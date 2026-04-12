@@ -44,7 +44,7 @@ const PropertyGridSection = ({ title, type }: Props) => {
   const hotPer = intSetting(siteMap, 'home_hot_per_page', 8);
   const startPer = intSetting(siteMap, 'home_start_per_page', 8);
   const windowDays = intSetting(siteMap, 'home_start_window_days', 180);
-  const hotMode = (setting(siteMap, 'home_hot_mode', 'promoted') || 'promoted').toLowerCase().trim();
+  const hotMode = (setting(siteMap, 'home_hot_mode', 'latest') || 'latest').toLowerCase().trim();
   const hotSlugs = (setting(siteMap, 'home_hot_fixed_slugs', '') || '').trim();
   const hotBadge = setting(siteMap, 'home_hot_badge', 'Горячее предложение');
   const startBadge = setting(siteMap, 'home_start_badge', 'Старт продаж');
@@ -67,9 +67,10 @@ const PropertyGridSection = ({ title, type }: Props) => {
       const useSlugs = hotMode === 'fixed_slugs' && hotSlugs.length > 0;
       if (useSlugs) {
         sp.set('block_slugs', hotSlugs);
-      } else {
+      } else if (hotMode === 'promoted') {
         sp.set('is_promoted', 'true');
       }
+      /* latest (и прочие): без is_promoted — ЖК с активными квартирами, сортировка created_desc */
       return apiGet<{ data: ApiBlockListRow[] }>(`/blocks?${sp}`);
     },
   });

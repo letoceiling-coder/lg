@@ -1,14 +1,60 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, OnModuleInit } from '@nestjs/common';
 import { NavigationItem, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateMortgageBankDto } from './dto/create-mortgage-bank.dto';
 import { UpdateMortgageBankDto } from './dto/update-mortgage-bank.dto';
+import { DEFAULT_DEMO_NEWS, DEFAULT_HOMEPAGE_SITE_SETTINGS } from './content-defaults';
 
 type NavItemTree = NavigationItem & { children: NavItemTree[] };
 
+const homepageDefaultsByKey = new Map(DEFAULT_HOMEPAGE_SITE_SETTINGS.map((r) => [r.key, r]));
+
 @Injectable()
-export class ContentService {
+export class ContentService implements OnModuleInit {
+  private readonly logger = new Logger(ContentService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit() {
+    await this.ensureHomepageSiteSettings();
+    await this.ensureDemoNewsIfEmpty();
+  }
+
+  /** Создаёт строки site_settings для главной, если их ещё нет (прод без prisma seed). */
+  private async ensureHomepageSiteSettings() {
+    for (const row of DEFAULT_HOMEPAGE_SITE_SETTINGS) {
+      await this.prisma.siteSetting.upsert({
+        where: { key: row.key },
+        update: {},
+        create: row,
+      });
+    }
+    this.logger.log('Homepage site_settings ensured');
+  }
+
+  /** Если таблица news пуста — демо-статьи как в шаблоне (главная + /admin/news). */
+  private async ensureDemoNewsIfEmpty() {
+    const n = await this.prisma.news.count();
+    if (n > 0) return;
+    const now = new Date();
+    for (let i = 0; i < DEFAULT_DEMO_NEWS.length; i++) {
+      const article = DEFAULT_DEMO_NEWS[i];
+      const publishedAt = new Date(now);
+      publishedAt.setDate(publishedAt.getDate() - (DEFAULT_DEMO_NEWS.length - i));
+      await this.prisma.news.create({
+        data: {
+          slug: article.slug,
+          title: article.title,
+          body: article.body,
+          source: article.source,
+          imageUrl: article.imageUrl,
+          isPublished: true,
+          publishedAt,
+        },
+      });
+    }
+    this.logger.log(`Seeded ${DEFAULT_DEMO_NEWS.length} demo news (DB was empty)`);
+  }
 
   async getSettings() {
     const rows = await this.prisma.siteSetting.findMany({
@@ -26,12 +72,20 @@ export class ContentService {
 
   async updateSettings(data: { key: string; value: string }[]) {
     await this.prisma.$transaction(
-      data.map(({ key, value }) =>
-        this.prisma.siteSetting.update({
+      data.map(({ key, value }) => {
+        const base = homepageDefaultsByKey.get(key);
+        if (base) {
+          return this.prisma.siteSetting.upsert({
+            where: { key },
+            update: { value },
+            create: { ...base, value },
+          });
+        }
+        return this.prisma.siteSetting.update({
           where: { key },
           data: { value },
-        }),
-      ),
+        });
+      }),
     );
     return this.getSettings();
   }

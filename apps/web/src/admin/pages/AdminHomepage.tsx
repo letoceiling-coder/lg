@@ -100,8 +100,9 @@ export default function AdminHomepage() {
 
       {homepageRows.length === 0 && (
         <div className="bg-background border rounded-2xl p-8 text-sm text-muted-foreground">
-          Нет полей главной в site_settings. Выполните{' '}
-          <code className="text-xs bg-muted px-1 rounded">pnpm db:seed</code>.
+          Нет полей главной в базе. Перезапустите API (подтянутся значения по умолчанию) или выполните{' '}
+          <code className="text-xs bg-muted px-1 rounded">pnpm db:seed</code> в каталоге{' '}
+          <code className="text-xs bg-muted px-1 rounded">packages/database</code>.
         </div>
       )}
 

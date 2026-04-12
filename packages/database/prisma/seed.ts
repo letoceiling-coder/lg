@@ -97,12 +97,12 @@ async function main() {
     // Главная: «Горячие предложения» и «Старт продаж» (редактируются в админке → Настройки сайта)
     { key: 'home_hot_title', value: 'Горячие предложения', groupName: 'homepage', label: 'Заголовок блока «Горячие предложения»', fieldType: 'TEXT' as const, sortOrder: 0 },
     { key: 'home_hot_per_page', value: '8', groupName: 'homepage', label: 'Сколько карточек в «Горячих предложениях»', fieldType: 'TEXT' as const, sortOrder: 1 },
-    { key: 'home_hot_mode', value: 'promoted', groupName: 'homepage', label: 'Режим горячих: promoted — флаг «Реклама» у ЖК; fixed_slugs — только список slug ниже', fieldType: 'TEXT' as const, sortOrder: 2 },
+    { key: 'home_hot_mode', value: 'latest', groupName: 'homepage', label: 'Режим горячих: latest — последние ЖК с офферами; promoted — флаг «Реклама»; fixed_slugs — список slug ниже', fieldType: 'TEXT' as const, sortOrder: 2 },
     { key: 'home_hot_fixed_slugs', value: '', groupName: 'homepage', label: 'Фиксированные slug ЖК (через запятую), если режим fixed_slugs', fieldType: 'TEXTAREA' as const, sortOrder: 3 },
     { key: 'home_hot_badge', value: 'Горячее предложение', groupName: 'homepage', label: 'Текст бейджа на карточке «Горячие»', fieldType: 'TEXT' as const, sortOrder: 4 },
     { key: 'home_start_title', value: 'Старт продаж', groupName: 'homepage', label: 'Заголовок блока «Старт продаж»', fieldType: 'TEXT' as const, sortOrder: 10 },
     { key: 'home_start_per_page', value: '8', groupName: 'homepage', label: 'Сколько карточек в «Старте продаж»', fieldType: 'TEXT' as const, sortOrder: 11 },
-    { key: 'home_start_window_days', value: '180', groupName: 'homepage', label: 'Окно дней: дата старта продаж от сегодня до +N дней', fieldType: 'TEXT' as const, sortOrder: 12 },
+    { key: 'home_start_window_days', value: '365', groupName: 'homepage', label: 'Окно дней: дата старта продаж от сегодня до +N дней', fieldType: 'TEXT' as const, sortOrder: 12 },
     { key: 'home_start_badge', value: 'Старт продаж', groupName: 'homepage', label: 'Текст бейджа «Старт продаж»', fieldType: 'TEXT' as const, sortOrder: 13 },
     { key: 'home_news_per_page', value: '4', groupName: 'homepage', label: 'Сколько новостей в блоке на главной', fieldType: 'TEXT' as const, sortOrder: 20 },
   ];
