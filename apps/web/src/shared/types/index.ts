@@ -56,7 +56,11 @@ export interface UserProfile {
   id: string;
   name: string;
   phone: string;
-  email: string;
+  /** Пустая строка или null, если вход только через Telegram и email не привязан */
+  email: string | null;
   role: UserRole;
+  telegramUsername?: string | null;
+  /** Есть привязанный Telegram (даже без @username в профиле) */
+  telegramLinked?: boolean;
   avatar?: string;
 }

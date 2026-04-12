@@ -15,6 +15,8 @@ type Props = {
   className?: string;
   /** Доп. класс для обёртки виджета (Telegram вставляет iframe/кнопку внутрь). */
   widgetWrapClassName?: string;
+  /** `login` — POST /auth/telegram; `link` — привязка к текущему аккаунту (JWT). */
+  mode?: 'login' | 'link';
   onSuccess?: () => void;
   onError?: (message: string) => void;
 };
@@ -22,6 +24,7 @@ type Props = {
 export function TelegramLoginButton({
   className,
   widgetWrapClassName,
+  mode = 'login',
   onSuccess,
   onError,
 }: Props) {
@@ -30,7 +33,7 @@ export function TelegramLoginButton({
   const onErrorRef = useRef(onError);
   onSuccessRef.current = onSuccess;
   onErrorRef.current = onError;
-  const { loginWithTelegram } = useAuth();
+  const { loginWithTelegram, linkTelegram } = useAuth();
 
   const { data: cfg, isLoading } = useQuery({
     queryKey: ['auth', 'telegram-widget-config'],
@@ -74,7 +77,7 @@ export function TelegramLoginButton({
       window.onTelegramAuth = undefined;
       el.innerHTML = '';
     };
-  }, [cfg?.botUsername, loginWithTelegram]);
+  }, [cfg?.botUsername, loginWithTelegram, linkTelegram, mode]);
 
   if (isLoading) {
     return <div className={cn('text-xs text-muted-foreground py-2', className)}>Загрузка…</div>;

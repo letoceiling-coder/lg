@@ -43,7 +43,7 @@ const navColumns = [
       { label: 'Войти', to: '/login' },
       { label: 'Регистрация', to: '/register' },
       { label: 'Избранное', to: '/favorites' },
-      { label: 'Личный кабинет', to: '/account' },
+      { label: 'Личный кабинет', to: '/profile' },
     ],
   },
 ];

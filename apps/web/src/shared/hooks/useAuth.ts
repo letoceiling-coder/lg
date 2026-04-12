@@ -21,6 +21,8 @@ interface MeResponse {
   fullName: string | null;
   role: string;
   telegramUsername?: string | null;
+  /** Есть привязанный Telegram (даже без публичного @username) */
+  telegramLinked?: boolean;
   isActive: boolean;
 }
 
@@ -30,6 +32,8 @@ interface AuthState {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithTelegram: (payload: Record<string, unknown>) => Promise<void>;
+  linkTelegram: (payload: Record<string, unknown>) => Promise<void>;
+  linkEmail: (email: string, password: string) => Promise<void>;
   register: (data: { name: string; phone: string; email: string; password: string; role: 'client' | 'agent' }) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -39,12 +43,20 @@ const AuthContext = createContext<AuthState | null>(null);
 export const AuthProvider = AuthContext.Provider;
 
 function meToProfile(me: MeResponse): UserProfile {
+  const email = me.email ?? null;
+  const display =
+    me.fullName?.trim() ||
+    (email ? email : me.telegramUsername ? `@${me.telegramUsername}` : 'Пользователь');
   return {
     id: me.id,
-    name: me.fullName || me.email,
+    name: display,
     phone: me.phone || '',
-    email: me.email,
+    email,
     role: me.role as UserRole,
+    telegramUsername: me.telegramUsername ?? null,
+    telegramLinked:
+      me.telegramLinked ??
+      !!(me.telegramUsername && String(me.telegramUsername).trim()),
   };
 }
 
@@ -118,6 +130,29 @@ export function useAuthState(): AuthState {
     localStorage.setItem('lg_user', JSON.stringify(profile));
   }, []);
 
+  const linkTelegram = useCallback(async (payload: Record<string, unknown>) => {
+    const body: Record<string, string> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (v === undefined || v === null) continue;
+      body[k] = typeof v === 'string' ? v : String(v);
+    }
+    const tokens = await apiPost<AuthTokens>('/auth/link-telegram', body);
+    setTokens(tokens.accessToken, tokens.refreshToken);
+    const me = await apiGet<MeResponse>('/auth/me');
+    const profile = meToProfile(me);
+    setUser(profile);
+    localStorage.setItem('lg_user', JSON.stringify(profile));
+  }, []);
+
+  const linkEmail = useCallback(async (email: string, password: string) => {
+    const tokens = await apiPost<AuthTokens>('/auth/link-email', { email, password });
+    setTokens(tokens.accessToken, tokens.refreshToken);
+    const me = await apiGet<MeResponse>('/auth/me');
+    const profile = meToProfile(me);
+    setUser(profile);
+    localStorage.setItem('lg_user', JSON.stringify(profile));
+  }, []);
+
   const register = useCallback(async (_data: { name: string; phone: string; email: string; password: string; role: 'client' | 'agent' }) => {
     // TODO: implement when POST /auth/register is available on backend
     throw new Error('Регистрация пока недоступна');
@@ -136,6 +171,8 @@ export function useAuthState(): AuthState {
     loading,
     login,
     loginWithTelegram,
+    linkTelegram,
+    linkEmail,
     register,
     logout,
   };

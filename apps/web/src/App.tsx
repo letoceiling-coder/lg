@@ -98,7 +98,7 @@ const AppRoutes = () => (
     <Route path="/register" element={<Register />} />
     <Route path="/forgot-password" element={<ForgotPassword />} />
     <Route path="/reset-password" element={<ResetPassword />} />
-    <Route path="/profile" element={<Profile />} />
+    <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
 
     {/* News */}
     <Route path="/news" element={<News />} />

@@ -1,14 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, TokensDto } from './dto';
+import { LinkEmailDto, LoginDto, TokensDto } from './dto';
 import { verifyTelegramLoginWidget } from './telegram-login.util';
 
 interface JwtPayload {
@@ -43,14 +45,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const tokens = await this.generateTokens({
-      sub: user.id,
-      email: user.email ?? '',
-      role: user.role,
-    });
-
-    await this.saveRefreshToken(user.id, tokens.refreshToken);
-    return tokens;
+    return this.issueTokensForUser(user.id);
   }
 
   /** Публичный username бота для Telegram Login Widget (без токена). */
@@ -66,8 +61,156 @@ export class AuthService {
   /**
    * Вход через Telegram Login Widget: проверка hash по токену бота из site_settings,
    * создание пользователя client при первом входе.
+   * Объединение с аккаунтом по email — через {@link linkTelegram} в личном кабинете.
    */
   async telegramLogin(body: Record<string, unknown>): Promise<TokensDto> {
+    const { tgId, fullName, username } = await this.parseAndVerifyTelegramLogin(body);
+
+    let user = await this.prisma.user.findUnique({ where: { telegramId: tgId } });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email: null,
+          passwordHash: null,
+          fullName,
+          role: 'client',
+          telegramId: tgId,
+          telegramUsername: username,
+          isActive: true,
+        },
+      });
+    } else {
+      if (!user.isActive) {
+        throw new UnauthorizedException('Аккаунт отключён');
+      }
+      const patch: { telegramUsername?: string | null; fullName?: string | null } = {};
+      if (username !== null && username !== user.telegramUsername) {
+        patch.telegramUsername = username;
+      }
+      if (fullName && fullName !== user.fullName) {
+        patch.fullName = fullName;
+      }
+      if (Object.keys(patch).length > 0) {
+        user = await this.prisma.user.update({ where: { id: user.id }, data: patch });
+      }
+    }
+
+    return this.issueTokensForUser(user.id);
+  }
+
+  /**
+   * Привязка Telegram к текущему аккаунту (JWT).
+   * Если этот Telegram уже был у «пустого» аккаунта (только Telegram, без email и пароля),
+   * избранное переносится на текущего пользователя, сессии старого аккаунта сбрасываются.
+   */
+  async linkTelegram(userId: string, body: Record<string, unknown>): Promise<TokensDto> {
+    const { tgId, fullName, username } = await this.parseAndVerifyTelegramLogin(body);
+
+    const me = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!me?.isActive) {
+      throw new UnauthorizedException('Пользователь не найден или отключён');
+    }
+
+    if (me.telegramId === tgId) {
+      const patch: { telegramUsername?: string | null; fullName?: string | null } = {};
+      if (username !== null && username !== me.telegramUsername) {
+        patch.telegramUsername = username;
+      }
+      if (fullName && fullName !== me.fullName) {
+        patch.fullName = fullName;
+      }
+      if (Object.keys(patch).length > 0) {
+        await this.prisma.user.update({ where: { id: me.id }, data: patch });
+      }
+      return this.issueTokensForUser(me.id);
+    }
+
+    const other = await this.prisma.user.findUnique({ where: { telegramId: tgId } });
+    if (other && other.id !== me.id) {
+      const otherHasCredentials = !!(other.email?.trim() || other.passwordHash);
+      if (otherHasCredentials) {
+        throw new ConflictException(
+          'Этот Telegram уже привязан к другому аккаунту (с email или паролем).',
+        );
+      }
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.session.deleteMany({ where: { userId: other.id } });
+        const favs = await tx.favorite.findMany({ where: { userId: other.id } });
+        for (const f of favs) {
+          try {
+            await tx.favorite.create({
+              data: { userId: me.id, blockId: f.blockId, listingId: f.listingId },
+            });
+          } catch (e) {
+            if (
+              e instanceof Prisma.PrismaClientKnownRequestError &&
+              e.code === 'P2002'
+            ) {
+              continue;
+            }
+            throw e;
+          }
+        }
+        await tx.favorite.deleteMany({ where: { userId: other.id } });
+        await tx.user.update({
+          where: { id: other.id },
+          data: { telegramId: null, telegramUsername: null },
+        });
+        const data: {
+          telegramId: bigint;
+          telegramUsername: string | null;
+          fullName?: string | null;
+        } = { telegramId: tgId, telegramUsername: username };
+        if (fullName && !me.fullName) {
+          data.fullName = fullName;
+        }
+        await tx.user.update({ where: { id: me.id }, data });
+      });
+
+      return this.issueTokensForUser(me.id);
+    }
+
+    const data: {
+      telegramId: bigint;
+      telegramUsername: string | null;
+      fullName?: string | null;
+    } = { telegramId: tgId, telegramUsername: username };
+    if (fullName && !me.fullName) {
+      data.fullName = fullName;
+    }
+    await this.prisma.user.update({ where: { id: me.id }, data });
+    return this.issueTokensForUser(me.id);
+  }
+
+  /** Добавить email и пароль к аккаунту, вошедшему только через Telegram (JWT). */
+  async linkEmail(userId: string, dto: LinkEmailDto): Promise<TokensDto> {
+    const email = dto.email.trim().toLowerCase();
+    const me = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!me?.isActive) {
+      throw new UnauthorizedException('Пользователь не найден или отключён');
+    }
+    if (me.email?.trim()) {
+      throw new ConflictException('В этом аккаунте уже указан email');
+    }
+    const taken = await this.prisma.user.findUnique({ where: { email } });
+    if (taken && taken.id !== me.id) {
+      throw new ConflictException('Этот email уже занят другим аккаунтом');
+    }
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    await this.prisma.user.update({
+      where: { id: me.id },
+      data: { email, passwordHash },
+    });
+    return this.issueTokensForUser(me.id);
+  }
+
+  private async parseAndVerifyTelegramLogin(body: Record<string, unknown>): Promise<{
+    tgId: bigint;
+    fullName: string | null;
+    username: string | null;
+  }> {
     const strMap: Record<string, string> = {};
     for (const [k, v] of Object.entries(body)) {
       if (v === undefined || v === null) continue;
@@ -100,39 +243,18 @@ export class AuthService {
       throw new BadRequestException('Некорректный id');
     }
 
-    let user = await this.prisma.user.findUnique({ where: { telegramId: tgId } });
     const fullName =
       [strMap.first_name, strMap.last_name].filter(Boolean).join(' ').trim() || null;
     const username = strMap.username?.trim() || null;
 
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          email: null,
-          passwordHash: null,
-          fullName,
-          role: 'client',
-          telegramId: tgId,
-          telegramUsername: username,
-          isActive: true,
-        },
-      });
-    } else {
-      if (!user.isActive) {
-        throw new UnauthorizedException('Аккаунт отключён');
-      }
-      const patch: { telegramUsername?: string | null; fullName?: string | null } = {};
-      if (username !== null && username !== user.telegramUsername) {
-        patch.telegramUsername = username;
-      }
-      if (fullName && fullName !== user.fullName) {
-        patch.fullName = fullName;
-      }
-      if (Object.keys(patch).length > 0) {
-        user = await this.prisma.user.update({ where: { id: user.id }, data: patch });
-      }
-    }
+    return { tgId, fullName, username };
+  }
 
+  private async issueTokensForUser(userId: string): Promise<TokensDto> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found or disabled');
+    }
     const tokens = await this.generateTokens({
       sub: user.id,
       email: user.email ?? '',
@@ -182,16 +304,8 @@ export class AuthService {
       throw new UnauthorizedException('User not found or disabled');
     }
 
-    const tokens = await this.generateTokens({
-      sub: user.id,
-      email: user.email ?? '',
-      role: user.role,
-    });
-
     await this.prisma.session.delete({ where: { id: session.id } });
-    await this.saveRefreshToken(user.id, tokens.refreshToken);
-
-    return tokens;
+    return this.issueTokensForUser(user.id);
   }
 
   async logout(userId: string): Promise<void> {
@@ -207,13 +321,15 @@ export class AuthService {
         phone: true,
         fullName: true,
         role: true,
+        telegramId: true,
         telegramUsername: true,
         isActive: true,
         createdAt: true,
       },
     });
     if (!user) throw new UnauthorizedException('User not found');
-    return user;
+    const { telegramId: _tg, ...rest } = user;
+    return { ...rest, telegramLinked: _tg !== null };
   }
 
   private async generateTokens(payload: JwtPayload): Promise<TokensDto> {

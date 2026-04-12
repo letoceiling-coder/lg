@@ -13,7 +13,13 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, TokensDto, RefreshDto, TelegramWidgetConfigDto } from './dto';
+import {
+  LinkEmailDto,
+  LoginDto,
+  TokensDto,
+  RefreshDto,
+  TelegramWidgetConfigDto,
+} from './dto';
 import { Public, CurrentUser } from './decorators';
 
 @ApiTags('Auth')
@@ -45,6 +51,33 @@ export class AuthController {
   @ApiResponse({ status: 200, type: TokensDto })
   async telegramLogin(@Body() body: Record<string, unknown>): Promise<TokensDto> {
     return this.authService.telegramLogin(body);
+  }
+
+  @Post('link-telegram')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Привязать Telegram к текущему пользователю (JSON с полями виджета: id, auth_date, hash, …)',
+  })
+  @ApiResponse({ status: 200, type: TokensDto })
+  async linkTelegram(
+    @CurrentUser('sub') userId: string,
+    @Body() body: Record<string, unknown>,
+  ): Promise<TokensDto> {
+    return this.authService.linkTelegram(userId, body);
+  }
+
+  @Post('link-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Добавить email и пароль к аккаунту без email (например после входа через Telegram)' })
+  @ApiResponse({ status: 200, type: TokensDto })
+  async linkEmail(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: LinkEmailDto,
+  ): Promise<TokensDto> {
+    return this.authService.linkEmail(userId, dto);
   }
 
   @Public()

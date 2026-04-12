@@ -2429,7 +2429,7 @@ apps/
 
 | Область | Статус |
 |--------|--------|
-| Auth: Telegram Login, телефон в login/register | **Telegram Login:** виджет на `/login`, регистрации и в модалке шапки; `GET /auth/telegram-widget-config`, `POST /auth/telegram` (hash по токену из админки). Телефон в login — без отдельного API |
+| Auth: Telegram Login, телефон в login/register | **Telegram Login:** виджет на `/login`, регистрации и в модалке шапки; `GET /auth/telegram-widget-config`, `POST /auth/telegram`. **Связка аккаунтов:** `/profile` — `POST /auth/link-telegram` (JWT), `POST /auth/link-email`; при привязке TG к email-аккаунту «пустой» TG-only пользователь объединяется (избранное переносится). Телефон в login — без отдельного API |
 | Заявки → Telegram | Готово при заполнении полей в админке |
 | Избранное: синхронизация с API, обязательная авторизация | Не готово |
 | Медиа-модуль (загрузка файлов на сервер) | Не готово |
@@ -2446,7 +2446,7 @@ apps/
 **Пошаговая реализация дальше (ориентир):**
 
 1. **Интеграции в админке (расширение):** по тому же принципу, что Telegram — вынести в `site_settings` публичные/секретные ключи (например, Yandex Maps API), убрать дубли из `.env` там, где это не ломает инфраструктуру (БД, JWT, секреты подписи токенов остаются в окружении сервера).
-2. **Telegram Login:** фронт — виджет с `data-telegram-login` из `telegram_login_bot_username`; бэк — `POST /auth/telegram` с проверкой hash по токену бота из `site_settings`.
+2. **Telegram Login:** фронт — виджет с `data-telegram-login` из `telegram_login_bot_username`; бэк — `POST /auth/telegram` с проверкой hash по токену бота из `site_settings`. Связка email↔Telegram: `POST /auth/link-telegram`, `POST /auth/link-email`, UI в `/profile`.
 3. **Ручные листинги:** API create/update/delete + формы в админке для квартир / домов / участков / коммерции с `source=manual`.
 4. **Избранное:** синхронизация с API и политика авторизации по плану C.10.
 

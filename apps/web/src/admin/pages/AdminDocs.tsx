@@ -182,6 +182,8 @@ Toast, Toggle, ToggleGroup, Tooltip
 - \`POST /api/v1/auth/login\` — email и пароль
 - \`GET /api/v1/auth/telegram-widget-config\` — поле \`botUsername\` для Telegram Login Widget (из настроек, без секрета)
 - \`POST /api/v1/auth/telegram\` — JSON с полями виджета (\`id\`, \`auth_date\`, \`hash\`, …); подпись проверяется токеном \`telegram_bot_token\` из админки
+- \`POST /api/v1/auth/link-telegram\` (Bearer) — то же тело, что от виджета: привязка Telegram к текущему пользователю; «пустой» TG-аккаунт без email объединяется (избранное переносится)
+- \`POST /api/v1/auth/link-email\` (Bearer) — \`{ email, password }\` для аккаунта без email (например после входа через Telegram)
 - В @BotFather для бота: команда привязки домена сайта (HTTPS), иначе виджет не откроется на проде
 
 ## Текущее состояние
