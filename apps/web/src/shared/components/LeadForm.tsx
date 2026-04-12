@@ -16,6 +16,8 @@ interface Props {
   title?: string;
   /** Короткая метка для комментария (страница / сценарий). */
   source?: string;
+  /** Доп. строки в комментарий к заявке (например параметры калькулятора). */
+  contextFooter?: string;
   className?: string;
   requestType?: PublicRequestType;
   blockId?: number;
@@ -31,6 +33,7 @@ function inferRequestType(source: string): PublicRequestType {
 const LeadForm = ({
   title = 'Получить консультацию',
   source = 'lead_form',
+  contextFooter,
   className = '',
   requestType: requestTypeProp,
   blockId,
@@ -50,7 +53,11 @@ const LeadForm = ({
     setError('');
     const type = requestTypeProp ?? inferRequestType(source);
     const commentPayload =
-      [comment.trim(), source && source !== 'lead_form' ? `Источник формы: ${source}` : '']
+      [
+        comment.trim(),
+        source && source !== 'lead_form' ? `Источник формы: ${source}` : '',
+        contextFooter?.trim(),
+      ]
         .filter(Boolean)
         .join('\n\n') || undefined;
     try {

@@ -90,7 +90,12 @@ const Mortgage = () => {
           </div>
 
           <div>
-            <LeadForm title="Подобрать ипотеку" source="mortgage" />
+            <LeadForm
+              title="Подобрать ипотеку"
+              source="mortgage"
+              requestType="MORTGAGE"
+              contextFooter={`Параметры калькулятора: стоимость ${fmt(price)} ₽, взнос ${downPayment}%, срок ${years} лет, ставка ${rate}%, платёж ${fmt(monthlyPayment)} ₽`}
+            />
           </div>
         </div>
       </div>

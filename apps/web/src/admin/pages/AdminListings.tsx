@@ -58,8 +58,8 @@ export default function AdminListings() {
         <div>
           <h1 className="text-2xl font-bold">Квартиры (каталог)</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Просмотр объявлений из API. Редактирование объявлений из фида в интерфейсе — в разработке; источник правды —
-            импорт TrendAgent.
+            Просмотр объявлений из API (фид + витрина). Ручное создание и правка листингов вне фида — отдельный этап
+            (формы + <code className="text-xs bg-muted px-1 rounded">POST/PATCH</code> для <code className="text-xs bg-muted px-1 rounded">source=manual</code>).
           </p>
         </div>
       </div>

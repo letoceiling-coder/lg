@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { useYandexMapsReady } from '@/shared/hooks/useYandexMapsReady';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { ResidentialComplex } from '@/redesign/data/types';
@@ -29,18 +30,9 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-  const [ready, setReady] = useState(false);
+  const { ready } = useYandexMapsReady();
 
   const activeComplex = complexes.find(c => c.slug === activeSlug);
-
-  useEffect(() => {
-    if (window.ymaps) { window.ymaps.ready(() => setReady(true)); return; }
-    const s = document.createElement('script');
-    s.src = 'https://api-maps.yandex.ru/2.1/?lang=ru_RU';
-    s.async = true;
-    s.onload = () => window.ymaps.ready(() => setReady(true));
-    document.head.appendChild(s);
-  }, []);
 
   useEffect(() => {
     if (!ready || !mapRef.current || mapInstance.current) return;

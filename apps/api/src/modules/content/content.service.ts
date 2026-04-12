@@ -133,6 +133,16 @@ export class ContentService implements OnModuleInit {
   }
 
   /** Уведомления о заявках: значения из site_settings (не из env). */
+  /** Ключ для загрузки виджета карт в браузере (не секрет сервера; хранится в integrations). */
+  async getYandexMapsPublicConfig(): Promise<{ apiKey: string | null }> {
+    const row = await this.prisma.siteSetting.findUnique({
+      where: { key: 'yandex_maps_api_key' },
+      select: { value: true },
+    });
+    const v = row?.value?.trim();
+    return { apiKey: v && v.length > 0 ? v : null };
+  }
+
   async getTelegramNotifyCredentials(): Promise<{ botToken: string; notifyChatId: string }> {
     const keys = ['telegram_bot_token', 'telegram_notify_chat_id'] as const;
     const rows = await this.prisma.siteSetting.findMany({

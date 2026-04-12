@@ -129,6 +129,14 @@ async function main() {
       fieldType: 'TEXT' as const,
       sortOrder: 2,
     },
+    {
+      key: 'yandex_maps_api_key',
+      value: '',
+      groupName: 'integrations',
+      label: 'Yandex Maps: JavaScript API Key (ограничить по HTTP Referrer)',
+      fieldType: 'TEXT' as const,
+      sortOrder: 3,
+    },
   ];
 
   for (const s of settings) {

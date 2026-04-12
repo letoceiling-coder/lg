@@ -128,6 +128,15 @@ export const DEFAULT_INTEGRATION_SITE_SETTINGS: Array<{
     fieldType: SiteSettingFieldType.TEXT,
     sortOrder: 2,
   },
+  {
+    key: 'yandex_maps_api_key',
+    value: '',
+    groupName: INTEGRATIONS_SITE_SETTINGS_GROUP,
+    label:
+      'Yandex Maps: JavaScript API Key (публичный ключ для сайта; в кабинете разработчика ограничьте по HTTP Referrer)',
+    fieldType: SiteSettingFieldType.TEXT,
+    sortOrder: 3,
+  },
 ];
 
 /**

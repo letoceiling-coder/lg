@@ -186,6 +186,9 @@ Toast, Toggle, ToggleGroup, Tooltip
 - \`POST /api/v1/auth/link-email\` (Bearer) — \`{ email, password }\` для аккаунта без email (например после входа через Telegram)
 - В @BotFather для бота: команда привязки домена сайта (HTTPS), иначе виджет не откроется на проде
 
+## Интеграции (публичные фрагменты)
+- \`GET /api/v1/content/maps-config\` — \`{ apiKey }\` для Yandex Maps JS (ключ задаётся в админке → Интеграции; ограничивайте ключ по HTTP Referrer)
+
 ## Избранное (API, JWT)
 - \`GET /api/v1/favorites\` — список с вложенными \`block\` / \`listing\`
 - \`GET /api/v1/favorites/ids\` — \`{ blockIds, listingIds }\`

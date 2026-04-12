@@ -15,6 +15,13 @@ export class ContentController {
     return this.service.getSettingsPublic();
   }
 
+  @Public()
+  @Get('maps-config')
+  @ApiOperation({ summary: 'Yandex Maps: публичный apiKey для загрузки JS API (из site_settings)' })
+  getMapsConfig() {
+    return this.service.getYandexMapsPublicConfig();
+  }
+
   @Post('settings')
   @Roles('admin', 'editor')
   @ApiOperation({

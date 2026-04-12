@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useYandexMapsReady } from '@/shared/hooks/useYandexMapsReady';
 import type { PropertyData } from '@/components/PropertyCard';
 import CatalogList from './CatalogList';
 
@@ -19,23 +20,8 @@ const CatalogMapView = ({ items }: Props) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-  const [ready, setReady] = useState(false);
+  const { ready } = useYandexMapsReady();
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
-
-  // Load Yandex Maps script once
-  useEffect(() => {
-    if (window.ymaps) {
-      setReady(true);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://api-maps.yandex.ru/2.1/?lang=ru_RU';
-    script.async = true;
-    script.onload = () => {
-      window.ymaps.ready(() => setReady(true));
-    };
-    document.head.appendChild(script);
-  }, []);
 
   // Init map
   useEffect(() => {

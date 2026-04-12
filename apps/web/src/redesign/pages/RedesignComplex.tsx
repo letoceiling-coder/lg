@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Heart, Share2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,6 +17,7 @@ import type { ResidentialComplex, SortField, SortDir } from '@/redesign/data/typ
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { parseApiBlockId, useFavorites } from '@/shared/hooks/useFavorites';
+import { useYandexMapsReady } from '@/shared/hooks/useYandexMapsReady';
 import {
   buildLayoutGroupsFromApartments,
   mapApiBlockDetailToResidentialComplex,
@@ -62,6 +63,7 @@ const RedesignComplex = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { isBlockFavorite, toggleBlock } = useFavorites();
+  const { ready: ymapsReady } = useYandexMapsReady();
   const mockComplex = useMemo(() => getComplexBySlug(slug || ''), [slug]);
 
   const apiBlockQuery = useQuery({
@@ -152,17 +154,16 @@ const RedesignComplex = () => {
   };
 
   const initMap = () => {
-    if (!complex || mapInstanceRef.current || !mapRef.current) return;
-    if (!window.ymaps) {
-      const s = document.createElement('script');
-      s.src = 'https://api-maps.yandex.ru/2.1/?lang=ru_RU';
-      s.async = true;
-      s.onload = () => window.ymaps.ready(() => createMap());
-      document.head.appendChild(s);
-    } else {
-      window.ymaps.ready(() => createMap());
-    }
+    if (!ymapsReady || !complex || mapInstanceRef.current || !mapRef.current) return;
+    if (!window.ymaps) return;
+    window.ymaps.ready(() => createMap());
   };
+
+  useEffect(() => {
+    if (!ymapsReady || !complex) return;
+    const t = window.setTimeout(() => initMap(), 200);
+    return () => window.clearTimeout(t);
+  }, [ymapsReady, complex?.slug]);
 
   const createMap = () => {
     if (!complex || !mapRef.current || mapInstanceRef.current) return;
