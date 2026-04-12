@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Folder,
@@ -12,6 +12,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost, apiPostForm, ApiError } from '@/lib/api';
+import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { MediaFileRow, MediaFolderRow } from '@/admin/components/media-types';
@@ -34,7 +35,6 @@ function buildTree(folders: MediaFolderRow[]) {
 function FolderTree({
   byParent,
   trashId,
-  uploadsId,
   currentId,
   depth,
   parentKey,
@@ -42,7 +42,6 @@ function FolderTree({
 }: {
   byParent: Map<string, MediaFolderRow[]>;
   trashId: number | null;
-  uploadsId: number | null;
   currentId: number | null;
   depth: number;
   parentKey: string;
@@ -52,8 +51,8 @@ function FolderTree({
   return (
     <ul className={depth === 0 ? 'space-y-0.5' : 'ml-2 border-l border-border pl-2 space-y-0.5 mt-0.5'}>
       {nodes.map((n) => {
+        /* Корзину в дереве не показываем — она отдельной кнопкой; «Загрузки» показываем, иначе вложенные папки не видны */
         if (trashId != null && n.id === trashId) return null;
-        if (uploadsId != null && n.id === uploadsId) return null;
         const key = String(n.id);
         const children = byParent.get(key);
         const active = currentId === n.id;
@@ -73,7 +72,6 @@ function FolderTree({
               <FolderTree
                 byParent={byParent}
                 trashId={trashId}
-                uploadsId={uploadsId}
                 currentId={currentId}
                 depth={depth + 1}
                 parentKey={key}
@@ -139,20 +137,22 @@ export default function AdminMedia() {
     return files.filter((f) => (f.originalFilename ?? String(f.id)).toLowerCase().includes(q));
   }, [files, search]);
 
-  const refresh = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['admin', 'media'] });
-  }, [qc]);
-
   const createFolder = async () => {
     const name = newFolderName.trim();
-    if (!name) return;
+    if (!name) {
+      toast.message('Введите имя папки');
+      return;
+    }
     setErr('');
     try {
       await apiPost('/admin/media/folders', { parentId: folderId ?? null, name });
       setNewFolderName('');
-      refresh();
+      await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+      toast.success(`Папка «${name}» создана`);
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Не удалось создать папку');
+      const msg = e instanceof ApiError ? e.message : 'Не удалось создать папку';
+      setErr(msg);
+      toast.error(msg);
     }
   };
 
@@ -160,10 +160,13 @@ export default function AdminMedia() {
     if (!window.confirm('Удалить папку? (только если пуста)')) return;
     try {
       await apiDelete(`/admin/media/folders/${id}`);
-      refresh();
+      await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
       if (folderId === id) setFolderId(uploadsId);
+      toast.success('Папка удалена');
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Ошибка');
+      const msg = e instanceof ApiError ? e.message : 'Ошибка';
+      setErr(msg);
+      toast.error(msg);
     }
   };
 
@@ -171,6 +174,7 @@ export default function AdminMedia() {
     const list = e.target.files;
     if (!list?.length) return;
     setErr('');
+    const n = list.length;
     try {
       for (const file of Array.from(list)) {
         const fd = new FormData();
@@ -179,9 +183,12 @@ export default function AdminMedia() {
         await apiPostForm<MediaFileRow>(`/admin/media/upload${q}`, fd);
       }
       e.target.value = '';
-      refresh();
+      await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+      toast.success(n === 1 ? 'Файл загружен' : `Загружено файлов: ${n}`);
     } catch (ex) {
-      setErr(ex instanceof ApiError ? ex.message : 'Ошибка загрузки');
+      const msg = ex instanceof ApiError ? ex.message : 'Ошибка загрузки';
+      setErr(msg);
+      toast.error(msg);
     }
   };
 
@@ -190,6 +197,7 @@ export default function AdminMedia() {
     const list = e.dataTransfer.files;
     if (!list?.length) return;
     setErr('');
+    let ok = 0;
     try {
       for (const file of Array.from(list)) {
         if (!file.type.startsWith('image/')) continue;
@@ -197,10 +205,15 @@ export default function AdminMedia() {
         fd.append('file', file);
         const q = folderId != null ? `?folder_id=${folderId}` : '';
         await apiPostForm<MediaFileRow>(`/admin/media/upload${q}`, fd);
+        ok++;
       }
-      refresh();
+      await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+      if (ok) toast.success(ok === 1 ? 'Файл загружен' : `Загружено файлов: ${ok}`);
+      else toast.message('Перетащите изображения (не другие типы файлов)');
     } catch (ex) {
-      setErr(ex instanceof ApiError ? ex.message : 'Ошибка загрузки');
+      const msg = ex instanceof ApiError ? ex.message : 'Ошибка загрузки';
+      setErr(msg);
+      toast.error(msg);
     }
   };
 
@@ -254,7 +267,6 @@ export default function AdminMedia() {
           <FolderTree
             byParent={byParent}
             trashId={trashId}
-            uploadsId={uploadsId}
             currentId={folderId}
             depth={0}
             parentKey="root"
@@ -321,10 +333,13 @@ export default function AdminMedia() {
                 onClick={async () => {
                   if (!window.confirm('Удалить все файлы из корзины безвозвратно?')) return;
                   try {
-                    await apiPost<{ removed: number }>('/admin/media/trash/empty');
-                    refresh();
+                    const r = await apiPost<{ removed: number }>('/admin/media/trash/empty');
+                    await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                    toast.success(`Корзина очищена (${r.removed} шт.)`);
                   } catch (e) {
-                    setErr(e instanceof ApiError ? e.message : 'Ошибка');
+                    const msg = e instanceof ApiError ? e.message : 'Ошибка';
+                    setErr(msg);
+                    toast.error(msg);
                   }
                 }}
               >
@@ -358,7 +373,8 @@ export default function AdminMedia() {
                           title="Восстановить"
                           onClick={async () => {
                             await apiPost(`/admin/media/files/${m.id}/restore`);
-                            refresh();
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('Файл восстановлен');
                           }}
                         >
                           <Undo2 className="w-3.5 h-3.5" />
@@ -370,7 +386,8 @@ export default function AdminMedia() {
                           onClick={async () => {
                             if (!window.confirm('Удалить файл навсегда?')) return;
                             await apiDelete(`/admin/media/files/${m.id}`);
-                            refresh();
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('Удалено навсегда');
                           }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -384,7 +401,8 @@ export default function AdminMedia() {
                           title="В корзину"
                           onClick={async () => {
                             await apiPost(`/admin/media/files/${m.id}/trash`);
-                            refresh();
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('В корзине');
                           }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -396,8 +414,14 @@ export default function AdminMedia() {
                         <MediaFileMoveSelect
                           fileId={m.id}
                           options={moveFolderOptions}
-                          onMoved={refresh}
-                          onError={(msg) => setErr(msg)}
+                          onMoved={async () => {
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('Файл перемещён');
+                          }}
+                          onError={(msg) => {
+                            setErr(msg);
+                            toast.error(msg);
+                          }}
                         />
                       </div>
                     ) : null}
@@ -423,7 +447,8 @@ export default function AdminMedia() {
                           variant="outline"
                           onClick={async () => {
                             await apiPost(`/admin/media/files/${m.id}/restore`);
-                            refresh();
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('Файл восстановлен');
                           }}
                         >
                           Восстановить
@@ -435,7 +460,8 @@ export default function AdminMedia() {
                           onClick={async () => {
                             if (!window.confirm('Удалить навсегда?')) return;
                             await apiDelete(`/admin/media/files/${m.id}`);
-                            refresh();
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('Удалено навсегда');
                           }}
                         >
                           Удалить
@@ -446,8 +472,14 @@ export default function AdminMedia() {
                         <MediaFileMoveSelect
                           fileId={m.id}
                           options={moveFolderOptions}
-                          onMoved={refresh}
-                          onError={(msg) => setErr(msg)}
+                          onMoved={async () => {
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('Файл перемещён');
+                          }}
+                          onError={(msg) => {
+                            setErr(msg);
+                            toast.error(msg);
+                          }}
                           className="text-xs border rounded-md px-2 py-1.5 bg-background max-w-[200px]"
                         />
                         <Button
@@ -456,7 +488,8 @@ export default function AdminMedia() {
                           variant="outline"
                           onClick={async () => {
                             await apiPost(`/admin/media/files/${m.id}/trash`);
-                            refresh();
+                            await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            toast.success('В корзине');
                           }}
                         >
                           В корзину

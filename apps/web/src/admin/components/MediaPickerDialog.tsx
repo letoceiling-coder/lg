@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Folder, FolderPlus, Image as ImageIcon, Loader2, Trash2, Undo2 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost, apiPostForm, ApiError } from '@/lib/api';
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import type { MediaFileRow, MediaFolderRow } from './media-types';
 import { buildFolderMoveOptions } from '@/admin/lib/media-folder-options';
 import MediaFileMoveSelect from '@/admin/components/MediaFileMoveSelect';
+import { toast } from '@/components/ui/sonner';
 
 type Props = {
   open: boolean;
@@ -39,7 +40,6 @@ function buildTree(folders: MediaFolderRow[]) {
 function FolderTree({
   byParent,
   trashId,
-  uploadsId,
   currentId,
   depth,
   parentKey,
@@ -47,7 +47,6 @@ function FolderTree({
 }: {
   byParent: Map<string, MediaFolderRow[]>;
   trashId: number | null;
-  uploadsId: number | null;
   currentId: number | null;
   depth: number;
   parentKey: string;
@@ -58,7 +57,6 @@ function FolderTree({
     <ul className={depth === 0 ? 'space-y-0.5' : 'ml-2 border-l border-border pl-2 space-y-0.5 mt-0.5'}>
       {nodes.map((n) => {
         if (trashId != null && n.id === trashId) return null;
-        if (uploadsId != null && n.id === uploadsId) return null;
         const key = String(n.id);
         const children = byParent.get(key);
         const active = currentId === n.id;
@@ -78,7 +76,6 @@ function FolderTree({
               <FolderTree
                 byParent={byParent}
                 trashId={trashId}
-                uploadsId={uploadsId}
                 currentId={currentId}
                 depth={depth + 1}
                 parentKey={key}
@@ -139,20 +136,22 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
     [folders, trashId],
   );
 
-  const refresh = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['admin', 'media'] });
-  }, [qc]);
-
   const createFolder = async () => {
     const name = newFolderName.trim();
-    if (!name) return;
+    if (!name) {
+      toast.message('Введите имя папки');
+      return;
+    }
     setErr('');
     try {
       await apiPost('/admin/media/folders', { parentId: folderId ?? null, name });
       setNewFolderName('');
-      refresh();
+      toast.success(`Папка «${name}» создана`);
+      await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Не удалось создать папку');
+      const msg = e instanceof ApiError ? e.message : 'Не удалось создать папку';
+      setErr(msg);
+      toast.error(msg);
     }
   };
 
@@ -161,6 +160,7 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
     if (!list?.length) return;
     setErr('');
     try {
+      const n = list.length;
       for (const file of Array.from(list)) {
         const fd = new FormData();
         fd.append('file', file);
@@ -168,9 +168,12 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
         await apiPostForm<MediaFileRow>(`/admin/media/upload${q}`, fd);
       }
       e.target.value = '';
-      refresh();
+      toast.success(n === 1 ? 'Файл загружен' : `Загружено файлов: ${n}`);
+      await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
     } catch (ex) {
-      setErr(ex instanceof ApiError ? ex.message : 'Ошибка загрузки');
+      const msg = ex instanceof ApiError ? ex.message : 'Ошибка загрузки';
+      setErr(msg);
+      toast.error(msg);
     }
   };
 
@@ -225,7 +228,6 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
             <FolderTree
               byParent={byParent}
               trashId={trashId}
-              uploadsId={defaultUploadsId}
               currentId={folderId}
               depth={0}
               parentKey="root"
@@ -259,10 +261,13 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
                   onClick={async () => {
                     if (!window.confirm('Удалить все файлы из корзины безвозвратно?')) return;
                     try {
-                      await apiPost<{ removed: number }>('/admin/media/trash/empty');
-                      refresh();
+                      const r = await apiPost<{ removed: number }>('/admin/media/trash/empty');
+                      toast.success(`Корзина очищена (${r.removed} шт.)`);
+                      await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
                     } catch (ex) {
-                      setErr(ex instanceof ApiError ? ex.message : 'Ошибка');
+                      const msg = ex instanceof ApiError ? ex.message : 'Ошибка';
+                      setErr(msg);
+                      toast.error(msg);
                     }
                   }}
                 >
@@ -318,8 +323,15 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
                                 title="Восстановить"
                                 onClick={async (ev) => {
                                   ev.stopPropagation();
-                                  await apiPost(`/admin/media/files/${f.id}/restore`);
-                                  refresh();
+                                  try {
+                                    await apiPost(`/admin/media/files/${f.id}/restore`);
+                                    toast.success('Файл восстановлен');
+                                    await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                                  } catch (ex) {
+                                    const msg = ex instanceof ApiError ? ex.message : 'Ошибка';
+                                    setErr(msg);
+                                    toast.error(msg);
+                                  }
                                 }}
                               >
                                 <Undo2 className="w-3.5 h-3.5" />
@@ -331,8 +343,15 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
                                 onClick={async (ev) => {
                                   ev.stopPropagation();
                                   if (!window.confirm('Удалить файл навсегда?')) return;
-                                  await apiDelete(`/admin/media/files/${f.id}`);
-                                  refresh();
+                                  try {
+                                    await apiDelete(`/admin/media/files/${f.id}`);
+                                    toast.success('Удалено навсегда');
+                                    await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                                  } catch (ex) {
+                                    const msg = ex instanceof ApiError ? ex.message : 'Ошибка';
+                                    setErr(msg);
+                                    toast.error(msg);
+                                  }
                                 }}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -345,8 +364,15 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
                               title="В корзину"
                               onClick={async (ev) => {
                                 ev.stopPropagation();
-                                await apiPost(`/admin/media/files/${f.id}/trash`);
-                                refresh();
+                                try {
+                                  await apiPost(`/admin/media/files/${f.id}/trash`);
+                                  toast.success('В корзине');
+                                  await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                                } catch (ex) {
+                                  const msg = ex instanceof ApiError ? ex.message : 'Ошибка';
+                                  setErr(msg);
+                                  toast.error(msg);
+                                }
                               }}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -357,8 +383,14 @@ export default function MediaPickerDialog({ open, onOpenChange, title, multiple,
                           <MediaFileMoveSelect
                             fileId={f.id}
                             options={moveFolderOptions}
-                            onMoved={refresh}
-                            onError={(msg) => setErr(msg)}
+                            onMoved={async () => {
+                              toast.success('Файл перемещён');
+                              await qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+                            }}
+                            onError={(msg) => {
+                              setErr(msg);
+                              toast.error(msg);
+                            }}
                             className="w-full text-[10px] border rounded-md px-1 py-0.5 bg-background"
                           />
                         ) : null}
