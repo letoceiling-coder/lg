@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, $Enums } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QueryListingsDto } from './dto/query-listings.dto';
+import type {
+  CreateManualApartmentDto,
+  UpdateManualApartmentDto,
+} from './dto/manual-apartment.dto';
 
 @Injectable()
 export class ListingsService {
@@ -192,5 +197,150 @@ export class ListingsService {
       default:
         return { createdAt: 'desc' };
     }
+  }
+
+  async createManualApartment(dto: CreateManualApartmentDto) {
+    const region = await this.prisma.feedRegion.findUnique({
+      where: { id: dto.regionId },
+      select: { id: true },
+    });
+    if (!region) throw new BadRequestException('Регион не найден');
+
+    if (dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== dto.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const externalId = `manual-${randomUUID()}`;
+    const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
+    const a = dto.apartment;
+
+    return this.prisma.listing.create({
+      data: {
+        regionId: dto.regionId,
+        kind: 'APARTMENT',
+        blockId: dto.blockId ?? null,
+        externalId,
+        price: new Prisma.Decimal(dto.price),
+        currency: 'RUB',
+        status,
+        dataSource: 'MANUAL',
+        isPublished: dto.isPublished ?? false,
+        apartment: {
+          create: {
+            areaTotal: new Prisma.Decimal(a.areaTotal),
+            areaKitchen:
+              a.areaKitchen != null ? new Prisma.Decimal(a.areaKitchen) : null,
+            floor: a.floor ?? null,
+            floorsTotal: a.floorsTotal ?? null,
+            roomTypeId: a.roomTypeId ?? null,
+            finishingId: a.finishingId ?? null,
+            planUrl: a.planUrl ?? null,
+            buildingName: a.buildingName ?? null,
+            number: a.number ?? null,
+          },
+        },
+      },
+      include: {
+        apartment: { include: { roomType: true, finishing: true } },
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async updateManualApartment(id: number, dto: UpdateManualApartmentDto) {
+    const row = await this.requireManualListing(id);
+
+    if (dto.blockId !== undefined && dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== row.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const listingPatch: Prisma.ListingUpdateInput = {};
+    if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
+    if (dto.status !== undefined) {
+      listingPatch.status = dto.status as $Enums.ListingStatus;
+    }
+    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
+    if (dto.blockId !== undefined) {
+      if (dto.blockId === null) {
+        listingPatch.block = { disconnect: true };
+      } else {
+        listingPatch.block = { connect: { id: dto.blockId } };
+      }
+    }
+
+    const aptPatch: Prisma.ListingApartmentUpdateInput = {};
+    if (dto.apartment) {
+      const p = dto.apartment;
+      if (p.areaTotal !== undefined) aptPatch.areaTotal = new Prisma.Decimal(p.areaTotal);
+      if (p.areaKitchen !== undefined) {
+        aptPatch.areaKitchen =
+          p.areaKitchen != null ? new Prisma.Decimal(p.areaKitchen) : null;
+      }
+      if (p.floor !== undefined) aptPatch.floor = p.floor;
+      if (p.floorsTotal !== undefined) aptPatch.floorsTotal = p.floorsTotal;
+      if (p.roomTypeId !== undefined) {
+        aptPatch.roomType =
+          p.roomTypeId == null ? { disconnect: true } : { connect: { id: p.roomTypeId } };
+      }
+      if (p.finishingId !== undefined) {
+        aptPatch.finishing =
+          p.finishingId == null ? { disconnect: true } : { connect: { id: p.finishingId } };
+      }
+      if (p.planUrl !== undefined) aptPatch.planUrl = p.planUrl;
+      if (p.buildingName !== undefined) aptPatch.buildingName = p.buildingName;
+      if (p.number !== undefined) aptPatch.number = p.number;
+    }
+
+    const hasListing = Object.keys(listingPatch).length > 0;
+    const hasApt = Object.keys(aptPatch).length > 0;
+    if (!hasListing && !hasApt) {
+      throw new BadRequestException('Укажите хотя бы одно поле для обновления');
+    }
+
+    return this.prisma.listing.update({
+      where: { id },
+      data: {
+        ...listingPatch,
+        ...(Object.keys(aptPatch).length > 0 ? { apartment: { update: aptPatch } } : {}),
+      },
+      include: {
+        apartment: { include: { roomType: true, finishing: true } },
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async deleteManualListing(id: number) {
+    await this.requireManualListing(id);
+    await this.prisma.listing.delete({ where: { id } });
+    return { deleted: true, id };
+  }
+
+  private async requireManualListing(id: number) {
+    const row = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { id: true, dataSource: true, regionId: true },
+    });
+    if (!row) throw new NotFoundException('Объявление не найдено');
+    if (row.dataSource !== 'MANUAL') {
+      throw new BadRequestException('Доступно только для ручных объявлений (MANUAL)');
+    }
+    return row;
   }
 }

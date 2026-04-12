@@ -189,6 +189,11 @@ Toast, Toggle, ToggleGroup, Tooltip
 ## Интеграции (публичные фрагменты)
 - \`GET /api/v1/content/maps-config\` — \`{ apiKey }\` для Yandex Maps JS (ключ задаётся в админке → Интеграции; ограничивайте ключ по HTTP Referrer)
 
+## Ручные листинги (админ, JWT, роль editor+)
+- \`POST /api/v1/admin/listings/manual-apartment\` — тело: \`regionId\`, \`price\`, опционально \`blockId\`, \`status\`, \`isPublished\`, вложенный объект \`apartment\` (площади, этаж, справочники и т.д.)
+- \`PATCH /api/v1/admin/listings/:id/manual-apartment\` — только для \`data_source = MANUAL\`
+- \`DELETE /api/v1/admin/listings/:id\` — только \`MANUAL\`
+
 ## Избранное (API, JWT)
 - \`GET /api/v1/favorites\` — список с вложенными \`block\` / \`listing\`
 - \`GET /api/v1/favorites/ids\` — \`{ blockIds, listingIds }\`
