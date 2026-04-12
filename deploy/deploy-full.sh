@@ -3,7 +3,8 @@ set -euo pipefail
 
 # ─── Полный деплой LiveGrid: API + фронт + nginx ───
 # Запускать с сервера:   bash /var/www/lg/deploy/deploy-full.sh
-# Или удалённо:          ssh root@85.198.64.93 'bash /var/www/lg/deploy/deploy-full.sh'
+# С обновлением из Git:  bash /var/www/lg/deploy/deploy-from-git.sh
+# Или удалённо:          ssh root@HOST 'bash /var/www/lg/deploy/deploy-from-git.sh'
 
 PROJECT_DIR="/var/www/lg"
 LOG_DIR="/var/log/lg"

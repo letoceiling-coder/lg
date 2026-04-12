@@ -35,6 +35,16 @@ export class FeedImportController {
     return this.service.getProgress() || { step: 'idle', percent: 0 };
   }
 
+  @Get('diagnostics')
+  @Roles('admin', 'editor')
+  @ApiOperation({
+    summary: 'Отчёт: фид TrendAgent (about, blocks.json) vs БД и счётчик витрины',
+  })
+  @ApiQuery({ name: 'region', required: false, example: 'msk' })
+  diagnostics(@Query('region') region?: string) {
+    return this.service.feedVsDbDiagnostics(region || 'msk');
+  }
+
   @Get('history')
   @Roles('editor')
   @ApiOperation({ summary: 'Get import history' })

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { ListingKind, ListingStatus } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -16,6 +17,7 @@ import {
   FEED_IMPORT_JOB_RUN,
 } from './feed-import.constants';
 import type { FeedImportBatchJob } from './feed-import.types';
+import { BlocksService } from '../blocks/blocks.service';
 
 export interface ImportProgress {
   step: string;
@@ -33,6 +35,7 @@ export class FeedImportService implements OnModuleInit {
     private readonly fetcher: FeedFetcherService,
     private readonly processor: FeedProcessorService,
     private readonly config: ConfigService,
+    private readonly blocks: BlocksService,
     @InjectQueue(FEED_IMPORT_QUEUE)
     private readonly feedImportQueue: Queue,
   ) {}
@@ -284,6 +287,161 @@ export class FeedImportService implements OnModuleInit {
 
       this.setProgress('Failed', msg, 0);
     }
+  }
+
+  /**
+   * Отчёт «фид TrendAgent vs БД» для сопоставления с витриной (например, msk.trendagent.ru).
+   * Тяжёлый apartments.json целиком не качаем — только about + blocks; число квартир во фиде уточняйте по последнему импорту или локальной копии фида.
+   */
+  async feedVsDbDiagnostics(regionCodeRaw: string) {
+    const regionCode = (regionCodeRaw || 'msk').toLowerCase();
+    const region = await this.prisma.feedRegion.findFirst({
+      where: { code: { equals: regionCode, mode: 'insensitive' } },
+    });
+    if (!region) {
+      throw new NotFoundException(`Регион не найден: ${regionCode}`);
+    }
+
+    const about = await this.fetcher.fetchAbout(regionCode);
+    const fileMap = new Map(about.map((e) => [e.name, e.url]));
+    const exportedAt = about[0]?.exported_at ?? null;
+
+    let blocksInFeed: number | null = null;
+    let blocksFeedError: string | null = null;
+    const blocksUrl = fileMap.get('blocks');
+    if (blocksUrl) {
+      try {
+        const blocksData = await this.fetcher.fetchFeedFile<unknown[]>(blocksUrl);
+        blocksInFeed = Array.isArray(blocksData) ? blocksData.length : null;
+      } catch (e: unknown) {
+        blocksFeedError = e instanceof Error ? e.message : String(e);
+      }
+    }
+
+    const apartmentsUrl = fileMap.get('apartments') ?? null;
+
+    const [
+      listingsActivePublished,
+      listingsWithBlock,
+      listingsBlockIdNull,
+      blocksInDbRegion,
+      lastCompleted,
+    ] = await Promise.all([
+      this.prisma.listing.count({
+        where: {
+          regionId: region.id,
+          kind: ListingKind.APARTMENT,
+          status: ListingStatus.ACTIVE,
+          isPublished: true,
+        },
+      }),
+      this.prisma.listing.count({
+        where: {
+          regionId: region.id,
+          kind: ListingKind.APARTMENT,
+          status: ListingStatus.ACTIVE,
+          isPublished: true,
+          blockId: { not: null },
+        },
+      }),
+      this.prisma.listing.count({
+        where: {
+          regionId: region.id,
+          kind: ListingKind.APARTMENT,
+          status: ListingStatus.ACTIVE,
+          isPublished: true,
+          blockId: null,
+        },
+      }),
+      this.prisma.block.count({ where: { regionId: region.id } }),
+      this.prisma.importBatch.findFirst({
+        where: { regionId: region.id, status: 'COMPLETED' },
+        orderBy: { finishedAt: 'desc' },
+        select: { id: true, finishedAt: true, feedExportedAt: true, stats: true },
+      }),
+    ]);
+
+    const importStats = lastCompleted?.stats as Record<string, unknown> | null | undefined;
+    const apartmentsUpsertedLast =
+      typeof importStats?.apartments_upserted === 'number'
+        ? importStats.apartments_upserted
+        : null;
+    const blocksUpsertedLast =
+      typeof importStats?.blocks_upserted === 'number' ? importStats.blocks_upserted : null;
+
+    const catalogCounts = await this.blocks.countCatalog({
+      region_id: region.id,
+    });
+
+    const distinctBlocksWithListings = await this.prisma.listing.groupBy({
+      by: ['blockId'],
+      where: {
+        regionId: region.id,
+        kind: ListingKind.APARTMENT,
+        status: ListingStatus.ACTIVE,
+        isPublished: true,
+        blockId: { not: null },
+      },
+    });
+    const distinctBlockCount = distinctBlocksWithListings.filter((g) => g.blockId != null).length;
+
+    const explanations: string[] = [];
+    if (listingsBlockIdNull > 0) {
+      explanations.push(
+        `В БД ${listingsBlockIdNull} активных опубликованных квартир без привязки к ЖК (block_id = null). Такие лоты не попадают в публичный счётчик «X квартир в Y ЖК», потому что Y считается только по связанным ЖК.`,
+      );
+    }
+    explanations.push(
+      'Счётчик витрины Live Grid (GET /blocks/catalog-counts) учитывает только квартиры, у которых есть связанный ЖК в регионе, и только ЖК с хотя бы одной такой квартирой (require_active_listings).',
+    );
+    explanations.push(
+      'Числа на msk.trendagent.ru могут включать другой набор статусов/географии или полный объём фида до фильтрации — сравнивайте с blocksInFeed и apartments_upserted последнего импорта.',
+    );
+    if (blocksInFeed != null && blocksInFeed > catalogCounts.blocks) {
+      explanations.push(
+        `Во фиде ${blocksInFeed} записей ЖК, в витринном счётчике ${catalogCounts.blocks} ЖК — часть ЖК без активных опубликованных квартир в БД не учитывается.`,
+      );
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      region: {
+        id: region.id,
+        code: region.code,
+        name: region.name,
+        lastImportedAt: region.lastImportedAt,
+      },
+      feedAbout: {
+        exported_at: exportedAt,
+        files: about.map((e) => ({ name: e.name, url: e.url, scope: e.scope })),
+      },
+      feedProbe: {
+        blocks_json_count: blocksInFeed,
+        blocks_json_error: blocksFeedError,
+        apartments_json_url: apartmentsUrl,
+        note:
+          'Полный размер массива apartments.json не запрашивается здесь (слишком тяжело для HTTP). Смотрите apartments_upserted последнего успешного импорта или скачайте фид локально (FEED_LOCAL_DIR).',
+      },
+      database: {
+        blocks_total_in_db: blocksInDbRegion,
+        listings_apartment_active_published: listingsActivePublished,
+        listings_with_block_id: listingsWithBlock,
+        listings_block_id_null: listingsBlockIdNull,
+        distinct_blocks_having_listings: distinctBlockCount,
+      },
+      vitrine_catalog_counts: catalogCounts,
+      last_completed_import: lastCompleted
+        ? {
+            batch_id: lastCompleted.id,
+            finished_at: lastCompleted.finishedAt,
+            feed_exported_at: lastCompleted.feedExportedAt,
+            stats: lastCompleted.stats,
+            apartments_upserted: apartmentsUpsertedLast,
+            blocks_upserted: blocksUpsertedLast,
+          }
+        : null,
+      explanations,
+    };
   }
 
   async getHistory(regionId?: number, page = 1, perPage = 20) {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, Loader2, Play, RefreshCw, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Download, Loader2, Play, RefreshCw, CheckCircle2, XCircle, Clock, FileJson } from 'lucide-react';
 import { apiGet, apiPost } from '@/lib/api';
 
 interface ImportHistoryRow {
@@ -48,6 +48,7 @@ const statusColor: Record<string, string> = {
 export default function AdminFeedImport() {
   const qc = useQueryClient();
   const [region] = useState('msk');
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const { data: progress, isFetching: progressFetching } = useQuery({
     queryKey: ['admin', 'feed-import', 'progress'],
@@ -60,6 +61,13 @@ export default function AdminFeedImport() {
     queryKey: ['admin', 'feed-import', 'history'],
     queryFn: () => apiGet<{ data: ImportHistoryRow[] }>('/admin/feed-import/history?per_page=20'),
     staleTime: 10_000,
+  });
+
+  const { data: diagnostics, isFetching: diagLoading, refetch: refetchDiag } = useQuery({
+    queryKey: ['admin', 'feed-import', 'diagnostics', region],
+    queryFn: () => apiGet<unknown>(`/admin/feed-import/diagnostics?region=${encodeURIComponent(region)}`),
+    enabled: showDiagnostics,
+    staleTime: 30_000,
   });
 
   const triggerMutation = useMutation({
@@ -79,15 +87,50 @@ export default function AdminFeedImport() {
           <Download className="w-6 h-6 text-primary" />
           <h1 className="text-2xl font-bold">Импорт фидов</h1>
         </div>
-        <button
-          onClick={() => triggerMutation.mutate()}
-          disabled={triggerMutation.isPending || isRunning}
-          className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-        >
-          {triggerMutation.isPending || isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-          {isRunning ? 'Импорт идёт…' : 'Запустить импорт'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowDiagnostics(true);
+              void refetchDiag();
+            }}
+            className="inline-flex items-center gap-2 border bg-background px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors"
+          >
+            {diagLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileJson className="w-4 h-4" />}
+            Отчёт фид vs БД
+          </button>
+          <button
+            onClick={() => triggerMutation.mutate()}
+            disabled={triggerMutation.isPending || isRunning}
+            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {triggerMutation.isPending || isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+            {isRunning ? 'Импорт идёт…' : 'Запустить импорт'}
+          </button>
+        </div>
       </div>
+
+      {showDiagnostics && (
+        <div className="bg-muted/30 border rounded-2xl p-4 mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold">GET /admin/feed-import/diagnostics?region={region}</span>
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() => refetchDiag()}
+            >
+              Обновить
+            </button>
+          </div>
+          {diagLoading && !diagnostics ? (
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          ) : (
+            <pre className="text-xs overflow-x-auto max-h-[480px] overflow-y-auto whitespace-pre-wrap break-words">
+              {JSON.stringify(diagnostics, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
 
       {/* Progress bar */}
       {isRunning && progress && (
