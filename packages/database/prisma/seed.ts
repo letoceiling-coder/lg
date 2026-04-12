@@ -106,6 +106,14 @@ async function main() {
     { key: 'home_start_badge', value: 'Старт продаж', groupName: 'homepage', label: 'Текст бейджа «Старт продаж»', fieldType: 'TEXT' as const, sortOrder: 13 },
     { key: 'home_news_per_page', value: '4', groupName: 'homepage', label: 'Сколько новостей в блоке на главной', fieldType: 'TEXT' as const, sortOrder: 20 },
     {
+      key: 'home_news_rss_url',
+      value: '',
+      groupName: 'homepage',
+      label: 'RSS/Atom URL для импорта новостей (админка → Новости → Импорт RSS)',
+      fieldType: 'TEXT' as const,
+      sortOrder: 21,
+    },
+    {
       key: 'telegram_bot_token',
       value: '',
       groupName: 'integrations',

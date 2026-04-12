@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
-import { IS_PUBLIC_KEY } from '../decorators';
+import { IS_PUBLIC_KEY, OPTIONAL_JWT_USER_KEY } from '../decorators';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -23,9 +23,28 @@ export class JwtAuthGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    const optionalJwtUser = this.reflector.getAllAndOverride<boolean>(OPTIONAL_JWT_USER_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    const request = context.switchToHttp().getRequest<Request & { user?: unknown }>();
+
+    if (isPublic && optionalJwtUser) {
+      const token = this.extractToken(request);
+      if (token) {
+        try {
+          request.user = await this.jwtService.verifyAsync(token, {
+            secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+          });
+        } catch {
+          /* гость или просроченный токен — форма всё равно принимается */
+        }
+      }
+      return true;
+    }
+
     if (isPublic) return true;
 
-    const request = context.switchToHttp().getRequest();
     const path = (request.path || request.url?.split('?')[0] || '') as string;
     if (path === '/docs' || path.startsWith('/docs/')) return true;
 

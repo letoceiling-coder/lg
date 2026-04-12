@@ -19,6 +19,11 @@ enum UserRole {
   client
 }
 
+enum CollectionItemKind {
+  BLOCK
+  LISTING
+}
+
 enum DataSource {
   FEED
   MANUAL
@@ -162,8 +167,10 @@ model User {
   mediaFiles       MediaFile[]
   siteSettings     SiteSetting[]   @relation("UpdatedSettings")
   contentBlocks    ContentBlock[]  @relation("UpdatedBlocks")
-  assignedRequests Request[]       @relation("AssignedRequests")
-  favorites        Favorite[]
+  assignedRequests   Request[]       @relation("AssignedRequests")
+  submittedRequests  Request[]       @relation("SubmittedRequests")
+  favorites          Favorite[]
+  collections      UserCollection[]
 
   @@map("users")
 }
@@ -693,14 +700,17 @@ model Request {
   blockId      Int?          @map("block_id")
   listingId    Int?          @map("listing_id")
   sourceUrl    String?       @map("source_url")
+  userId       String?       @map("user_id") @db.Uuid
   assignedTo   String?       @map("assigned_to") @db.Uuid
   comment      String?       @db.Text
   telegramSent Boolean       @default(false) @map("telegram_sent")
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
+  user         User? @relation("SubmittedRequests", fields: [userId], references: [id], onDelete: SetNull)
   assignedUser User? @relation("AssignedRequests", fields: [assignedTo], references: [id])
 
+  @@index([userId])
   @@map("requests")
 }
 
@@ -722,6 +732,38 @@ model Favorite {
   @@unique([userId, blockId, listingId])
   @@index([userId])
   @@map("favorites")
+}
+
+// ============================================================
+// User collections (подборки)
+// ============================================================
+
+model UserCollection {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items UserCollectionItem[]
+
+  @@index([userId])
+  @@map("user_collections")
+}
+
+model UserCollectionItem {
+  id           String               @id @default(uuid()) @db.Uuid
+  collectionId String               @map("collection_id") @db.Uuid
+  kind         CollectionItemKind
+  entityId     Int                  @map("entity_id")
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  collection UserCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, kind, entityId])
+  @@index([collectionId])
+  @@map("user_collection_items")
 }
 
 // ============================================================

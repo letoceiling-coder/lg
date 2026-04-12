@@ -10,8 +10,9 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { LinkEmailDto, LoginDto, TokensDto } from './dto';
+import { LinkEmailDto, LoginDto, RegisterDto, TokensDto } from './dto';
 import { verifyTelegramLoginWidget } from './telegram-login.util';
+import { normalizeLoginPhone, phoneLookupVariants } from './phone-normalize.util';
 
 interface JwtPayload {
   sub: string;
@@ -28,9 +29,29 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto): Promise<TokensDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+    const email = dto.email?.trim();
+    const phoneRaw = dto.phone?.trim();
+    if (!email && !phoneRaw) {
+      throw new BadRequestException('Укажите email или телефон');
+    }
+    if (email && phoneRaw) {
+      throw new BadRequestException('Укажите только email или только телефон');
+    }
+
+    let user =
+      email != null && email.length > 0
+        ? await this.prisma.user.findUnique({ where: { email } })
+        : null;
+
+    if (!user && phoneRaw) {
+      const variants = phoneLookupVariants(phoneRaw);
+      if (variants.length === 0) {
+        throw new BadRequestException('Неверный формат телефона');
+      }
+      user = await this.prisma.user.findFirst({
+        where: { phone: { in: variants } },
+      });
+    }
 
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
@@ -43,6 +64,55 @@ export class AuthService {
     const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isMatch) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return this.issueTokensForUser(user.id);
+  }
+
+  async register(dto: RegisterDto): Promise<TokensDto> {
+    const email = dto.email.trim().toLowerCase();
+    const phoneNorm = normalizeLoginPhone(dto.phone);
+    if (!phoneNorm) {
+      throw new BadRequestException('Неверный формат телефона');
+    }
+    const fullName = dto.fullName.trim();
+    if (!fullName) {
+      throw new BadRequestException('Укажите имя');
+    }
+
+    const [byEmail, byPhone] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email }, select: { id: true } }),
+      this.prisma.user.findFirst({
+        where: { phone: { in: phoneLookupVariants(dto.phone) } },
+        select: { id: true },
+      }),
+    ]);
+    if (byEmail) {
+      throw new ConflictException('Пользователь с таким email уже зарегистрирован');
+    }
+    if (byPhone) {
+      throw new ConflictException('Пользователь с таким телефоном уже зарегистрирован');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          phone: phoneNorm,
+          passwordHash,
+          fullName,
+          role: 'client',
+          isActive: true,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Email или телефон уже занят');
+      }
+      throw e;
     }
 
     return this.issueTokensForUser(user.id);

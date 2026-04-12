@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff, UserCircle2 } from 'lucide-react';
 import Header from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [tgError, setTgError] = useState('');
@@ -30,7 +30,7 @@ const Login = () => {
     setError('');
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(loginId, password);
       navigate(from, { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Ошибка входа';
@@ -57,14 +57,16 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
+              <label className="text-sm font-medium">Email или телефон</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <UserCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  type="email"
-                  placeholder="mail@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  type="text"
+                  inputMode="email"
+                  autoComplete="username"
+                  placeholder="mail@example.com или +7 900 123-45-67"
+                  value={loginId}
+                  onChange={e => setLoginId(e.target.value)}
                   className="pl-10"
                 />
               </div>

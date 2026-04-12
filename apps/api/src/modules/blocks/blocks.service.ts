@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { QueryBlocksDto } from './dto/query-blocks.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
+import { catalogBlockWhereToSql } from './catalog-block-where-sql';
 
 @Injectable()
 export class BlocksService {
@@ -178,59 +179,128 @@ export class BlocksService {
       return { data: [], meta: { page, per_page, total: 0, total_pages: 0 } };
     }
 
-    const orderBy = this.parseSort(sort);
+    const listInclude = {
+      region: { select: { id: true, code: true, name: true } },
+      district: { select: { id: true, name: true } },
+      builder: { select: { id: true, name: true } },
+      addresses: { orderBy: { sortOrder: 'asc' as const } },
+      images: { orderBy: { sortOrder: 'asc' as const }, take: 3 },
+      subways: {
+        include: { subway: { select: { id: true, name: true } } },
+        orderBy: { distanceTime: 'asc' as const },
+        take: 3,
+      },
+      _count: {
+        select: {
+          listings: {
+            where: { status: ListingStatus.ACTIVE, kind: ListingKind.APARTMENT, isPublished: true },
+          },
+        },
+      },
+    } as const;
 
-    const [rows, total] = await Promise.all([
-      this.prisma.block.findMany({
+    const total = await this.prisma.block.count({ where });
+    if (total === 0) {
+      return { data: [], meta: { page, per_page, total: 0, total_pages: 0 } };
+    }
+
+    const isPriceSort = sort === 'price_asc' || sort === 'price_desc';
+
+    let rows: Awaited<ReturnType<typeof this.prisma.block.findMany>>;
+    let priceByBlock: Map<number, { min: number; max: number }>;
+
+    if (isPriceSort) {
+      const whereSql = catalogBlockWhereToSql(where);
+      const skip = (page - 1) * per_page;
+      const listingAgg = Prisma.sql`
+        SELECT block_id, MIN(price) AS min_p, MAX(price) AS max_p
+        FROM listings
+        WHERE status = ${ListingStatus.ACTIVE}::"ListingStatus"
+          AND kind = ${ListingKind.APARTMENT}::"ListingKind"
+          AND is_published = true
+          AND price IS NOT NULL
+        GROUP BY block_id
+      `;
+
+      if (whereSql != null) {
+        const pageRows =
+          sort === 'price_asc'
+            ? await this.prisma.$queryRaw<{ id: number; min_p: unknown; max_p: unknown }[]>`
+                SELECT b.id, lp.min_p, lp.max_p
+                FROM blocks b
+                LEFT JOIN (${listingAgg}) lp ON lp.block_id = b.id
+                WHERE ${whereSql}
+                ORDER BY lp.min_p ASC NULLS LAST, b.id ASC
+                LIMIT ${per_page} OFFSET ${skip}
+              `
+            : await this.prisma.$queryRaw<{ id: number; min_p: unknown; max_p: unknown }[]>`
+                SELECT b.id, lp.min_p, lp.max_p
+                FROM blocks b
+                LEFT JOIN (${listingAgg}) lp ON lp.block_id = b.id
+                WHERE ${whereSql}
+                ORDER BY lp.min_p DESC NULLS LAST, b.id ASC
+                LIMIT ${per_page} OFFSET ${skip}
+              `;
+
+        priceByBlock = new Map();
+        for (const r of pageRows) {
+          if (r.min_p != null && r.max_p != null) {
+            priceByBlock.set(r.id, { min: Number(r.min_p), max: Number(r.max_p) });
+          }
+        }
+        const pageIds = pageRows.map((r) => r.id);
+        if (!pageIds.length) {
+          return {
+            data: [],
+            meta: { page, per_page, total, total_pages: Math.ceil(total / per_page) },
+          };
+        }
+        const fetched = await this.prisma.block.findMany({
+          where: { id: { in: pageIds } },
+          include: listInclude,
+        });
+        const byId = new Map(fetched.map((b) => [b.id, b]));
+        rows = pageIds.map((id) => byId.get(id)).filter((b): b is NonNullable<typeof b> => b != null);
+      } else {
+        const idRows = await this.prisma.block.findMany({
+          where,
+          select: { id: true },
+        });
+        const ids = idRows.map((r) => r.id);
+        priceByBlock = await this.listingPriceBoundsByBlockIds(ids);
+        const dir = sort === 'price_asc' ? 1 : -1;
+        const sortedIds = [...ids].sort((a, b) => {
+          const pa = priceByBlock.get(a)?.min;
+          const pb = priceByBlock.get(b)?.min;
+          const na = pa == null ? (dir === 1 ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY) : pa;
+          const nb = pb == null ? (dir === 1 ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY) : pb;
+          if (na !== nb) return (na - nb) * dir;
+          return a - b;
+        });
+        const pageIds = sortedIds.slice((page - 1) * per_page, page * per_page);
+        if (!pageIds.length) {
+          return {
+            data: [],
+            meta: { page, per_page, total, total_pages: Math.ceil(total / per_page) },
+          };
+        }
+        const fetched = await this.prisma.block.findMany({
+          where: { id: { in: pageIds } },
+          include: listInclude,
+        });
+        const byId = new Map(fetched.map((b) => [b.id, b]));
+        rows = pageIds.map((id) => byId.get(id)).filter((b): b is NonNullable<typeof b> => b != null);
+      }
+    } else {
+      const orderBy = this.parseSort(sort);
+      rows = await this.prisma.block.findMany({
         where,
         orderBy,
         skip: (page - 1) * per_page,
         take: per_page,
-        include: {
-          region: { select: { id: true, code: true, name: true } },
-          district: { select: { id: true, name: true } },
-          builder: { select: { id: true, name: true } },
-          addresses: { orderBy: { sortOrder: 'asc' } },
-          images: { orderBy: { sortOrder: 'asc' }, take: 3 },
-          subways: {
-            include: { subway: { select: { id: true, name: true } } },
-            orderBy: { distanceTime: 'asc' },
-            take: 3,
-          },
-          _count: {
-            select: {
-              listings: {
-                where: { status: ListingStatus.ACTIVE, kind: ListingKind.APARTMENT, isPublished: true },
-              },
-            },
-          },
-        },
-      }),
-      this.prisma.block.count({ where }),
-    ]);
-
-    const blockIds = rows.map((b) => b.id);
-    const priceByBlock = new Map<number, { min: number; max: number }>();
-    if (blockIds.length) {
-      const agg = await this.prisma.listing.groupBy({
-        by: ['blockId'],
-        where: {
-          blockId: { in: blockIds },
-          status: ListingStatus.ACTIVE,
-          kind: ListingKind.APARTMENT,
-          price: { not: null },
-          isPublished: true,
-        },
-        _min: { price: true },
-        _max: { price: true },
+        include: listInclude,
       });
-      for (const row of agg) {
-        if (row.blockId == null || row._min.price == null) continue;
-        priceByBlock.set(row.blockId, {
-          min: Number(row._min.price),
-          max: row._max.price != null ? Number(row._max.price) : Number(row._min.price),
-        });
-      }
+      priceByBlock = await this.listingPriceBoundsByBlockIds(rows.map((b) => b.id));
     }
 
     const data = rows.map((b) => {
@@ -246,6 +316,33 @@ export class BlocksService {
       data,
       meta: { page, per_page, total, total_pages: Math.ceil(total / per_page) },
     };
+  }
+
+  private async listingPriceBoundsByBlockIds(
+    blockIds: number[],
+  ): Promise<Map<number, { min: number; max: number }>> {
+    const map = new Map<number, { min: number; max: number }>();
+    if (!blockIds.length) return map;
+    const agg = await this.prisma.listing.groupBy({
+      by: ['blockId'],
+      where: {
+        blockId: { in: blockIds },
+        status: ListingStatus.ACTIVE,
+        kind: ListingKind.APARTMENT,
+        price: { not: null },
+        isPublished: true,
+      },
+      _min: { price: true },
+      _max: { price: true },
+    });
+    for (const row of agg) {
+      if (row.blockId == null || row._min.price == null) continue;
+      map.set(row.blockId, {
+        min: Number(row._min.price),
+        max: row._max.price != null ? Number(row._max.price) : Number(row._min.price),
+      });
+    }
+    return map;
   }
 
   private readonly blockDetailInclude = {
@@ -277,7 +374,9 @@ export class BlocksService {
       include: this.blockDetailInclude,
     });
     if (!block) throw new NotFoundException('Block not found');
-    return block;
+    const prices = await this.listingPriceBoundsByBlockIds([id]);
+    const p = prices.get(id);
+    return { ...block, listingPriceMin: p?.min ?? null, listingPriceMax: p?.max ?? null };
   }
 
   async findBySlug(slug: string) {
@@ -286,7 +385,9 @@ export class BlocksService {
       include: this.blockDetailInclude,
     });
     if (!block) throw new NotFoundException('Block not found');
-    return block;
+    const prices = await this.listingPriceBoundsByBlockIds([block.id]);
+    const p = prices.get(block.id);
+    return { ...block, listingPriceMin: p?.min ?? null, listingPriceMax: p?.max ?? null };
   }
 
   private parseBlockStatus(raw?: string): BlockStatus {
@@ -379,8 +480,6 @@ export class BlocksService {
       case 'name_asc': return { name: 'asc' as const };
       case 'name_desc': return { name: 'desc' as const };
       case 'created_desc': return { createdAt: 'desc' as const };
-      case 'price_asc': return { name: 'asc' as const };
-      case 'price_desc': return { name: 'desc' as const };
       case 'sales_start_asc': return { salesStartDate: 'asc' as const };
       default: return { name: 'asc' as const };
     }

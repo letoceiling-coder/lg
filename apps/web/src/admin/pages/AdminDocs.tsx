@@ -179,7 +179,8 @@ Toast, Toggle, ToggleGroup, Tooltip
 \`\`\`
 
 ## Авторизация (API)
-- \`POST /api/v1/auth/login\` — email и пароль
+- \`POST /api/v1/auth/login\` — тело: \`{ email, password }\` или \`{ phone, password }\` (на фронте одно поле «email или телефон»)
+- \`POST /api/v1/auth/register\` — \`{ fullName, phone, email, password }\` → JWT (роль client)
 - \`GET /api/v1/auth/telegram-widget-config\` — поле \`botUsername\` для Telegram Login Widget (из настроек, без секрета)
 - \`POST /api/v1/auth/telegram\` — JSON с полями виджета (\`id\`, \`auth_date\`, \`hash\`, …); подпись проверяется токеном \`telegram_bot_token\` из админки
 - \`POST /api/v1/auth/link-telegram\` (Bearer) — то же тело, что от виджета: привязка Telegram к текущему пользователю; «пустой» TG-аккаунт без email объединяется (избранное переносится)
@@ -199,6 +200,14 @@ Toast, Toggle, ToggleGroup, Tooltip
 - \`GET /api/v1/favorites/ids\` — \`{ blockIds, listingIds }\`
 - \`POST /api/v1/favorites/block/:blockId\`, \`POST /api/v1/favorites/listing/:listingId\`
 - \`DELETE /api/v1/favorites/:id\` — по числовому id записи избранного
+
+## Подборки (API, JWT)
+- \`GET /api/v1/collections\` — список подборок с \`_count.items\`
+- \`POST /api/v1/collections\` — \`{ name }\`
+- \`GET /api/v1/collections/:id\` — подборка и элементы (ссылки на ЖК/объявления)
+- \`DELETE /api/v1/collections/:id\`
+- \`POST /api/v1/collections/:collectionId/items\` — \`{ kind: BLOCK|LISTING, entityId }\`
+- \`DELETE /api/v1/collections/:collectionId/items/:itemId\`
 
 ## Текущее состояние
 - ✅ Главная страница с динамическим контентом из CMS

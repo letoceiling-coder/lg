@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback, useEffect, useDeferredValue } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useSearchParams, Link } from 'react-router-dom';
 import { LayoutGrid, List, Map, SlidersHorizontal, X, Search, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { apiGet } from '@/lib/api';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
@@ -16,7 +17,24 @@ import { defaultFilters, type CatalogFilters, type ObjectType, type MarketType }
 
 type ViewMode = 'grid' | 'list' | 'map';
 
-const PER_PAGE = 48;
+const PER_PAGE = 20;
+
+const CATALOG_SORT_VALUES = [
+  'name_asc',
+  'name_desc',
+  'created_desc',
+  'price_asc',
+  'price_desc',
+  'sales_start_asc',
+] as const;
+type CatalogSort = (typeof CATALOG_SORT_VALUES)[number];
+
+function parseCatalogSort(raw: string | null): CatalogSort {
+  if (raw && (CATALOG_SORT_VALUES as readonly string[]).includes(raw)) {
+    return raw as CatalogSort;
+  }
+  return 'name_asc';
+}
 
 const RedesignCatalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,8 +59,6 @@ const RedesignCatalog = () => {
   const [filters, setFilters] = useState<CatalogFilters>(initialFilters);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [mapActive, setMapActive] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-
   const { data: defaultRegionId, setStoredRegionId } = useDefaultRegionId();
   const urlRegionIdRaw = searchParams.get('region_id');
   const urlRegionId = urlRegionIdRaw ? parseInt(urlRegionIdRaw, 10) : NaN;
@@ -66,21 +82,34 @@ const RedesignCatalog = () => {
 
   const regionLoading = regionId == null;
   const deferredSearch = useDeferredValue(filters.search);
+  const catalogSort = parseCatalogSort(searchParams.get('sort'));
 
   const statusMap: Record<string, string> = { building: 'BUILDING', completed: 'COMPLETED', planned: 'PROJECT' };
 
-  useEffect(() => {
-    setPage(1);
-  }, [deferredSearch, regionId, filters.priceMin, filters.priceMax, filters.status, filters.objectType, filters.district, filters.subway, filters.builder]);
-
-  const blocksQuery = useQuery({
-    queryKey: ['blocks', 'catalog', regionId, deferredSearch, page, filters.priceMin, filters.priceMax, filters.status, filters.objectType, filters.district, filters.subway, filters.builder],
-    queryFn: async () => {
+  const blocksInfinite = useInfiniteQuery({
+    queryKey: [
+      'blocks',
+      'catalog',
+      'infinite',
+      regionId,
+      deferredSearch,
+      catalogSort,
+      filters.priceMin,
+      filters.priceMax,
+      filters.status,
+      filters.objectType,
+      filters.district,
+      filters.subway,
+      filters.builder,
+    ],
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
       const sp = new URLSearchParams();
       sp.set('region_id', String(regionId));
       if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
-      sp.set('page', String(page));
+      sp.set('page', String(pageParam));
       sp.set('per_page', String(PER_PAGE));
+      sp.set('sort', catalogSort);
       if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
       if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
       if (filters.status.length === 1) {
@@ -90,7 +119,15 @@ const RedesignCatalog = () => {
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
       if (filters.subway.length) sp.set('subway_names', filters.subway.join(','));
       if (filters.builder.length) sp.set('builder_names', filters.builder.join(','));
-      return apiGet<{ data: ApiBlockListRow[]; meta: { total: number; total_pages: number } }>(`/blocks?${sp}`);
+      return apiGet<{
+        data: ApiBlockListRow[];
+        meta: { page: number; per_page: number; total: number; total_pages: number };
+      }>(`/blocks?${sp}`);
+    },
+    getNextPageParam: (lastPage) => {
+      const { page, total_pages: totalPages } = lastPage.meta;
+      if (page >= totalPages) return undefined;
+      return page + 1;
     },
     enabled: regionId != null,
   });
@@ -117,8 +154,9 @@ const RedesignCatalog = () => {
   });
 
   const rows = useMemo(
-    () => blocksQuery.data?.data.map(mapApiBlockListRowToResidentialComplex) ?? [],
-    [blocksQuery.data],
+    () =>
+      blocksInfinite.data?.pages.flatMap((p) => p.data).map(mapApiBlockListRowToResidentialComplex) ?? [],
+    [blocksInfinite.data],
   );
 
   const filtered = rows;
@@ -126,21 +164,40 @@ const RedesignCatalog = () => {
   const handleFiltersChange = useCallback(
     (f: CatalogFilters) => {
       setFilters(f);
-      setPage(1);
-      const params = new URLSearchParams();
-      if (f.search) params.set('search', f.search);
-      if (f.rooms.length) params.set('rooms', f.rooms.join(','));
-      if (f.objectType !== 'apartments') params.set('type', f.objectType);
-      if (f.marketType !== 'all') params.set('market', f.marketType);
-      setSearchParams(params, { replace: true });
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        if (f.search) params.set('search', f.search);
+        else params.delete('search');
+        if (f.rooms.length) params.set('rooms', f.rooms.join(','));
+        else params.delete('rooms');
+        if (f.objectType !== 'apartments') params.set('type', f.objectType);
+        else params.delete('type');
+        if (f.marketType !== 'all') params.set('market', f.marketType);
+        else params.delete('market');
+        return params;
+      }, { replace: true });
     },
     [setSearchParams],
   );
 
-  const totalRemote = blocksQuery.data?.meta.total;
-  const totalPages = blocksQuery.data?.meta.total_pages ?? 1;
-  const loading = regionLoading || (regionId != null && blocksQuery.isPending);
-  const loadError = blocksQuery.isError;
+  const handleSortChange = useCallback(
+    (value: string) => {
+      const next = parseCatalogSort(value);
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev);
+        if (next === 'name_asc') p.delete('sort');
+        else p.set('sort', next);
+        return p;
+      }, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  const totalRemote = blocksInfinite.data?.pages[0]?.meta.total;
+  const loading = regionLoading || (regionId != null && blocksInfinite.isPending && !blocksInfinite.data);
+  const loadError = blocksInfinite.isError;
+  const hasMore = Boolean(blocksInfinite.hasNextPage);
+  const fetchingMore = blocksInfinite.isFetchingNextPage;
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
@@ -174,13 +231,26 @@ const RedesignCatalog = () => {
           <div>
             <h1 className="text-lg font-bold">Жилые комплексы</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {loading ? 'Загрузка…' : loadError ? 'Ошибка загрузки' : `${filtered.length} на странице${totalRemote != null ? ` · всего ${totalRemote}` : ''}`}
+              {loading ? 'Загрузка…' : loadError ? 'Ошибка загрузки' : `${filtered.length} загружено${totalRemote != null ? ` · всего в каталоге ${totalRemote}` : ''}`}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <Button variant="outline" size="sm" className="lg:hidden h-9" onClick={() => setShowMobileFilters(true)}>
               <SlidersHorizontal className="w-4 h-4 mr-1.5" /> Фильтры
             </Button>
+            <Select value={catalogSort} onValueChange={handleSortChange}>
+              <SelectTrigger className="h-9 w-[min(200px,42vw)] sm:w-[220px] text-xs bg-background">
+                <SelectValue placeholder="Сортировка" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name_asc">Название А—Я</SelectItem>
+                <SelectItem value="name_desc">Название Я—А</SelectItem>
+                <SelectItem value="created_desc">Сначала новые по дате</SelectItem>
+                <SelectItem value="price_asc">Цена: сначала дешевле</SelectItem>
+                <SelectItem value="price_desc">Цена: сначала дороже</SelectItem>
+                <SelectItem value="sales_start_asc">Старт продаж (раньше)</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="hidden sm:flex items-center gap-0.5 border border-border rounded-xl p-1 bg-muted/50">
               {(
                 [
@@ -247,17 +317,23 @@ const RedesignCatalog = () => {
                 <MapSearch complexes={filtered} activeSlug={mapActive} onSelect={setMapActive} compact />
               </div>
             )}
-            {totalPages > 1 && view !== 'map' && (
-              <div className="flex items-center justify-center gap-3 mt-8">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                  Назад
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {page} / {totalPages}
-                </span>
-                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                  Вперёд
-                </Button>
+            {view !== 'map' && filtered.length > 0 && (
+              <div className="flex flex-col items-center gap-2 mt-8">
+                {hasMore ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-w-[200px]"
+                    disabled={fetchingMore}
+                    onClick={() => void blocksInfinite.fetchNextPage()}
+                  >
+                    {fetchingMore ? 'Загрузка…' : 'Показать ещё'}
+                  </Button>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  Показано {filtered.length}
+                  {totalRemote != null ? ` из ${totalRemote}` : ''}
+                </p>
               </div>
             )}
             {!loading && filtered.length === 0 && view !== 'map' && (

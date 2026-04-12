@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { RequestStatus, RequestType } from '@prisma/client';
+import { Prisma, RequestStatus, RequestType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { TelegramNotifyService } from './telegram-notify.service';
@@ -25,7 +25,7 @@ export class RequestsService {
     private readonly telegramNotify: TelegramNotifyService,
   ) {}
 
-  async create(dto: CreateRequestDto) {
+  async create(dto: CreateRequestDto, userId?: string | null) {
     const type = this.resolveType(dto.type);
     const row = await this.prisma.request.create({
       data: {
@@ -38,7 +38,8 @@ export class RequestsService {
         listingId: dto.listingId,
         sourceUrl: dto.sourceUrl,
         comment: dto.comment,
-      },
+        ...(userId ? { userId } : {}),
+      } as Prisma.RequestCreateInput,
     });
 
     if (await this.telegramNotify.isConfigured()) {
@@ -60,6 +61,28 @@ export class RequestsService {
     }
 
     return row;
+  }
+
+  /** Заявки, созданные с привязкой к пользователю (JWT при POST /requests). */
+  async findByUserId(userId: string, take = 100) {
+    return this.prisma.request.findMany({
+      where: { userId } as Prisma.RequestWhereInput,
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        type: true,
+        status: true,
+        blockId: true,
+        listingId: true,
+        sourceUrl: true,
+        comment: true,
+        createdAt: true,
+      },
+    });
   }
 
   async findAll(status?: string, page = 1, perPage = 20) {

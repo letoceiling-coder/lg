@@ -30,6 +30,13 @@ export class NewsController {
 export class NewsAdminController {
   constructor(private readonly service: NewsService) {}
 
+  @Post('sync-rss')
+  @Roles('editor')
+  @ApiOperation({ summary: 'Admin: import news from RSS/Atom (dedupe by sourceUrl)' })
+  syncRss(@Body() body?: { url?: string | null }) {
+    return this.service.syncFromRss(body?.url);
+  }
+
   @Get()
   @Roles('editor')
   @ApiOperation({ summary: 'Admin: list all news (including drafts)' })

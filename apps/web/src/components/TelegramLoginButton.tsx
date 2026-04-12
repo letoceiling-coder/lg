@@ -49,7 +49,11 @@ export function TelegramLoginButton({
     el.innerHTML = '';
     window.onTelegramAuth = async (user: Record<string, unknown>) => {
       try {
-        await loginWithTelegram(user);
+        if (mode === 'link') {
+          await linkTelegram(user);
+        } else {
+          await loginWithTelegram(user);
+        }
         onSuccessRef.current?.();
       } catch (e) {
         let msg = e instanceof Error ? e.message : 'Ошибка входа через Telegram';

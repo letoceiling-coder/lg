@@ -18,7 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { RequestStatus } from '@prisma/client';
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
-import { CurrentUser, Public, Roles } from '../../auth/decorators';
+import { CurrentUser, OptionalJwtUser, Public, Roles } from '../../auth/decorators';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { RequestsService } from './requests.service';
 
@@ -41,11 +41,23 @@ export class UpdateRequestDto {
 export class RequestsController {
   constructor(private readonly service: RequestsService) {}
 
+  @Get('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Мои заявки (созданные с JWT при отправке формы)' })
+  findMine(@CurrentUser('sub') userId: string) {
+    return this.service.findByUserId(userId);
+  }
+
   @Public()
+  @OptionalJwtUser()
   @Post()
-  @ApiOperation({ summary: 'Submit a request (public form)' })
-  create(@Body() dto: CreateRequestDto) {
-    return this.service.create(dto);
+  @ApiOperation({
+    summary: 'Submit a request (public form)',
+    description:
+      'Если передать Bearer access token, заявка привяжется к пользователю и попадёт в GET /requests/me.',
+  })
+  create(@Body() dto: CreateRequestDto, @CurrentUser('sub') userId?: string) {
+    return this.service.create(dto, userId);
   }
 }
 

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,6 +23,8 @@ interface Props {
   requestType?: PublicRequestType;
   blockId?: number;
   listingId?: number;
+  /** Без карточки и заголовка — для вложения в модалку с собственным `DialogTitle`. */
+  embedded?: boolean;
 }
 
 function inferRequestType(source: string): PublicRequestType {
@@ -38,7 +41,9 @@ const LeadForm = ({
   requestType: requestTypeProp,
   blockId,
   listingId,
+  embedded = false,
 }: Props) => {
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [comment, setComment] = useState('');
@@ -46,7 +51,7 @@ const LeadForm = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim()) return;
     setLoading(true);
@@ -70,6 +75,7 @@ const LeadForm = ({
         ...(blockId != null ? { blockId } : {}),
         ...(listingId != null ? { listingId } : {}),
       });
+      void queryClient.invalidateQueries({ queryKey: ['requests', 'me'] });
       setSubmitted(true);
     } catch (err) {
       let msg = 'Не удалось отправить заявку. Попробуйте позже.';
@@ -87,19 +93,26 @@ const LeadForm = ({
     }
   };
 
+  const shell = (inner: ReactNode) =>
+    embedded ? (
+      <div className={className}>{inner}</div>
+    ) : (
+      <div className={`bg-card border border-border rounded-xl p-6 sm:p-8 ${className}`}>{inner}</div>
+    );
+
   if (submitted) {
-    return (
-      <div className={`bg-card border border-border rounded-xl p-6 sm:p-8 text-center ${className}`}>
+    return shell(
+      <div className="text-center py-2">
         <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
         <h3 className="font-bold text-lg mb-1">Спасибо!</h3>
         <p className="text-sm text-muted-foreground">Менеджер свяжется в течение 2 часов</p>
-      </div>
+      </div>,
     );
   }
 
-  return (
-    <div className={`bg-card border border-border rounded-xl p-6 sm:p-8 ${className}`}>
-      <h3 className="font-bold text-lg mb-4">{title}</h3>
+  return shell(
+    <>
+      {title ? <h3 className="font-bold text-lg mb-4">{title}</h3> : null}
       <form onSubmit={handleSubmit} className="space-y-3">
         <Input
           placeholder="Имя"
@@ -131,7 +144,7 @@ const LeadForm = ({
           <a href="/privacy" className="underline hover:text-foreground">политикой конфиденциальности</a>
         </p>
       </form>
-    </div>
+    </>,
   );
 };
 

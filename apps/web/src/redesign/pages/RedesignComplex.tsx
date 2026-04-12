@@ -1,7 +1,7 @@
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Heart, Share2 } from 'lucide-react';
+import { MapPin, Heart, Share2, GitCompare, FileText } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
@@ -17,6 +17,9 @@ import type { ResidentialComplex, SortField, SortDir } from '@/redesign/data/typ
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { parseApiBlockId, useFavorites } from '@/shared/hooks/useFavorites';
+import { useCompare } from '@/shared/hooks/useCompare';
+import { shareCurrentPage } from '@/lib/share-page';
+import { toast } from '@/components/ui/sonner';
 import { useYandexMapsReady } from '@/shared/hooks/useYandexMapsReady';
 import {
   buildLayoutGroupsFromApartments,
@@ -63,6 +66,7 @@ const RedesignComplex = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { isBlockFavorite, toggleBlock } = useFavorites();
+  const { isCompared, toggle: toggleCompare, count: compareCount } = useCompare();
   const { ready: ymapsReady } = useYandexMapsReady();
   const mockComplex = useMemo(() => getComplexBySlug(slug || ''), [slug]);
 
@@ -204,6 +208,22 @@ const RedesignComplex = () => {
 
   const roomCounts = [...new Set(complex.buildings.flatMap(b => b.apartments).filter(a => a.status !== 'sold').map(a => a.rooms))].sort();
 
+  const inCompare = isCompared(complex.slug);
+  const handleCompare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!inCompare && compareCount >= 3) {
+      toast.error('В сравнении не более 3 ЖК');
+      return;
+    }
+    toggleCompare(complex.slug);
+  };
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    void shareCurrentPage({ title: complex.name });
+  };
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <RedesignHeader />
@@ -234,7 +254,24 @@ const RedesignComplex = () => {
                 )}
               />
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Share2 className="w-4 h-4" /></Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              title={inCompare ? 'Убрать из сравнения' : 'В сравнение'}
+              onClick={handleCompare}
+            >
+              <GitCompare className={cn('w-4 h-4', inCompare ? 'text-primary' : 'text-muted-foreground')} />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 px-2 gap-1" title="Презентация" asChild>
+              <Link to={`/presentation/${complex.slug}`}>
+                <FileText className="w-4 h-4" />
+              </Link>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Поделиться" onClick={handleShare}>
+              <Share2 className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 

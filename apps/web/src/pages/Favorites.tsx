@@ -1,10 +1,15 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
-import { Heart, Printer } from 'lucide-react';
+import { Heart, Printer, FolderPlus } from 'lucide-react';
 import { formatPrice } from '@/redesign/data/mock-data';
 import { Button } from '@/components/ui/button';
 import { useFavorites } from '@/shared/hooks/useFavorites';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { apiPost } from '@/lib/api';
+import { toast } from '@/components/ui/sonner';
 
 function listingPrice(p: unknown): number {
   if (p == null) return 0;
@@ -15,22 +20,74 @@ function listingPrice(p: unknown): number {
 
 const Favorites = () => {
   const { favorites, isLoading, removeByFavoriteId } = useFavorites();
+  const { isAuthenticated } = useAuth();
+  const qc = useQueryClient();
+  const [savingCollection, setSavingCollection] = useState(false);
   const rows = favorites ?? [];
 
+  const saveFavoritesAsCollection = async () => {
+    if (!isAuthenticated || rows.length === 0) return;
+    const name = window.prompt('Название новой подборки (в неё войдут все текущие избранные):');
+    if (!name?.trim()) return;
+    setSavingCollection(true);
+    try {
+      const col = await apiPost<{ id: string }>('/collections', { name: name.trim() });
+      let added = 0;
+      for (const row of rows) {
+        if (row.blockId != null) {
+          try {
+            await apiPost(`/collections/${col.id}/items`, { kind: 'BLOCK', entityId: row.blockId });
+            added += 1;
+          } catch {
+            /* дубликат или конфликт */
+          }
+        }
+        if (row.listingId != null) {
+          try {
+            await apiPost(`/collections/${col.id}/items`, { kind: 'LISTING', entityId: row.listingId });
+            added += 1;
+          } catch {
+            /* */
+          }
+        }
+      }
+      void qc.invalidateQueries({ queryKey: ['collections'] });
+      toast.success(`Подборка «${name.trim()}» создана (позиций: ${added})`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось создать подборку');
+    } finally {
+      setSavingCollection(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-background pb-16 lg:pb-0">
-      <RedesignHeader />
-      <div className="max-w-[1400px] mx-auto px-4 py-8 sm:py-12">
+    <div className="min-h-screen bg-background pb-16 lg:pb-0 print:pb-0">
+      <div className="print:hidden">
+        <RedesignHeader />
+      </div>
+      <div className="max-w-[1400px] mx-auto px-4 py-8 sm:py-12 print:py-4">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold">Избранное</h1>
           {rows.length > 0 && (
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-            >
-              <Printer className="w-4 h-4" /> Скачать подборку
-            </button>
+            <div className="print:hidden flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void saveFavoritesAsCollection()}
+                disabled={savingCollection || !isAuthenticated}
+                title={!isAuthenticated ? 'Войдите в аккаунт' : undefined}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                <FolderPlus className="w-4 h-4" />
+                {savingCollection ? 'Сохранение…' : 'В подборку'}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+              >
+                <Printer className="w-4 h-4" /> Скачать подборку
+              </button>
+            </div>
           )}
         </div>
         {isLoading ? (
@@ -70,7 +127,7 @@ const Favorites = () => {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="text-xs text-destructive hover:text-destructive h-8 px-0"
+                      className="print:hidden text-xs text-destructive hover:text-destructive h-8 px-0"
                       onClick={() => void removeByFavoriteId(row.id)}
                     >
                       Удалить
@@ -82,7 +139,9 @@ const Favorites = () => {
           </div>
         )}
       </div>
-      <FooterSection />
+      <div className="print:hidden">
+        <FooterSection />
+      </div>
     </div>
   );
 };

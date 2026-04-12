@@ -4,7 +4,7 @@ import PropertyCard, { type PropertyData } from './PropertyCard';
 import StartSaleCard, { type StartSaleData } from './StartSaleCard';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import LeadForm from '@/shared/components/LeadForm';
 import { ChevronLeft, ChevronRight, Flame, ArrowRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
@@ -37,6 +37,7 @@ const PropertyGridSection = ({ title, type }: Props) => {
   const { data: regionId } = useDefaultRegionId();
   const { data: siteMap } = useSiteSettings();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpFormKey, setHelpFormKey] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isHot = type === 'hot';
   const isStart = type === 'start';
@@ -219,17 +220,25 @@ const PropertyGridSection = ({ title, type }: Props) => {
         )}
       </div>
 
-      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+      <Dialog
+        open={helpOpen}
+        onOpenChange={(open) => {
+          setHelpOpen(open);
+          if (open) setHelpFormKey((k) => k + 1);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Помощь с подбором</DialogTitle>
           </DialogHeader>
-          <form className="space-y-4 mt-2" onSubmit={(e) => { e.preventDefault(); setHelpOpen(false); }}>
-            <Input placeholder="Ваше имя" />
-            <Input placeholder="Телефон" type="tel" />
-            <Input placeholder="Бюджет, например: до 10 млн" />
-            <Button type="submit" className="w-full">Отправить заявку</Button>
-          </form>
+          <LeadForm
+            key={helpFormKey}
+            embedded
+            title=""
+            source="home_start_sales_section"
+            requestType="SELECTION"
+            contextFooter="Заявка из блока «Старт продаж» на главной / в каталоге."
+          />
         </DialogContent>
       </Dialog>
     </section>

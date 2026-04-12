@@ -19,6 +19,7 @@ import { FeedImportModule } from './modules/feed-import/feed-import.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { NewsModule } from './modules/news/news.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
+import { CollectionsModule } from './modules/collections/collections.module';
 import { SearchModule } from './modules/search/search.module';
 
 @Module({
@@ -43,6 +44,7 @@ import { SearchModule } from './modules/search/search.module';
     StatsModule,
     NewsModule,
     FavoritesModule,
+    CollectionsModule,
     SearchModule,
   ],
 })

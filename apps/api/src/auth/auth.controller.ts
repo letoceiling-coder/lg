@@ -16,6 +16,7 @@ import { AuthService } from './auth.service';
 import {
   LinkEmailDto,
   LoginDto,
+  RegisterDto,
   TokensDto,
   RefreshDto,
   TelegramWidgetConfigDto,
@@ -38,10 +39,19 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email/password' })
+  @ApiOperation({ summary: 'Вход по email или телефону и паролю' })
   @ApiResponse({ status: 200, type: TokensDto })
   async login(@Body() dto: LoginDto): Promise<TokensDto> {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('register')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Регистрация: имя, телефон, email, пароль' })
+  @ApiResponse({ status: 200, type: TokensDto })
+  async register(@Body() dto: RegisterDto): Promise<TokensDto> {
+    return this.authService.register(dto);
   }
 
   @Public()

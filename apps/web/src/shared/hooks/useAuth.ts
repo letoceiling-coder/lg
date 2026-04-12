@@ -30,11 +30,12 @@ interface AuthState {
   isAuthenticated: boolean;
   user: UserProfile | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** Email или телефон (как в форме входа) + пароль */
+  login: (identifier: string, password: string) => Promise<void>;
   loginWithTelegram: (payload: Record<string, unknown>) => Promise<void>;
   linkTelegram: (payload: Record<string, unknown>) => Promise<void>;
   linkEmail: (email: string, password: string) => Promise<void>;
-  register: (data: { name: string; phone: string; email: string; password: string; role: 'client' | 'agent' }) => Promise<void>;
+  register: (data: { name: string; phone: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -107,8 +108,13 @@ export function useAuthState(): AuthState {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const tokens = await apiPost<AuthTokens>('/auth/login', { email, password });
+  const login = useCallback(async (identifier: string, password: string) => {
+    const trimmed = identifier.trim();
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+    const body = looksLikeEmail
+      ? { email: trimmed, password }
+      : { phone: trimmed, password };
+    const tokens = await apiPost<AuthTokens>('/auth/login', body);
     setTokens(tokens.accessToken, tokens.refreshToken);
     const me = await apiGet<MeResponse>('/auth/me');
     const profile = meToProfile(me);
@@ -153,9 +159,18 @@ export function useAuthState(): AuthState {
     localStorage.setItem('lg_user', JSON.stringify(profile));
   }, []);
 
-  const register = useCallback(async (_data: { name: string; phone: string; email: string; password: string; role: 'client' | 'agent' }) => {
-    // TODO: implement when POST /auth/register is available on backend
-    throw new Error('Регистрация пока недоступна');
+  const register = useCallback(async (data: { name: string; phone: string; email: string; password: string }) => {
+    const tokens = await apiPost<AuthTokens>('/auth/register', {
+      fullName: data.name.trim(),
+      phone: data.phone.trim(),
+      email: data.email.trim(),
+      password: data.password,
+    });
+    setTokens(tokens.accessToken, tokens.refreshToken);
+    const me = await apiGet<MeResponse>('/auth/me');
+    const profile = meToProfile(me);
+    setUser(profile);
+    localStorage.setItem('lg_user', JSON.stringify(profile));
   }, []);
 
   const logout = useCallback(async () => {

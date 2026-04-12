@@ -90,6 +90,14 @@ export const DEFAULT_HOMEPAGE_SITE_SETTINGS: Array<{
     fieldType: SiteSettingFieldType.TEXT,
     sortOrder: 20,
   },
+  {
+    key: 'home_news_rss_url',
+    value: '',
+    groupName: 'homepage',
+    label: 'RSS/Atom URL для импорта новостей (кнопка «Импорт RSS» в админке → Новости; пусто — только ручной URL в запросе)',
+    fieldType: SiteSettingFieldType.TEXT,
+    sortOrder: 21,
+  },
 ];
 
 /** Группа настроек интеграций: не отдаётся в публичном API, редактирование секретов — только admin. */

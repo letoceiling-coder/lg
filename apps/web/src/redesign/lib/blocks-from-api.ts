@@ -8,6 +8,7 @@ export type ApiBlockListRow = {
   name: string;
   isPromoted?: boolean;
   description?: string | null;
+  dataSource?: string;
   status: string;
   salesStartDate?: string | Date | null;
   latitude?: unknown;

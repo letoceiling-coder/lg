@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Newspaper, Loader2, Plus, Pencil, Trash2, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Newspaper, Loader2, Plus, Pencil, Trash2, Eye, EyeOff, ChevronLeft, ChevronRight, Rss } from 'lucide-react';
 import { apiGet, apiPost, apiUrl, getAccessToken } from '@/lib/api';
+import { toast } from '@/components/ui/sonner';
 
 interface NewsRow {
   id: number;
@@ -87,6 +88,19 @@ export default function AdminNews() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'news'] }),
   });
 
+  const rssMutation = useMutation({
+    mutationFn: (url?: string) =>
+      apiPost<{ imported: number; skipped: number; totalInFeed: number; feedUrl: string }>('/admin/news/sync-rss', url ? { url } : {}),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'news'] });
+      qc.invalidateQueries({ queryKey: ['news'] });
+      toast.success(`RSS: добавлено ${res.imported}, пропущено ${res.skipped} (в ленте ${res.totalInFeed})`);
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || 'Ошибка импорта RSS');
+    },
+  });
+
   function resetForm() { setForm({ title: '', slug: '', body: '', imageUrl: '', isPublished: false }); }
   function startEdit(row: NewsRow) {
     setEditing(row);
@@ -111,12 +125,31 @@ export default function AdminNews() {
           <h1 className="text-2xl font-bold">Новости</h1>
           {meta && <span className="text-sm text-muted-foreground ml-2">({meta.total})</span>}
         </div>
-        <button
-          onClick={startCreate}
-          className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Добавить
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const raw = window.prompt(
+                'URL RSS или Atom (https://…). Пусто — взять из настроек сайта «home_news_rss_url» (группа Главная).',
+                '',
+              );
+              if (raw === null) return;
+              const u = raw.trim();
+              rssMutation.mutate(u || undefined);
+            }}
+            disabled={rssMutation.isPending}
+            className="inline-flex items-center gap-2 border border-border bg-background px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {rssMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rss className="w-4 h-4" />}
+            Импорт RSS
+          </button>
+          <button
+            onClick={startCreate}
+            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Добавить
+          </button>
+        </div>
       </div>
 
       {/* Create / Edit form */}

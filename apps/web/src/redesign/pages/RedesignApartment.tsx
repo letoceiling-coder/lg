@@ -1,7 +1,7 @@
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Calculator, Heart, Share2 } from 'lucide-react';
+import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Calculator, Heart, Share2, GitCompare, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
@@ -14,6 +14,9 @@ import { getApartmentById, formatPrice } from '@/redesign/data/mock-data';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useFavorites } from '@/shared/hooks/useFavorites';
+import { useCompare } from '@/shared/hooks/useCompare';
+import { shareCurrentPage } from '@/lib/share-page';
+import { toast } from '@/components/ui/sonner';
 
 function parseNumericListingId(id: string | undefined): number | null {
   if (!id) return null;
@@ -28,6 +31,7 @@ const RedesignApartment = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { isListingFavorite, toggleListing } = useFavorites();
+  const { isCompared, toggle: toggleCompare, count: compareCount } = useCompare();
   const listingId = parseNumericListingId(idParam);
 
   const mockResult = useMemo(() => {
@@ -126,6 +130,22 @@ const RedesignApartment = () => {
     void toggleListing(listingId);
   };
 
+  const inCompare = isCompared(complex.slug);
+  const handleCompare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!inCompare && compareCount >= 3) {
+      toast.error('В сравнении не более 3 ЖК');
+      return;
+    }
+    toggleCompare(complex.slug);
+  };
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    void shareCurrentPage({ title: `${complex.name} · ${roomLabel}` });
+  };
+
   const loanAmount = apt.price * (1 - mortgageDown / 100);
   const monthlyRate = mortgageRate / 100 / 12;
   const months = mortgageYears * 12;
@@ -174,7 +194,24 @@ const RedesignApartment = () => {
                 )}
               />
             </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Share2 className="w-4 h-4" /></Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              title={inCompare ? 'Убрать ЖК из сравнения' : 'Добавить ЖК в сравнение'}
+              onClick={handleCompare}
+            >
+              <GitCompare className={cn('w-4 h-4', inCompare ? 'text-primary' : 'text-muted-foreground')} />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 px-2" title="Презентация ЖК" asChild>
+              <Link to={`/presentation/${complex.slug}`}>
+                <FileText className="w-4 h-4" />
+              </Link>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Поделиться" onClick={handleShare}>
+              <Share2 className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 
@@ -270,8 +307,21 @@ const RedesignApartment = () => {
 
             {/* CTA */}
             <div className="rounded-2xl border border-border bg-card p-6 space-y-3">
-              <Button className="w-full h-12"><Phone className="w-4 h-4 mr-2" /> Позвонить</Button>
-              <Button variant="outline" className="w-full h-12"><MessageCircle className="w-4 h-4 mr-2" /> Записаться на просмотр</Button>
+              <Button
+                type="button"
+                className="w-full h-12"
+                onClick={() => toast.info('Телефон застройщика будет доступен после подключения справочника контактов')}
+              >
+                <Phone className="w-4 h-4 mr-2" /> Позвонить
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-12"
+                onClick={() => toast.info('Оставьте заявку ниже — менеджер согласует время просмотра')}
+              >
+                <MessageCircle className="w-4 h-4 mr-2" /> Записаться на просмотр
+              </Button>
               <Button variant="secondary" className="w-full h-12" onClick={() => setShowMortgage(true)}>
                 <Calculator className="w-4 h-4 mr-2" /> Рассчитать ипотеку
               </Button>

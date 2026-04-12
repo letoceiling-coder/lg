@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Building2, Home, TreePine, Store, Trees, Phone, Send, CheckCircle2 } from 'lucide-react';
@@ -53,6 +54,7 @@ const step2Fields: Record<string, FieldConfig[]> = {
 };
 
 const QuizSection = () => {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [selectedType, setSelectedType] = useState('');
   const [params, setParams] = useState<Record<string, string>>({});
@@ -83,6 +85,7 @@ const QuizSection = () => {
         comment: `Тип: ${selectedType}. ${comment}`,
         sourceUrl: window.location.href,
       });
+      void queryClient.invalidateQueries({ queryKey: ['requests', 'me'] });
       setSubmitted(true);
     } catch {
       setError('Не удалось отправить заявку. Попробуйте позже.');
