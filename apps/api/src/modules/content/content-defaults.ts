@@ -92,7 +92,10 @@ export const DEFAULT_HOMEPAGE_SITE_SETTINGS: Array<{
   },
 ];
 
-/** Стабильные обложки (picsum по seed = не меняются между деплоями). */
+/**
+ * Обложки — статика с сайта (`apps/web/public/news/covers/`, как в strict-template).
+ * Относительные пути: без внешних CDN (часто блокируются).
+ */
 export const DEFAULT_DEMO_NEWS: Array<{
   slug: string;
   title: string;
@@ -105,41 +108,41 @@ export const DEFAULT_DEMO_NEWS: Array<{
     title: 'Обзор новостроек Москвы: что выбрать',
     body: '<p>Краткий обзор рынка новостроек Москвы и Московской области.</p>',
     source: 'Обзор',
-    imageUrl: 'https://picsum.photos/seed/livegrid-news-obzor/800/480',
+    imageUrl: '/news/covers/construction.jpg',
   },
   {
     slug: 'ipoteka-stavki-snizheny-2026',
     title: 'Ипотечные ставки снижены до 6%',
     body: '<p>Обзор актуальных ипотечных программ и условий банков.</p>',
     source: 'Ипотека',
-    imageUrl: 'https://picsum.photos/seed/livegrid-news-ipoteka/800/480',
+    imageUrl: '/news/covers/office.jpg',
   },
   {
     slug: 'novyj-zhk-na-yuge-moskvy',
     title: 'Новый жилой комплекс на юге Москвы',
     body: '<p>Анонс нового проекта на юге столицы.</p>',
     source: 'Новостройки',
-    imageUrl: 'https://picsum.photos/seed/livegrid-news-zhk/800/480',
+    imageUrl: '/news/covers/complex.jpg',
   },
   {
     slug: 'kak-vybrat-kvartiru-sovety',
     title: 'Как выбрать квартиру: советы экспертов',
     body: '<p>Практические рекомендации при выборе квартиры в новостройке.</p>',
     source: 'Советы',
-    imageUrl: 'https://picsum.photos/seed/livegrid-news-sovety/800/480',
+    imageUrl: '/news/covers/interior.jpg',
   },
   {
     slug: 'rynok-novostroek-prognoz-2026',
     title: 'Прогноз по рынку новостроек на 2026 год',
     body: '<p>Что ждёт покупателей: спрос, цены и география запусков.</p>',
     source: 'Аналитика',
-    imageUrl: 'https://picsum.photos/seed/livegrid-news-analitika/800/480',
+    imageUrl: '/news/covers/office.jpg',
   },
   {
     slug: 'samoletnye-programmy-rassrochki',
     title: 'Рассрочка и trade-in: какие программы актуальны',
     body: '<p>Краткий обзор условий застройщиков и банковских партнёров.</p>',
     source: 'Финансы',
-    imageUrl: 'https://picsum.photos/seed/livegrid-news-finance/800/480',
+    imageUrl: '/news/covers/construction.jpg',
   },
 ];

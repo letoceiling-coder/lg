@@ -57,12 +57,19 @@ export class ContentService implements OnModuleInit {
     this.logger.log(`Seeded ${DEFAULT_DEMO_NEWS.length} demo news (DB was empty)`);
   }
 
-  /** Добавляет обложки демо-новостям, если они уже были в БД без imageUrl (старый прод). */
+  /** Обложки демо-новостей: пусто, внешний CDN (picsum) или старый URL → локальные `/news/covers/*`. */
   private async ensureDemoNewsCovers() {
     for (const article of DEFAULT_DEMO_NEWS) {
       if (!article.imageUrl) continue;
       const r = await this.prisma.news.updateMany({
-        where: { slug: article.slug, OR: [{ imageUrl: null }, { imageUrl: '' }] },
+        where: {
+          slug: article.slug,
+          OR: [
+            { imageUrl: null },
+            { imageUrl: '' },
+            { imageUrl: { contains: 'picsum.photos' } },
+          ],
+        },
         data: { imageUrl: article.imageUrl },
       });
       if (r.count > 0) {

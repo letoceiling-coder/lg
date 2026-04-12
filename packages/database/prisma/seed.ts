@@ -136,7 +136,7 @@ async function main() {
       title: 'Обзор новостроек Москвы: что выбрать',
       body: '<p>Краткий обзор рынка новостроек Москвы и Московской области.</p>',
       source: 'Обзор',
-      imageUrl: 'https://picsum.photos/seed/livegrid-news-obzor/800/480',
+      imageUrl: '/news/covers/construction.jpg',
     },
     {
       slug: 'ipoteka-stavki-snizheny-2026',
@@ -150,7 +150,7 @@ async function main() {
       title: 'Новый жилой комплекс на юге Москвы',
       body: '<p>Анонс нового проекта на юге столицы.</p>',
       source: 'Новостройки',
-      imageUrl: 'https://picsum.photos/seed/livegrid-news-zhk/800/480',
+      imageUrl: '/news/covers/complex.jpg',
     },
     {
       slug: 'kak-vybrat-kvartiru-sovety',
@@ -164,14 +164,14 @@ async function main() {
       title: 'Прогноз по рынку новостроек на 2026 год',
       body: '<p>Что ждёт покупателей: спрос, цены и география запусков.</p>',
       source: 'Аналитика',
-      imageUrl: 'https://picsum.photos/seed/livegrid-news-analitika/800/480',
+      imageUrl: '/news/covers/office.jpg',
     },
     {
       slug: 'samoletnye-programmy-rassrochki',
       title: 'Рассрочка и trade-in: какие программы актуальны',
       body: '<p>Краткий обзор условий застройщиков и банковских партнёров.</p>',
       source: 'Финансы',
-      imageUrl: 'https://picsum.photos/seed/livegrid-news-finance/800/480',
+      imageUrl: '/news/covers/construction.jpg',
     },
   ];
   const now = new Date();

@@ -15,7 +15,7 @@ const navItems = [
   { to: '/admin/listings', icon: Home, label: 'Квартиры' },
   { to: '/admin/feed-import', icon: Download, label: 'Импорт фидов' },
   { to: '/admin/regions', icon: Globe, label: 'Регионы' },
-  { to: '/admin/homepage', icon: LayoutTemplate, label: 'Главная (блоки)' },
+  { to: '/admin/homepage', icon: LayoutTemplate, label: 'Главная: блоки API' },
   { to: '/admin/news', icon: Newspaper, label: 'Новости' },
   { to: '/admin/media', icon: Image, label: 'Медиа' },
   { to: '/admin/users', icon: Users, label: 'Пользователи' },
