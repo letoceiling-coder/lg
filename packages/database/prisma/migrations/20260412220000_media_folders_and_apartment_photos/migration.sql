@@ -5,7 +5,7 @@ CREATE TABLE "media_folders" (
     "name" VARCHAR(255) NOT NULL,
     "is_trash" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
+    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "media_folders_pkey" PRIMARY KEY ("id")
 );
@@ -29,5 +29,5 @@ CREATE INDEX "media_files_folder_id_idx" ON "media_files"("folder_id");
 ALTER TABLE "listing_apartments" ADD COLUMN     "finishing_photo_url" TEXT,
 ADD COLUMN     "extra_photo_urls" JSONB;
 
-INSERT INTO "media_folders" ("parent_id", "name", "is_trash") VALUES (NULL, 'Корзина', true);
-INSERT INTO "media_folders" ("parent_id", "name", "is_trash") VALUES (NULL, 'Загрузки', false);
+INSERT INTO "media_folders" ("parent_id", "name", "is_trash", "updated_at") VALUES (NULL, 'Корзина', true, CURRENT_TIMESTAMP);
+INSERT INTO "media_folders" ("parent_id", "name", "is_trash", "updated_at") VALUES (NULL, 'Загрузки', false, CURRENT_TIMESTAMP);
