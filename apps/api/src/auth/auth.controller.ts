@@ -13,7 +13,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, TokensDto, RefreshDto } from './dto';
+import { LoginDto, TokensDto, RefreshDto, TelegramWidgetConfigDto } from './dto';
 import { Public, CurrentUser } from './decorators';
 
 @ApiTags('Auth')
@@ -22,12 +22,29 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Get('telegram-widget-config')
+  @ApiOperation({ summary: 'Username бота для Telegram Login Widget (без секретов)' })
+  @ApiResponse({ status: 200, type: TelegramWidgetConfigDto })
+  async telegramWidgetConfig(): Promise<TelegramWidgetConfigDto> {
+    return this.authService.getTelegramWidgetConfig();
+  }
+
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email/password' })
   @ApiResponse({ status: 200, type: TokensDto })
   async login(@Body() dto: LoginDto): Promise<TokensDto> {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('telegram')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login / регистрация через Telegram Login Widget' })
+  @ApiResponse({ status: 200, type: TokensDto })
+  async telegramLogin(@Body() body: Record<string, unknown>): Promise<TokensDto> {
+    return this.authService.telegramLogin(body);
   }
 
   @Public()

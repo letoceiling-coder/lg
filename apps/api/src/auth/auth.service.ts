@@ -1,9 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, TokensDto } from './dto';
+import { verifyTelegramLoginWidget } from './telegram-login.util';
 
 interface JwtPayload {
   sub: string;
@@ -39,12 +45,110 @@ export class AuthService {
 
     const tokens = await this.generateTokens({
       sub: user.id,
-      email: user.email!,
+      email: user.email ?? '',
       role: user.role,
     });
 
     await this.saveRefreshToken(user.id, tokens.refreshToken);
     return tokens;
+  }
+
+  /** Публичный username бота для Telegram Login Widget (без токена). */
+  async getTelegramWidgetConfig(): Promise<{ botUsername: string | null }> {
+    const row = await this.prisma.siteSetting.findUnique({
+      where: { key: 'telegram_login_bot_username' },
+      select: { value: true },
+    });
+    const v = row?.value?.trim();
+    return { botUsername: v && v.length > 0 ? v.replace(/^@/, '') : null };
+  }
+
+  /**
+   * Вход через Telegram Login Widget: проверка hash по токену бота из site_settings,
+   * создание пользователя client при первом входе.
+   */
+  async telegramLogin(body: Record<string, unknown>): Promise<TokensDto> {
+    const strMap: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body)) {
+      if (v === undefined || v === null) continue;
+      strMap[k] = typeof v === 'string' ? v : String(v);
+    }
+    if (!strMap.id || !strMap.auth_date || !strMap.hash) {
+      throw new BadRequestException('Нужны поля id, auth_date и hash');
+    }
+
+    const botToken = await this.getSiteSettingValue('telegram_bot_token');
+    if (!botToken) {
+      throw new ServiceUnavailableException(
+        'Вход через Telegram не настроен: укажите токен бота в админке → Настройки → Интеграции',
+      );
+    }
+
+    if (!verifyTelegramLoginWidget(strMap, botToken)) {
+      throw new UnauthorizedException('Неверная подпись Telegram');
+    }
+
+    const authTs = parseInt(strMap.auth_date, 10);
+    if (!Number.isFinite(authTs) || Math.abs(Date.now() / 1000 - authTs) > 86400) {
+      throw new UnauthorizedException('Устаревшие данные авторизации');
+    }
+
+    let tgId: bigint;
+    try {
+      tgId = BigInt(strMap.id);
+    } catch {
+      throw new BadRequestException('Некорректный id');
+    }
+
+    let user = await this.prisma.user.findUnique({ where: { telegramId: tgId } });
+    const fullName =
+      [strMap.first_name, strMap.last_name].filter(Boolean).join(' ').trim() || null;
+    const username = strMap.username?.trim() || null;
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email: null,
+          passwordHash: null,
+          fullName,
+          role: 'client',
+          telegramId: tgId,
+          telegramUsername: username,
+          isActive: true,
+        },
+      });
+    } else {
+      if (!user.isActive) {
+        throw new UnauthorizedException('Аккаунт отключён');
+      }
+      const patch: { telegramUsername?: string | null; fullName?: string | null } = {};
+      if (username !== null && username !== user.telegramUsername) {
+        patch.telegramUsername = username;
+      }
+      if (fullName && fullName !== user.fullName) {
+        patch.fullName = fullName;
+      }
+      if (Object.keys(patch).length > 0) {
+        user = await this.prisma.user.update({ where: { id: user.id }, data: patch });
+      }
+    }
+
+    const tokens = await this.generateTokens({
+      sub: user.id,
+      email: user.email ?? '',
+      role: user.role,
+    });
+    await this.saveRefreshToken(user.id, tokens.refreshToken);
+    return tokens;
+  }
+
+  private async getSiteSettingValue(key: string): Promise<string | null> {
+    const row = await this.prisma.siteSetting.findUnique({
+      where: { key },
+      select: { value: true },
+    });
+    const v = row?.value?.trim();
+    return v && v.length > 0 ? v : null;
   }
 
   async refresh(refreshToken: string): Promise<TokensDto> {
@@ -80,7 +184,7 @@ export class AuthService {
 
     const tokens = await this.generateTokens({
       sub: user.id,
-      email: user.email!,
+      email: user.email ?? '',
       role: user.role,
     });
 

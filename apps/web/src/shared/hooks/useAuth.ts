@@ -16,10 +16,11 @@ interface AuthTokens {
 
 interface MeResponse {
   id: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   fullName: string | null;
   role: string;
+  telegramUsername?: string | null;
   isActive: boolean;
 }
 
@@ -28,6 +29,7 @@ interface AuthState {
   user: UserProfile | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithTelegram: (payload: Record<string, unknown>) => Promise<void>;
   register: (data: { name: string; phone: string; email: string; password: string; role: 'client' | 'agent' }) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -102,6 +104,20 @@ export function useAuthState(): AuthState {
     localStorage.setItem('lg_user', JSON.stringify(profile));
   }, []);
 
+  const loginWithTelegram = useCallback(async (payload: Record<string, unknown>) => {
+    const body: Record<string, string> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (v === undefined || v === null) continue;
+      body[k] = typeof v === 'string' ? v : String(v);
+    }
+    const tokens = await apiPost<AuthTokens>('/auth/telegram', body);
+    setTokens(tokens.accessToken, tokens.refreshToken);
+    const me = await apiGet<MeResponse>('/auth/me');
+    const profile = meToProfile(me);
+    setUser(profile);
+    localStorage.setItem('lg_user', JSON.stringify(profile));
+  }, []);
+
   const register = useCallback(async (_data: { name: string; phone: string; email: string; password: string; role: 'client' | 'agent' }) => {
     // TODO: implement when POST /auth/register is available on backend
     throw new Error('Регистрация пока недоступна');
@@ -119,6 +135,7 @@ export function useAuthState(): AuthState {
     user,
     loading,
     login,
+    loginWithTelegram,
     register,
     logout,
   };

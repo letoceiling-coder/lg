@@ -178,6 +178,12 @@ Sidebar, Skeleton, Slider, Sonner, Switch, Table, Tabs, Textarea,
 Toast, Toggle, ToggleGroup, Tooltip
 \`\`\`
 
+## Авторизация (API)
+- \`POST /api/v1/auth/login\` — email и пароль
+- \`GET /api/v1/auth/telegram-widget-config\` — поле \`botUsername\` для Telegram Login Widget (из настроек, без секрета)
+- \`POST /api/v1/auth/telegram\` — JSON с полями виджета (\`id\`, \`auth_date\`, \`hash\`, …); подпись проверяется токеном \`telegram_bot_token\` из админки
+- В @BotFather для бота: команда привязки домена сайта (HTTPS), иначе виджет не откроется на проде
+
 ## Текущее состояние
 - ✅ Главная страница с динамическим контентом из CMS
 - ✅ Каталог ЖК с фильтрами и 3 режимами (grid/list/map)

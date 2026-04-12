@@ -5,9 +5,13 @@ import Header from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TelegramLoginButton } from '@/components/TelegramLoginButton';
+import { useNavigate } from 'react-router-dom';
 
 const Register = () => {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [tgError, setTgError] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,12 +70,17 @@ const Register = () => {
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <Button variant="outline" className="w-full rounded-full gap-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.38-.27-2.06-.49-.83-.27-1.49-.42-1.43-.88.03-.24.37-.49 1.02-.74 3.98-1.73 6.64-2.87 7.97-3.44 3.79-1.58 4.58-1.86 5.09-1.87.11 0 .37.03.54.17.14.12.18.28.2.45-.01.06.01.24 0 .48z" fill="#2AABEE"/>
-            </svg>
-            Войти через Telegram
-          </Button>
+          {tgError && (
+            <p className="text-sm text-destructive text-center">{tgError}</p>
+          )}
+          <TelegramLoginButton
+            className="w-full"
+            onSuccess={() => {
+              setTgError('');
+              navigate('/', { replace: true });
+            }}
+            onError={(msg) => setTgError(msg)}
+          />
 
           <p className="text-center text-sm text-muted-foreground">
             Уже есть аккаунт?{' '}
