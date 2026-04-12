@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Image, Users, Settings, ChevronLeft,
   ChevronRight, Palette, BookOpen, ClipboardList, Building2, Download, Newspaper, Home,
@@ -26,7 +26,6 @@ const navItems = [
 
 export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
-  const location = useLocation();
 
   return (
     <div className="flex h-screen bg-muted/30 overflow-hidden">
@@ -63,6 +62,14 @@ export default function AdminLayout() {
             </NavLink>
           ))}
         </nav>
+        {!collapsed ? (
+          <div
+            className="mx-2 mb-1 px-2 py-1 rounded-lg bg-muted/50 text-[10px] text-muted-foreground leading-tight break-all"
+            title="Если дата не меняется после деплоя — на сервере старая сборка или кэш браузера (Ctrl+Shift+R)."
+          >
+            Сборка: {__LG_BUILD_TIME__}
+          </div>
+        ) : null}
         <button
           onClick={() => setCollapsed(c => !c)}
           className="flex items-center justify-center h-12 border-t text-muted-foreground hover:text-foreground transition-colors"

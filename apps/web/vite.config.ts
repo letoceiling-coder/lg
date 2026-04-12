@@ -5,6 +5,10 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  define: {
+    /** Время сборки фронта — в подвале админки, чтобы отличить старый dist на сервере */
+    __LG_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   server: {
     host: "::",
     port: 5173,
