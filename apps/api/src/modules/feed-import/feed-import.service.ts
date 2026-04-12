@@ -369,8 +369,21 @@ export class FeedImportService implements OnModuleInit {
     const blocksUpsertedLast =
       typeof importStats?.blocks_upserted === 'number' ? importStats.blocks_upserted : null;
 
-    const catalogCounts = await this.blocks.countCatalog({
+    /** Как публичный GET /blocks/catalog-counts (дефолт витрины). */
+    const catalogCountsVitrine = await this.blocks.countCatalog({
       region_id: region.id,
+      require_active_listings: true,
+    });
+    /** Все ЖК региона с квартирами по тем же правилам лотов, без требования «есть активные квартиры у ЖК». */
+    const catalogCountsRelaxed = await this.blocks.countCatalog({
+      region_id: region.id,
+      require_active_listings: false,
+    });
+
+    const listingStatusBreakdown = await this.prisma.listing.groupBy({
+      by: ['status'],
+      where: { regionId: region.id, kind: ListingKind.APARTMENT },
+      _count: { _all: true },
     });
 
     const distinctBlocksWithListings = await this.prisma.listing.groupBy({
@@ -397,9 +410,17 @@ export class FeedImportService implements OnModuleInit {
     explanations.push(
       'Числа на msk.trendagent.ru могут включать другой набор статусов/географии или полный объём фида до фильтрации — сравнивайте с blocksInFeed и apartments_upserted последнего импорта.',
     );
-    if (blocksInFeed != null && blocksInFeed > catalogCounts.blocks) {
+    if (blocksInFeed != null && blocksInFeed > catalogCountsVitrine.blocks) {
       explanations.push(
-        `Во фиде ${blocksInFeed} записей ЖК, в витринном счётчике ${catalogCounts.blocks} ЖК — часть ЖК без активных опубликованных квартир в БД не учитывается.`,
+        `Во фиде ${blocksInFeed} записей ЖК, на витрине (как у TrendAgent по смыслу «ЖК с офферами») ${catalogCountsVitrine.blocks} ЖК — часть ЖК в БД без активных опубликованных квартир не попадает в счётчик главной.`,
+      );
+    }
+    if (
+      catalogCountsRelaxed.apartments > catalogCountsVitrine.apartments ||
+      catalogCountsRelaxed.blocks > catalogCountsVitrine.blocks
+    ) {
+      explanations.push(
+        `Счётчик главной = vitrine_catalog_counts (require_active_listings). Без него было бы квартир: ${catalogCountsRelaxed.apartments}, ЖК: ${catalogCountsRelaxed.blocks} — сравнивайте с этим, если нужно понять «все лоты в регионе».`,
       );
     }
 
@@ -429,7 +450,12 @@ export class FeedImportService implements OnModuleInit {
         listings_block_id_null: listingsBlockIdNull,
         distinct_blocks_having_listings: distinctBlockCount,
       },
-      vitrine_catalog_counts: catalogCounts,
+      vitrine_catalog_counts: catalogCountsVitrine,
+      catalog_counts_relaxed: catalogCountsRelaxed,
+      listing_status_breakdown_apartments: listingStatusBreakdown.map((r) => ({
+        status: r.status,
+        count: r._count._all,
+      })),
       last_completed_import: lastCompleted
         ? {
             batch_id: lastCompleted.id,

@@ -13,6 +13,7 @@ set -euo pipefail
 #   DEPLOY_REMOTE — remote (по умолчанию origin)
 
 DEPLOY_ROOT="${DEPLOY_ROOT:-/var/www/lg}"
+export DEPLOY_ROOT
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 DEPLOY_REMOTE="${DEPLOY_REMOTE:-origin}"
 

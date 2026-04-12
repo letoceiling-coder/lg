@@ -1,8 +1,11 @@
+/** Совпадает с DEPLOY_ROOT в deploy-full.sh / deploy-from-git.sh */
+const deployRoot = process.env.DEPLOY_ROOT || '/var/www/lg';
+
 module.exports = {
   apps: [
     {
       name: 'lg-api',
-      cwd: '/var/www/lg/apps/api',
+      cwd: `${deployRoot}/apps/api`,
       script: 'dist/main.js',
       instances: 1,
       exec_mode: 'fork',

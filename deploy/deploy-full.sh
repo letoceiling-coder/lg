@@ -6,13 +6,14 @@ set -euo pipefail
 # С обновлением из Git:  bash /var/www/lg/deploy/deploy-from-git.sh
 # Или удалённо:          ssh root@HOST 'bash /var/www/lg/deploy/deploy-from-git.sh'
 
-PROJECT_DIR="/var/www/lg"
+PROJECT_DIR="${DEPLOY_ROOT:-/var/www/lg}"
+export DEPLOY_ROOT="$PROJECT_DIR"
 LOG_DIR="/var/log/lg"
 NGINX_CONF="/etc/nginx/sites-available/lg.livegrid.ru.conf"
 NGINX_LINK="/etc/nginx/sites-enabled/lg.livegrid.ru.conf"
 
 echo "=== LiveGrid Full Deploy ==="
-echo "Project: $PROJECT_DIR"
+echo "Project: $PROJECT_DIR (DEPLOY_ROOT=$DEPLOY_ROOT)"
 echo ""
 
 cd "$PROJECT_DIR"
