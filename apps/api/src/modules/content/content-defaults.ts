@@ -92,6 +92,44 @@ export const DEFAULT_HOMEPAGE_SITE_SETTINGS: Array<{
   },
 ];
 
+/** Группа настроек интеграций: не отдаётся в публичном API, редактирование секретов — только admin. */
+export const INTEGRATIONS_SITE_SETTINGS_GROUP = 'integrations';
+
+/** Telegram и др.: только БД + админ-панель (без переменных окружения). */
+export const DEFAULT_INTEGRATION_SITE_SETTINGS: Array<{
+  key: string;
+  value: string;
+  groupName: string;
+  label: string;
+  fieldType: SiteSettingFieldType;
+  sortOrder: number;
+}> = [
+  {
+    key: 'telegram_bot_token',
+    value: '',
+    groupName: INTEGRATIONS_SITE_SETTINGS_GROUP,
+    label: 'Telegram: токен бота (выдаёт BotFather)',
+    fieldType: SiteSettingFieldType.SECRET,
+    sortOrder: 0,
+  },
+  {
+    key: 'telegram_notify_chat_id',
+    value: '',
+    groupName: INTEGRATIONS_SITE_SETTINGS_GROUP,
+    label: 'Telegram: ID чата/канала для уведомлений о новых заявках',
+    fieldType: SiteSettingFieldType.TEXT,
+    sortOrder: 1,
+  },
+  {
+    key: 'telegram_login_bot_username',
+    value: '',
+    groupName: INTEGRATIONS_SITE_SETTINGS_GROUP,
+    label: 'Telegram Login: username бота без @ (для виджета на сайте)',
+    fieldType: SiteSettingFieldType.TEXT,
+    sortOrder: 2,
+  },
+];
+
 /**
  * Обложки — статика с сайта (`apps/web/public/news/covers/`, как в strict-template).
  * Относительные пути: без внешних CDN (часто блокируются).

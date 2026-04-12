@@ -114,6 +114,8 @@ enum SiteSettingFieldType {
   EMAIL
   IMAGE
   BOOLEAN
+  /// Секрет (токен и т.п.): только админ, не отдаётся в публичном GET /content/settings
+  SECRET
 }
 
 enum ContentFieldType {

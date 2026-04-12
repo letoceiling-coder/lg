@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LayoutTemplate, Loader2, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPut } from '@/lib/api';
 
 type SettingRow = { id: number; key: string; value: string; groupName: string; label: string; fieldType: string };
 type GroupedSettings = Record<string, SettingRow[]>;
@@ -47,8 +47,8 @@ const BLOCK_SECTIONS: Array<{
 export default function AdminHomepage() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'settings'],
-    queryFn: () => apiGet<GroupedSettings>('/content/settings'),
+    queryKey: ['admin', 'content', 'settings'],
+    queryFn: () => apiGet<GroupedSettings>('/admin/content/settings'),
     staleTime: 60_000,
   });
 
@@ -69,10 +69,10 @@ export default function AdminHomepage() {
   const mutation = useMutation({
     mutationFn: async () => {
       const payload = Object.entries(values).map(([key, value]) => ({ key, value }));
-      return apiPost('/content/settings', payload);
+      return apiPut('/admin/content/settings', payload);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'content', 'settings'] });
       qc.invalidateQueries({ queryKey: ['content', 'settings'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

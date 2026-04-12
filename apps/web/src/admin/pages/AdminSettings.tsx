@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Loader2, CheckCircle2 } from 'lucide-react';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPut } from '@/lib/api';
 
 type SettingRow = { id: number; key: string; value: string; groupName: string; label: string; fieldType: string };
 type GroupedSettings = Record<string, SettingRow[]>;
@@ -9,8 +9,8 @@ type GroupedSettings = Record<string, SettingRow[]>;
 export default function AdminSettings() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'settings'],
-    queryFn: () => apiGet<GroupedSettings>('/content/settings'),
+    queryKey: ['admin', 'content', 'settings'],
+    queryFn: () => apiGet<GroupedSettings>('/admin/content/settings'),
     staleTime: 60_000,
   });
 
@@ -29,10 +29,10 @@ export default function AdminSettings() {
   const mutation = useMutation({
     mutationFn: async () => {
       const payload = Object.entries(values).map(([key, value]) => ({ key, value }));
-      return apiPost('/content/settings', payload);
+      return apiPut('/admin/content/settings', payload);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'content', 'settings'] });
       qc.invalidateQueries({ queryKey: ['content', 'settings'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -48,6 +48,7 @@ export default function AdminSettings() {
     map: 'Карта',
     homepage: 'Главная страница',
     legal: 'Юридическая информация',
+    integrations: 'Интеграции (Telegram)',
   };
 
   if (isLoading) {
@@ -113,6 +114,15 @@ export default function AdminSettings() {
                       />
                       <span className="text-muted-foreground">включено</span>
                     </label>
+                  ) : row.fieldType === 'SECRET' ? (
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={values[row.key] ?? ''}
+                      onChange={(e) => setValues((v) => ({ ...v, [row.key]: e.target.value }))}
+                      placeholder="Вставьте токен"
+                      className="border rounded-xl px-3 py-2 text-sm w-full bg-background font-mono"
+                    />
                   ) : (
                     <input
                       type="text"

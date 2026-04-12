@@ -1,13 +1,21 @@
 import { Injectable, NotFoundException, Logger, OnModuleInit } from '@nestjs/common';
-import { NavigationItem, Prisma } from '@prisma/client';
+import { NavigationItem, Prisma, SiteSetting } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateMortgageBankDto } from './dto/create-mortgage-bank.dto';
 import { UpdateMortgageBankDto } from './dto/update-mortgage-bank.dto';
-import { DEFAULT_DEMO_NEWS, DEFAULT_HOMEPAGE_SITE_SETTINGS } from './content-defaults';
+import {
+  DEFAULT_DEMO_NEWS,
+  DEFAULT_HOMEPAGE_SITE_SETTINGS,
+  DEFAULT_INTEGRATION_SITE_SETTINGS,
+  INTEGRATIONS_SITE_SETTINGS_GROUP,
+} from './content-defaults';
 
 type NavItemTree = NavigationItem & { children: NavItemTree[] };
 
 const homepageDefaultsByKey = new Map(DEFAULT_HOMEPAGE_SITE_SETTINGS.map((r) => [r.key, r]));
+const integrationDefaultsByKey = new Map(DEFAULT_INTEGRATION_SITE_SETTINGS.map((r) => [r.key, r]));
+const integrationKeys = new Set(integrationDefaultsByKey.keys());
+const settingDefaultsByKey = new Map([...homepageDefaultsByKey, ...integrationDefaultsByKey]);
 
 @Injectable()
 export class ContentService implements OnModuleInit {
@@ -17,6 +25,7 @@ export class ContentService implements OnModuleInit {
 
   async onModuleInit() {
     await this.ensureHomepageSiteSettings();
+    await this.ensureIntegrationSiteSettings();
     await this.ensureDemoNewsIfEmpty();
     await this.ensureDemoNewsCovers();
   }
@@ -31,6 +40,18 @@ export class ContentService implements OnModuleInit {
       });
     }
     this.logger.log('Homepage site_settings ensured');
+  }
+
+  /** Telegram и др.: строки в БД, правки только из админки (не .env). */
+  private async ensureIntegrationSiteSettings() {
+    for (const row of DEFAULT_INTEGRATION_SITE_SETTINGS) {
+      await this.prisma.siteSetting.upsert({
+        where: { key: row.key },
+        update: {},
+        create: row,
+      });
+    }
+    this.logger.log('Integration site_settings ensured');
   }
 
   /** Если таблица news пуста — демо-статьи как в шаблоне (главная + /admin/news). */
@@ -78,11 +99,11 @@ export class ContentService implements OnModuleInit {
     }
   }
 
-  async getSettings() {
+  private async loadAllSettingsGrouped(): Promise<Record<string, SiteSetting[]>> {
     const rows = await this.prisma.siteSetting.findMany({
       orderBy: [{ groupName: 'asc' }, { sortOrder: 'asc' }, { id: 'asc' }],
     });
-    const grouped: Record<string, typeof rows> = {};
+    const grouped: Record<string, SiteSetting[]> = {};
     for (const row of rows) {
       if (!grouped[row.groupName]) {
         grouped[row.groupName] = [];
@@ -92,10 +113,51 @@ export class ContentService implements OnModuleInit {
     return grouped;
   }
 
-  async updateSettings(data: { key: string; value: string }[]) {
+  private omitIntegrationsGroup(
+    grouped: Record<string, SiteSetting[]>,
+  ): Record<string, SiteSetting[]> {
+    const { [INTEGRATIONS_SITE_SETTINGS_GROUP]: _removed, ...rest } = grouped;
+    return rest;
+  }
+
+  /** Публичный API: без группы integrations (токены и т.д.). */
+  async getSettingsPublic() {
+    return this.omitIntegrationsGroup(await this.loadAllSettingsGrouped());
+  }
+
+  /** Админка: редактор не видит группу integrations. */
+  async getSettingsForAdminRole(role: string) {
+    const grouped = await this.loadAllSettingsGrouped();
+    if (role === 'admin') return grouped;
+    return this.omitIntegrationsGroup(grouped);
+  }
+
+  /** Уведомления о заявках: значения из site_settings (не из env). */
+  async getTelegramNotifyCredentials(): Promise<{ botToken: string; notifyChatId: string }> {
+    const keys = ['telegram_bot_token', 'telegram_notify_chat_id'] as const;
+    const rows = await this.prisma.siteSetting.findMany({
+      where: { key: { in: [...keys] } },
+      select: { key: true, value: true },
+    });
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value ?? '']));
+    return {
+      botToken: String(map.telegram_bot_token ?? '').trim(),
+      notifyChatId: String(map.telegram_notify_chat_id ?? '').trim(),
+    };
+  }
+
+  async updateSettings(
+    data: { key: string; value: string }[],
+    ctx: { requesterRole: string; returnMode: 'public' | 'admin' },
+  ) {
+    const filtered = data.filter(({ key }) => {
+      if (!integrationKeys.has(key)) return true;
+      return ctx.requesterRole === 'admin';
+    });
+
     await this.prisma.$transaction(
-      data.map(({ key, value }) => {
-        const base = homepageDefaultsByKey.get(key);
+      filtered.map(({ key, value }) => {
+        const base = settingDefaultsByKey.get(key);
         if (base) {
           return this.prisma.siteSetting.upsert({
             where: { key },
@@ -109,7 +171,11 @@ export class ContentService implements OnModuleInit {
         });
       }),
     );
-    return this.getSettings();
+
+    if (ctx.returnMode === 'public') {
+      return this.getSettingsPublic();
+    }
+    return this.getSettingsForAdminRole(ctx.requesterRole);
   }
 
   async getPageBlocks(slug: string) {

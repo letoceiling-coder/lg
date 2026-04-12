@@ -10,7 +10,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Roles } from '../../auth/decorators';
+import { Roles, CurrentUser } from '../../auth/decorators';
 import { ContentService } from './content.service';
 import { CreateMortgageBankDto } from './dto/create-mortgage-bank.dto';
 import { UpdateMortgageBankDto } from './dto/update-mortgage-bank.dto';
@@ -23,21 +23,29 @@ export class ContentAdminController {
   constructor(private readonly service: ContentService) {}
 
   @Get('settings')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Admin: site settings grouped by group' })
-  getSettings() {
-    return this.service.getSettings();
+  @Roles('admin', 'editor')
+  @ApiOperation({
+    summary: 'Настройки сайта (группа integrations только у admin)',
+  })
+  getSettings(@CurrentUser() user: { role: string }) {
+    return this.service.getSettingsForAdminRole(user.role);
   }
 
   @Put('settings')
-  @Roles('admin')
+  @Roles('admin', 'editor')
   @ApiBody({ type: [SiteSettingEntryDto] })
-  @ApiOperation({ summary: 'Admin: batch update site settings' })
+  @ApiOperation({
+    summary: 'Пакетное обновление настроек (ключи Telegram — только admin)',
+  })
   updateSettings(
     @Body(new ParseArrayPipe({ items: SiteSettingEntryDto }))
     body: SiteSettingEntryDto[],
+    @CurrentUser() user: { role: string },
   ) {
-    return this.service.updateSettings(body);
+    return this.service.updateSettings(body, {
+      requesterRole: user.role,
+      returnMode: 'admin',
+    });
   }
 
   @Get('banks')

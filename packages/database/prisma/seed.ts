@@ -105,6 +105,30 @@ async function main() {
     { key: 'home_start_window_days', value: '365', groupName: 'homepage', label: 'Окно дней: дата старта продаж от сегодня до +N дней', fieldType: 'TEXT' as const, sortOrder: 12 },
     { key: 'home_start_badge', value: 'Старт продаж', groupName: 'homepage', label: 'Текст бейджа «Старт продаж»', fieldType: 'TEXT' as const, sortOrder: 13 },
     { key: 'home_news_per_page', value: '4', groupName: 'homepage', label: 'Сколько новостей в блоке на главной', fieldType: 'TEXT' as const, sortOrder: 20 },
+    {
+      key: 'telegram_bot_token',
+      value: '',
+      groupName: 'integrations',
+      label: 'Telegram: токен бота (BotFather)',
+      fieldType: 'SECRET' as const,
+      sortOrder: 0,
+    },
+    {
+      key: 'telegram_notify_chat_id',
+      value: '',
+      groupName: 'integrations',
+      label: 'Telegram: ID чата для уведомлений о заявках',
+      fieldType: 'TEXT' as const,
+      sortOrder: 1,
+    },
+    {
+      key: 'telegram_login_bot_username',
+      value: '',
+      groupName: 'integrations',
+      label: 'Telegram Login: username бота без @',
+      fieldType: 'TEXT' as const,
+      sortOrder: 2,
+    },
   ];
 
   for (const s of settings) {

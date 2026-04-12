@@ -41,7 +41,7 @@ export class RequestsService {
       },
     });
 
-    if (this.telegramNotify.isConfigured()) {
+    if (await this.telegramNotify.isConfigured()) {
       void (async () => {
         try {
           const ok = await this.telegramNotify.notifyNewRequest(row);

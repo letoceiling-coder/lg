@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { Request as DbRequest, RequestType } from '@prisma/client';
+import { ContentService } from '../content/content.service';
 
 function escapeHtml(s: string): string {
   return s
@@ -13,19 +13,34 @@ function escapeHtml(s: string): string {
 @Injectable()
 export class TelegramNotifyService {
   private readonly logger = new Logger(TelegramNotifyService.name);
+  private cache: { token: string; chatId: string; at: number } | null = null;
+  private static readonly CACHE_MS = 20_000;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly content: ContentService) {}
 
-  isConfigured(): boolean {
-    const token = this.config.get<string>('TELEGRAM_BOT_TOKEN')?.trim();
-    const chatId = this.config.get<string>('TELEGRAM_NOTIFY_CHAT_ID')?.trim();
+  private async getCachedCredentials(): Promise<{ token: string; chatId: string }> {
+    const now = Date.now();
+    if (this.cache && now - this.cache.at < TelegramNotifyService.CACHE_MS) {
+      return { token: this.cache.token, chatId: this.cache.chatId };
+    }
+    const { botToken, notifyChatId } = await this.content.getTelegramNotifyCredentials();
+    this.cache = { token: botToken, chatId: notifyChatId, at: now };
+    return { token: botToken, chatId: notifyChatId };
+  }
+
+  /** Сброс кэша после смены настроек в админке (опционально). */
+  invalidateCache() {
+    this.cache = null;
+  }
+
+  async isConfigured(): Promise<boolean> {
+    const { token, chatId } = await this.getCachedCredentials();
     return Boolean(token && chatId);
   }
 
   /** Отправка уведомления о новой заявке. Возвращает true, если сообщение ушло успешно. */
   async notifyNewRequest(row: DbRequest): Promise<boolean> {
-    const token = this.config.get<string>('TELEGRAM_BOT_TOKEN')?.trim();
-    const chatId = this.config.get<string>('TELEGRAM_NOTIFY_CHAT_ID')?.trim();
+    const { token, chatId } = await this.getCachedCredentials();
     if (!token || !chatId) {
       return false;
     }

@@ -92,6 +92,21 @@ export async function apiPost<T>(path: string, body?: unknown, init?: RequestIni
   return res.json() as Promise<T>;
 }
 
+export async function apiPut<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
+  const res = await fetch(apiUrl(path), {
+    method: 'PUT',
+    credentials: 'include',
+    ...init,
+    headers: { ...authHeaders(init?.headers), 'Content-Type': 'application/json' },
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new ApiError(res.status, text || `${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function apiPatch<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), {
     method: 'PATCH',
