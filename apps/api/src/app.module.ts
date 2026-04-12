@@ -21,6 +21,7 @@ import { NewsModule } from './modules/news/news.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { CollectionsModule } from './modules/collections/collections.module';
 import { SearchModule } from './modules/search/search.module';
+import { MediaModule } from './modules/media/media.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SearchModule } from './modules/search/search.module';
     FavoritesModule,
     CollectionsModule,
     SearchModule,
+    MediaModule,
   ],
 })
 export class AppModule {}

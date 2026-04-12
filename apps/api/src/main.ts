@@ -1,7 +1,9 @@
+import { join } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 // BigInt JSON serialization (Nest / Express JSON)
@@ -12,8 +14,11 @@ Object.assign(BigInt.prototype, {
 });
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
+
+  const mediaRoot = config.get<string>('MEDIA_ROOT') ?? join(process.cwd(), 'uploads');
+  app.useStaticAssets(mediaRoot, { prefix: '/uploads/', index: false });
 
   const prefix = config.get<string>('API_PREFIX', '/api/v1');
   app.setGlobalPrefix(prefix);

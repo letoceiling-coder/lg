@@ -15,7 +15,8 @@
     "db:seed": "pnpm --filter @lg/database seed",
     "db:studio": "pnpm --filter @lg/database studio",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @lg/web test"
   },
   "engines": {
     "node": ">=22.0.0",

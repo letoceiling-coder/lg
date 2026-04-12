@@ -47,6 +47,8 @@ export type ApiListingRow = {
     areaTotal: string | number | null;
     areaKitchen: string | number | null;
     planUrl: string | null;
+    finishingPhotoUrl?: string | null;
+    extraPhotoUrls?: unknown;
     roomType: { name: string } | null;
     finishing: { name: string } | null;
     buildingDeadline?: string | null;
@@ -149,6 +151,14 @@ export function mapListingRowToApartment(
   const kitchen = num(apt.areaKitchen);
   const floor = apt.floor ?? 1;
   const totalFloors = apt.floorsTotal ?? 1;
+  const gallery =
+    Array.isArray(apt.extraPhotoUrls) && apt.extraPhotoUrls.length
+      ? apt.extraPhotoUrls.filter((x): x is string => typeof x === 'string')
+      : undefined;
+  const finishingImg =
+    typeof apt.finishingPhotoUrl === 'string' && apt.finishingPhotoUrl.trim()
+      ? apt.finishingPhotoUrl
+      : undefined;
   return {
     id: String(listing.id),
     complexId,
@@ -163,6 +173,8 @@ export function mapListingRowToApartment(
     finishing: mapFinishing(apt.finishing?.name),
     status: listingStatus(listing.status),
     planImage: apt.planUrl || PLACEHOLDER,
+    finishingImage: finishingImg,
+    galleryImages: gallery,
     section: 1,
   };
 }

@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -50,6 +52,20 @@ export class ManualApartmentFieldsDto {
   @IsString()
   @MaxLength(2048)
   planUrl?: string;
+
+  @ApiPropertyOptional({ description: 'URL из медиатеки (/uploads/media/...)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  finishingPhotoUrl?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Галерея: только URL из медиатеки' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(24)
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -135,6 +151,20 @@ export class ManualApartmentPatchDto {
   @IsString()
   @MaxLength(2048)
   planUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  finishingPhotoUrl?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(24)
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

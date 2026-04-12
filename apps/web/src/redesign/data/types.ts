@@ -45,6 +45,10 @@ export interface Apartment {
   finishing: 'без отделки' | 'черновая' | 'чистовая' | 'под ключ';
   status: 'available' | 'reserved' | 'sold';
   planImage: string;
+  /** Фото отделки (URL из медиатеки или внешний). */
+  finishingImage?: string;
+  /** Доп. фото (вид из окна и т.д.). */
+  galleryImages?: string[];
   section: number;
 }
 

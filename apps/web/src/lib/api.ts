@@ -77,6 +77,22 @@ export async function apiGetOrNull<T>(path: string, init?: RequestInit): Promise
   return res.json() as Promise<T>;
 }
 
+/** POST multipart/form-data (не задавать Content-Type вручную). */
+export async function apiPostForm<T>(path: string, form: FormData, init?: RequestInit): Promise<T> {
+  const res = await fetch(apiUrl(path), {
+    method: 'POST',
+    credentials: 'include',
+    ...init,
+    headers: authHeaders(init?.headers),
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new ApiError(res.status, text || `${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function apiPost<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), {
     method: 'POST',

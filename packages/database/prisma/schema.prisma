@@ -507,7 +507,9 @@ model ListingApartment {
   blockName          String?   @map("block_name")
   blockIsCity        Boolean?  @map("block_is_city")
   blockCityId        String?   @map("block_city_id")
-  planUrl            String?   @map("plan_url")
+  planUrl              String?   @map("plan_url")
+  finishingPhotoUrl    String?   @map("finishing_photo_url")
+  extraPhotoUrls       Json?     @map("extra_photo_urls")
 
   listing      Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
   roomType     RoomType?     @relation(fields: [roomTypeId], references: [id])
@@ -646,21 +648,43 @@ model FieldOverride {
 // Media
 // ============================================================
 
+model MediaFolder {
+  id        Int      @id @default(autoincrement())
+  parentId  Int?     @map("parent_id")
+  name      String   @db.VarChar(255)
+  isTrash   Boolean  @default(false) @map("is_trash")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parent            MediaFolder?  @relation("MediaFolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children          MediaFolder[] @relation("MediaFolderChildren")
+  files             MediaFile[]   @relation("MediaFileFolder")
+  previousForFiles  MediaFile[]   @relation("MediaFilePreviousFolder")
+
+  @@unique([parentId, name])
+  @@map("media_folders")
+}
+
 model MediaFile {
-  id               Int       @id @default(autoincrement())
-  entityType       String?   @map("entity_type")
-  entityId         Int?      @map("entity_id")
-  kind             MediaKind
-  url              String
-  originalFilename String?   @map("original_filename")
-  sizeBytes        BigInt?   @map("size_bytes")
-  sortOrder        Int       @default(0) @map("sort_order")
-  uploadedBy       String?   @map("uploaded_by") @db.Uuid
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id                 Int       @id @default(autoincrement())
+  entityType         String?   @map("entity_type")
+  entityId           Int?      @map("entity_id")
+  kind               MediaKind
+  url                String
+  originalFilename   String?   @map("original_filename")
+  sizeBytes          BigInt?   @map("size_bytes")
+  sortOrder          Int       @default(0) @map("sort_order")
+  uploadedBy         String?   @map("uploaded_by") @db.Uuid
+  folderId           Int?      @map("folder_id")
+  previousFolderId   Int?      @map("previous_folder_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  user User? @relation(fields: [uploadedBy], references: [id])
+  user             User?        @relation(fields: [uploadedBy], references: [id])
+  folder           MediaFolder? @relation("MediaFileFolder", fields: [folderId], references: [id], onDelete: SetNull)
+  previousFolder   MediaFolder? @relation("MediaFilePreviousFolder", fields: [previousFolderId], references: [id], onDelete: SetNull)
 
+  @@index([folderId])
   @@map("media_files")
 }
 

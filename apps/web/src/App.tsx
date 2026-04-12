@@ -56,6 +56,7 @@ const AdminRequests = lazy(() => import("./admin/pages/AdminRequests"));
 const AdminBlocks = lazy(() => import("./admin/pages/AdminBlocks"));
 const AdminBlockEditor = lazy(() => import("./admin/pages/AdminBlockEditor"));
 const AdminListings = lazy(() => import("./admin/pages/AdminListings"));
+const AdminManualListing = lazy(() => import("./admin/pages/AdminManualListing"));
 const AdminFeedImport = lazy(() => import("./admin/pages/AdminFeedImport"));
 const AdminNews = lazy(() => import("./admin/pages/AdminNews"));
 const AdminRegions = lazy(() => import("./admin/pages/AdminRegions"));
@@ -113,6 +114,8 @@ const AppRoutes = () => (
       <Route path="blocks" element={<AdminBlocks />} />
       <Route path="blocks/:id" element={<AdminBlockEditor />} />
       <Route path="listings" element={<AdminListings />} />
+      <Route path="listings/manual/new" element={<AdminManualListing />} />
+      <Route path="listings/manual/:listingId/edit" element={<AdminManualListing />} />
       <Route path="feed-import" element={<AdminFeedImport />} />
       <Route path="news" element={<AdminNews />} />
       <Route path="regions" element={<AdminRegions />} />

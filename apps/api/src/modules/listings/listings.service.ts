@@ -8,6 +8,41 @@ import type {
   UpdateManualApartmentDto,
 } from './dto/manual-apartment.dto';
 
+const MEDIA_LIB_PREFIX = '/uploads/media/';
+
+function assertMediaLibraryUrl(u: string | undefined | null, label: string) {
+  if (u == null || u === '') return;
+  if (!u.startsWith(MEDIA_LIB_PREFIX)) {
+    throw new BadRequestException(
+      `${label}: разрешены только ссылки из медиатеки (${MEDIA_LIB_PREFIX}…)`,
+    );
+  }
+}
+
+function validateManualApartmentMedia(apt: {
+  planUrl?: string | null;
+  finishingPhotoUrl?: string | null;
+  extraPhotoUrls?: unknown;
+}) {
+  assertMediaLibraryUrl(apt.planUrl ?? undefined, 'Планировка');
+  assertMediaLibraryUrl(apt.finishingPhotoUrl ?? undefined, 'Фото отделки');
+  if (apt.extraPhotoUrls == null) return;
+  if (!Array.isArray(apt.extraPhotoUrls)) {
+    throw new BadRequestException('extraPhotoUrls: ожидается массив строк');
+  }
+  if (apt.extraPhotoUrls.length > 24) {
+    throw new BadRequestException('Не более 24 дополнительных фото');
+  }
+  let i = 0;
+  for (const u of apt.extraPhotoUrls) {
+    i++;
+    if (typeof u !== 'string') {
+      throw new BadRequestException(`Дополнительное фото #${i}: неверный формат`);
+    }
+    assertMediaLibraryUrl(u, `Дополнительное фото #${i}`);
+  }
+}
+
 @Injectable()
 export class ListingsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -220,6 +255,7 @@ export class ListingsService {
     const externalId = `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const a = dto.apartment;
+    validateManualApartmentMedia(a);
 
     return this.prisma.listing.create({
       data: {
@@ -242,6 +278,11 @@ export class ListingsService {
             roomTypeId: a.roomTypeId ?? null,
             finishingId: a.finishingId ?? null,
             planUrl: a.planUrl ?? null,
+            finishingPhotoUrl: a.finishingPhotoUrl ?? null,
+            extraPhotoUrls:
+              a.extraPhotoUrls != null && a.extraPhotoUrls.length > 0
+                ? (a.extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
             buildingName: a.buildingName ?? null,
             number: a.number ?? null,
           },
@@ -257,6 +298,10 @@ export class ListingsService {
 
   async updateManualApartment(id: number, dto: UpdateManualApartmentDto) {
     const row = await this.requireManualListing(id);
+
+    if (dto.apartment) {
+      validateManualApartmentMedia(dto.apartment);
+    }
 
     if (dto.blockId !== undefined && dto.blockId != null) {
       const block = await this.prisma.block.findUnique({
@@ -302,6 +347,13 @@ export class ListingsService {
           p.finishingId == null ? { disconnect: true } : { connect: { id: p.finishingId } };
       }
       if (p.planUrl !== undefined) aptPatch.planUrl = p.planUrl;
+      if (p.finishingPhotoUrl !== undefined) aptPatch.finishingPhotoUrl = p.finishingPhotoUrl;
+      if (p.extraPhotoUrls !== undefined) {
+        aptPatch.extraPhotoUrls =
+          p.extraPhotoUrls != null && p.extraPhotoUrls.length > 0
+            ? (p.extraPhotoUrls as Prisma.InputJsonValue)
+            : Prisma.DbNull;
+      }
       if (p.buildingName !== undefined) aptPatch.buildingName = p.buildingName;
       if (p.number !== undefined) aptPatch.number = p.number;
     }

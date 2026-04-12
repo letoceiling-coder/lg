@@ -1,152 +1,475 @@
-import { useState, useCallback } from 'react';
-import { useCMSStore } from '../store/cms-store';
-import { Upload, Search, Folder, Grid3X3, List, Trash2, Tag, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Folder,
+  FolderPlus,
+  Grid3X3,
+  List,
+  Loader2,
+  Search,
+  Trash2,
+  Undo2,
+  Upload,
+} from 'lucide-react';
+import { apiDelete, apiGet, apiPost, apiPostForm, ApiError } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import type { MediaFileRow, MediaFolderRow } from '@/admin/components/media-types';
+import { buildFolderMoveOptions } from '@/admin/lib/media-folder-options';
+import MediaFileMoveSelect from '@/admin/components/MediaFileMoveSelect';
+
+function buildTree(folders: MediaFolderRow[]) {
+  const byParent = new Map<string, MediaFolderRow[]>();
+  for (const f of folders) {
+    const k = f.parentId == null ? 'root' : String(f.parentId);
+    if (!byParent.has(k)) byParent.set(k, []);
+    byParent.get(k)!.push(f);
+  }
+  for (const arr of byParent.values()) {
+    arr.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  }
+  return byParent;
+}
+
+function FolderTree({
+  byParent,
+  trashId,
+  uploadsId,
+  currentId,
+  depth,
+  parentKey,
+  onSelect,
+}: {
+  byParent: Map<string, MediaFolderRow[]>;
+  trashId: number | null;
+  uploadsId: number | null;
+  currentId: number | null;
+  depth: number;
+  parentKey: string;
+  onSelect: (id: number | null) => void;
+}) {
+  const nodes = byParent.get(parentKey) ?? [];
+  return (
+    <ul className={depth === 0 ? 'space-y-0.5' : 'ml-2 border-l border-border pl-2 space-y-0.5 mt-0.5'}>
+      {nodes.map((n) => {
+        if (trashId != null && n.id === trashId) return null;
+        if (uploadsId != null && n.id === uploadsId) return null;
+        const key = String(n.id);
+        const children = byParent.get(key);
+        const active = currentId === n.id;
+        return (
+          <li key={n.id}>
+            <button
+              type="button"
+              onClick={() => onSelect(n.id)}
+              className={`w-full text-left flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm ${
+                active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+              }`}
+            >
+              <Folder className="w-4 h-4 shrink-0 opacity-80" />
+              <span className="truncate">{n.name}</span>
+            </button>
+            {children?.length ? (
+              <FolderTree
+                byParent={byParent}
+                trashId={trashId}
+                uploadsId={uploadsId}
+                currentId={currentId}
+                depth={depth + 1}
+                parentKey={key}
+                onSelect={onSelect}
+              />
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export default function AdminMedia() {
-  const { media, addMedia, deleteMedia } = useCMSStore();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedFolder, setSelectedFolder] = useState<string>('all');
-  const [dragOver, setDragOver] = useState(false);
+  const [folderId, setFolderId] = useState<number | null>(null);
+  const [folderInited, setFolderInited] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [err, setErr] = useState('');
 
-  const folders = ['all', ...new Set(media.map(m => m.folder || 'Без папки'))];
-  const filtered = media
-    .filter(m => selectedFolder === 'all' || (m.folder || 'Без папки') === selectedFolder)
-    .filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+  const { data: folders = [], isSuccess: foldersOk } = useQuery({
+    queryKey: ['admin', 'media', 'folders'],
+    queryFn: () => apiGet<MediaFolderRow[]>('/admin/media/folders'),
+    staleTime: 15_000,
+  });
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const trashId = useMemo(() => folders.find((f) => f.isTrash)?.id ?? null, [folders]);
+  const uploadsId = useMemo(
+    () => folders.find((f) => !f.isTrash && f.parentId == null && f.name === 'Загрузки')?.id ?? null,
+    [folders],
+  );
+
+  useEffect(() => {
+    if (!foldersOk || folderInited) return;
+    setFolderInited(true);
+    if (uploadsId != null) setFolderId(uploadsId);
+  }, [foldersOk, folderInited, uploadsId]);
+
+  const byParent = useMemo(() => buildTree(folders), [folders]);
+
+  const { data: files = [], isLoading } = useQuery({
+    queryKey: ['admin', 'media', 'files', folderId],
+    queryFn: () => {
+      const q = folderId == null ? '' : `?folder_id=${folderId}`;
+      return apiGet<MediaFileRow[]>(`/admin/media/files${q}`);
+    },
+    enabled: foldersOk,
+    staleTime: 10_000,
+  });
+
+  const inTrash = trashId != null && folderId === trashId;
+
+  const moveFolderOptions = useMemo(
+    () => buildFolderMoveOptions(folders, trashId),
+    [folders, trashId],
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return files;
+    return files.filter((f) => (f.originalFilename ?? String(f.id)).toLowerCase().includes(q));
+  }, [files, search]);
+
+  const refresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['admin', 'media'] });
+  }, [qc]);
+
+  const createFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    setErr('');
+    try {
+      await apiPost('/admin/media/folders', { parentId: folderId ?? null, name });
+      setNewFolderName('');
+      refresh();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Не удалось создать папку');
+    }
+  };
+
+  const deleteFolder = async (id: number) => {
+    if (!window.confirm('Удалить папку? (только если пуста)')) return;
+    try {
+      await apiDelete(`/admin/media/folders/${id}`);
+      refresh();
+      if (folderId === id) setFolderId(uploadsId);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Ошибка');
+    }
+  };
+
+  const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files;
+    if (!list?.length) return;
+    setErr('');
+    try {
+      for (const file of Array.from(list)) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const q = folderId != null ? `?folder_id=${folderId}` : '';
+        await apiPostForm<MediaFileRow>(`/admin/media/upload${q}`, fd);
+      }
+      e.target.value = '';
+      refresh();
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : 'Ошибка загрузки');
+    }
+  };
+
+  const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    files.forEach(file => {
-      const url = URL.createObjectURL(file);
-      addMedia({
-        name: file.name,
-        url,
-        type: file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document',
-        size: file.size,
-        folder: 'Загрузки',
-        tags: [],
-      });
-    });
-  }, [addMedia]);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      const url = URL.createObjectURL(file);
-      addMedia({
-        name: file.name,
-        url,
-        type: file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document',
-        size: file.size,
-        folder: 'Загрузки',
-        tags: [],
-      });
-    });
+    const list = e.dataTransfer.files;
+    if (!list?.length) return;
+    setErr('');
+    try {
+      for (const file of Array.from(list)) {
+        if (!file.type.startsWith('image/')) continue;
+        const fd = new FormData();
+        fd.append('file', file);
+        const q = folderId != null ? `?folder_id=${folderId}` : '';
+        await apiPostForm<MediaFileRow>(`/admin/media/upload${q}`, fd);
+      }
+      refresh();
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : 'Ошибка загрузки');
+    }
   };
 
   return (
     <div className="p-6 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Медиа</h1>
-        <label className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Медиа</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Иерархия папок, загрузка изображений. Удалённые файлы попадают в «Корзину» — оттуда можно восстановить
+            или удалить навсегда.
+          </p>
+        </div>
+        <label className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer shrink-0">
           <Upload className="w-4 h-4" /> Загрузить
-          <input type="file" multiple className="hidden" onChange={handleFileSelect} accept="image/*,video/*" />
+          <input type="file" multiple className="hidden" onChange={onUpload} accept="image/*" />
         </label>
       </div>
 
-      {/* Drop zone */}
+      {err ? <p className="text-sm text-destructive mb-3">{err}</p> : null}
+
       <div
-        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-2xl p-8 mb-6 text-center transition-colors ${
-          dragOver ? 'border-primary bg-primary/5' : 'border-border'
-        }`}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+        className="border-2 border-dashed rounded-2xl p-6 mb-6 text-center text-sm text-muted-foreground"
       >
-        <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Перетащите файлы сюда или нажмите «Загрузить»</p>
+        Перетащите изображения сюда — загрузятся в текущую папку
       </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск..." className="w-full border rounded-xl pl-9 pr-3 py-2 text-sm bg-background" />
-        </div>
-        <select
-          value={selectedFolder}
-          onChange={e => setSelectedFolder(e.target.value)}
-          className="border rounded-xl px-3 py-2 text-sm bg-background"
-        >
-          {folders.map(f => (
-            <option key={f} value={f}>{f === 'all' ? 'Все папки' : f}</option>
-          ))}
-        </select>
-        <div className="flex bg-muted rounded-xl p-0.5">
-          <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-background shadow-sm' : ''}`}>
-            <Grid3X3 className="w-4 h-4" />
+      <div className="flex flex-col lg:flex-row gap-4 min-h-[480px]">
+        <aside className="w-full lg:w-64 shrink-0 border rounded-2xl p-3 bg-background">
+          <p className="text-xs font-medium text-muted-foreground px-2 mb-2">Папки</p>
+          <button
+            type="button"
+            onClick={() => uploadsId != null && setFolderId(uploadsId)}
+            className={`w-full text-left rounded-lg px-2 py-2 text-sm mb-1 ${
+              folderId === uploadsId ? 'bg-muted font-medium' : 'hover:bg-muted/80'
+            }`}
+          >
+            Загрузки
           </button>
-          <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-background shadow-sm' : ''}`}>
-            <List className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={() => trashId != null && setFolderId(trashId)}
+            className={`w-full text-left rounded-lg px-2 py-2 text-sm mb-3 ${
+              inTrash ? 'bg-destructive/15 text-destructive font-medium' : 'hover:bg-muted/80'
+            }`}
+          >
+            Корзина
           </button>
-        </div>
-      </div>
+          <FolderTree
+            byParent={byParent}
+            trashId={trashId}
+            uploadsId={uploadsId}
+            currentId={folderId}
+            depth={0}
+            parentKey="root"
+            onSelect={(id) => setFolderId(id)}
+          />
+          {folderId != null && folderId !== trashId && folderId !== uploadsId ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full mt-3 text-xs"
+              onClick={() => deleteFolder(folderId)}
+            >
+              Удалить текущую папку
+            </Button>
+          ) : null}
+        </aside>
 
-      {/* Media grid */}
-      {filtered.length === 0 ? (
-        <div className="bg-background border rounded-2xl p-12 text-center text-muted-foreground text-sm">
-          Нет медиафайлов
-        </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {filtered.map(m => (
-            <div key={m.id} className="group relative bg-background border rounded-2xl overflow-hidden">
-              {m.type === 'image' ? (
-                <div className="aspect-square bg-muted">
-                  <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
-                </div>
-              ) : (
-                <div className="aspect-square bg-muted flex items-center justify-center">
-                  <span className="text-2xl">🎬</span>
-                </div>
-              )}
-              <div className="p-2">
-                <p className="text-xs truncate">{m.name}</p>
-                <p className="text-xs text-muted-foreground">{(m.size / 1024).toFixed(0)} KB</p>
-              </div>
+        <div className="flex-1 min-w-0 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск в текущей папке…"
+                className="pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+              <Input
+                placeholder="Новая вложенная папка"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+              />
+              <Button type="button" variant="outline" size="icon" onClick={createFolder} title="Создать папку">
+                <FolderPlus className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex bg-muted rounded-xl p-0.5">
               <button
-                onClick={() => deleteMedia(m.id)}
-                className="absolute top-2 right-2 p-1.5 rounded-lg bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600"
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-background shadow-sm' : ''}`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Grid3X3 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-background shadow-sm' : ''}`}
+              >
+                <List className="w-4 h-4" />
               </button>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="bg-background border rounded-2xl divide-y">
-          {filtered.map(m => (
-            <div key={m.id} className="flex items-center gap-3 p-3 hover:bg-muted/50">
-              <div className="w-10 h-10 rounded-lg bg-muted overflow-hidden shrink-0">
-                {m.type === 'image' ? (
-                  <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-sm">🎬</div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm truncate">{m.name}</p>
-                <p className="text-xs text-muted-foreground">{m.folder || 'Без папки'} · {(m.size / 1024).toFixed(0)} KB</p>
-              </div>
-              <button onClick={() => deleteMedia(m.id)} className="p-2 text-muted-foreground hover:text-red-600">
-                <Trash2 className="w-4 h-4" />
-              </button>
+          </div>
+
+          {inTrash ? (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={async () => {
+                  if (!window.confirm('Удалить все файлы из корзины безвозвратно?')) return;
+                  try {
+                    await apiPost<{ removed: number }>('/admin/media/trash/empty');
+                    refresh();
+                  } catch (e) {
+                    setErr(e instanceof ApiError ? e.message : 'Ошибка');
+                  }
+                }}
+              >
+                Очистить корзину
+              </Button>
             </div>
-          ))}
+          ) : null}
+
+          <div className="flex-1 border rounded-2xl p-3 bg-background min-h-[320px] overflow-y-auto">
+            {isLoading ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-12">Нет файлов</p>
+            ) : viewMode === 'grid' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {filtered.map((m) => (
+                  <div key={m.id} className="group relative bg-muted/30 border rounded-2xl overflow-hidden">
+                    <div className="aspect-square bg-muted">
+                      <img src={m.url} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="p-2">
+                      <p className="text-xs truncate">{m.originalFilename ?? m.id}</p>
+                    </div>
+                    {inTrash ? (
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg bg-background/90 hover:text-primary"
+                          title="Восстановить"
+                          onClick={async () => {
+                            await apiPost(`/admin/media/files/${m.id}/restore`);
+                            refresh();
+                          }}
+                        >
+                          <Undo2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg bg-background/90 hover:text-destructive"
+                          title="Удалить навсегда"
+                          onClick={async () => {
+                            if (!window.confirm('Удалить файл навсегда?')) return;
+                            await apiDelete(`/admin/media/files/${m.id}`);
+                            refresh();
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg bg-background/90 opacity-0 group-hover:opacity-100 hover:text-destructive"
+                          title="В корзину"
+                          onClick={async () => {
+                            await apiPost(`/admin/media/files/${m.id}/trash`);
+                            refresh();
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    {!inTrash ? (
+                      <div className="p-2 pt-0 flex justify-end" onClick={(e) => e.stopPropagation()}>
+                        <MediaFileMoveSelect
+                          fileId={m.id}
+                          options={moveFolderOptions}
+                          onMoved={refresh}
+                          onError={(msg) => setErr(msg)}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="divide-y rounded-xl border overflow-hidden">
+                {filtered.map((m) => (
+                  <div key={m.id} className="flex items-center gap-3 p-3 hover:bg-muted/40">
+                    <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden shrink-0">
+                      <img src={m.url} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{m.originalFilename ?? m.id}</p>
+                      <p className="text-xs text-muted-foreground">ID {m.id}</p>
+                    </div>
+                    {inTrash ? (
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            await apiPost(`/admin/media/files/${m.id}/restore`);
+                            refresh();
+                          }}
+                        >
+                          Восстановить
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={async () => {
+                            if (!window.confirm('Удалить навсегда?')) return;
+                            await apiDelete(`/admin/media/files/${m.id}`);
+                            refresh();
+                          }}
+                        >
+                          Удалить
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 justify-end">
+                        <MediaFileMoveSelect
+                          fileId={m.id}
+                          options={moveFolderOptions}
+                          onMoved={refresh}
+                          onError={(msg) => setErr(msg)}
+                          className="text-xs border rounded-md px-2 py-1.5 bg-background max-w-[200px]"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            await apiPost(`/admin/media/files/${m.id}/trash`);
+                            refresh();
+                          }}
+                        >
+                          В корзину
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

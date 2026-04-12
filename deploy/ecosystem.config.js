@@ -24,6 +24,8 @@ module.exports = {
         /** true — не регистрировать BullMQ cron (если импорт только shell-cron) */
         FEED_IMPORT_DISABLE_REPEAT: '',
         CORS_ORIGINS: 'https://lg.pfrpro.com,http://localhost:5173,http://localhost:5174',
+        /** Загрузки медиатеки (Nest static /uploads/); вне репозитория, чтобы не терять при деплое */
+        MEDIA_ROOT: `${deployRoot}/uploads`,
       },
       max_memory_restart: '1G',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',

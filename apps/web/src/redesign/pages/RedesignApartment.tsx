@@ -224,6 +224,30 @@ const RedesignApartment = () => {
               </div>
             </div>
 
+            {apt.finishingImage ? (
+              <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                <div className="px-6 pt-4">
+                  <h3 className="font-semibold text-sm">Отделка</h3>
+                </div>
+                <div className="aspect-[4/3] bg-muted/50 flex items-center justify-center p-8">
+                  <img src={apt.finishingImage} alt="Отделка" className="max-w-full max-h-full object-contain" />
+                </div>
+              </div>
+            ) : null}
+
+            {apt.galleryImages && apt.galleryImages.length > 0 ? (
+              <div className="rounded-2xl border border-border bg-card p-6">
+                <h3 className="font-semibold mb-3">Фотографии</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {apt.galleryImages.map((src, i) => (
+                    <div key={`${src}-${i}`} className="rounded-xl overflow-hidden border border-border bg-muted/30">
+                      <img src={src} alt="" className="w-full h-48 object-cover" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {/* Description */}
             <div className="rounded-2xl border border-border bg-card p-6">
               <h3 className="font-semibold mb-3">О квартире</h3>
