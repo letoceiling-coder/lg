@@ -154,7 +154,7 @@ const HeroSearch = () => {
   });
 
   const visibleObjectTabs = useMemo(() => {
-    if (!kindCounts) return objectTabs;
+    if (!kindCounts) return [];
     return objectTabs.filter((t) => (kindCounts[t.kind] ?? 0) > 0);
   }, [kindCounts]);
 
