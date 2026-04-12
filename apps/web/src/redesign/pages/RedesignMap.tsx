@@ -109,10 +109,11 @@ const RedesignMap = () => {
   const subtitle = loading ? 'Загрузка…' : `${filtered.length} объектов на карте`;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-16 lg:pb-0">
+    <div className="flex h-svh flex-col bg-background">
       <RedesignHeader />
-      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-        <aside className="hidden lg:block w-[280px] border-r border-border p-4 overflow-y-auto shrink-0">
+      {/* Один экран под шапкой (h-16): фильтры | карта | список; боковые колонки со своим scroll */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        <aside className="hidden min-h-0 w-[280px] shrink-0 overflow-y-auto border-r border-border bg-background p-4 lg:block">
           <FilterSidebar
             filters={filters}
             onChange={setFilters}
@@ -123,26 +124,32 @@ const RedesignMap = () => {
           />
         </aside>
 
-        <div className="flex-1 flex flex-col lg:flex-row min-h-0 lg:min-h-[calc(100vh-3.5rem)]">
-          <div className="flex flex-1 flex-col min-h-[280px] p-3 sm:p-4 lg:min-w-0">
-            <div className="flex items-center justify-between mb-2 lg:mb-3 shrink-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:min-w-0">
+            <div className="mb-2 flex shrink-0 items-center justify-between lg:mb-3">
               <span className="text-sm font-semibold">{subtitle}</span>
               <Button variant="outline" size="sm" className="h-9 lg:hidden" onClick={() => setShowFilters(true)}>
                 <SlidersHorizontal className="w-4 h-4 mr-1.5" /> Фильтры
               </Button>
             </div>
             {blocksQuery.isError && regionId != null && (
-              <p className="text-xs text-destructive mb-2 shrink-0">Карта: не удалось загрузить ЖК с API.</p>
+              <p className="mb-2 shrink-0 text-xs text-destructive">Карта: не удалось загрузить ЖК с API.</p>
             )}
-            <div className="flex-1 min-h-[320px] lg:min-h-0">
-              <MapSearch complexes={filtered} activeSlug={active} onSelect={setActive} height="100%" />
+            <div className="relative min-h-0 flex-1">
+              <MapSearch
+                complexes={filtered}
+                activeSlug={active}
+                onSelect={setActive}
+                height="100%"
+                compact
+              />
             </div>
           </div>
 
           <aside
             className={cn(
-              'border-t lg:border-t-0 lg:border-l border-border bg-muted/20 flex flex-col shrink-0',
-              'max-h-[38vh] lg:max-h-none lg:w-[360px] lg:self-stretch',
+              'flex min-h-0 shrink-0 flex-col overflow-hidden border-t border-border bg-muted/20',
+              'max-h-[40vh] lg:max-h-none lg:w-[360px] lg:border-l lg:border-t-0',
             )}
           >
             <div className="px-3 py-2 border-b border-border bg-background/80 backdrop-blur-sm shrink-0">

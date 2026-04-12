@@ -27,6 +27,7 @@ function getAptCount(c: ResidentialComplex) {
 }
 
 const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }: Props) => {
+  const fillParent = Boolean(compact) || height === '100%';
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -106,8 +107,17 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }
   }, [activeSlug, complexes]);
 
   return (
-    <div className={cn('relative', compact ? 'h-full' : '')} style={compact ? undefined : { height }}>
-      <div ref={mapRef} className="w-full h-full rounded-xl overflow-hidden border border-border bg-muted min-h-[300px]" />
+    <div
+      className={cn('relative', fillParent ? 'h-full min-h-0' : '')}
+      style={fillParent ? undefined : { height }}
+    >
+      <div
+        ref={mapRef}
+        className={cn(
+          'h-full w-full rounded-xl border border-border bg-muted',
+          fillParent ? 'min-h-0 overflow-hidden' : 'min-h-[300px] overflow-hidden',
+        )}
+      />
 
       {/* Floating card when a complex is selected */}
       {activeComplex && (
