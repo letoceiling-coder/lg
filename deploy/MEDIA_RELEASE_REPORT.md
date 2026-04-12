@@ -89,8 +89,15 @@ sudo chown -R <пользователь_pm2>:<группа> /var/www/lg/uploads
 
 ---
 
-## 6. Коммит
+## 6. Git
 
-Сводка для сообщения коммита (пример):
+- **Коммит:** `054a90c` — `feat(media): folders, trash, uploads UI, move; nginx /uploads; manual listing page + gallery`
+- **Push:** `origin/main` → `https://github.com/letoceiling-coder/lg.git` (успешно).
 
-> feat(media): папки, корзина, загрузки, перемещение; nginx /uploads; MEDIA_ROOT; ручная квартира на странице + фото из медиа
+## 7. Деплой на сервер (выполнить у вас)
+
+```bash
+ssh <user>@<host> 'bash /var/www/lg/deploy/deploy-from-git.sh'
+```
+
+Либо зайти по SSH и выполнить тот же скрипт вручную. Агент **не имел доступа** к вашему прод-серверу — деплой нужно запустить локально/из CI.
