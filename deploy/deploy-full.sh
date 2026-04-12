@@ -17,6 +17,10 @@ echo "Project: $PROJECT_DIR (DEPLOY_ROOT=$DEPLOY_ROOT)"
 echo ""
 
 cd "$PROJECT_DIR"
+export DEPLOY_ROOT="$PROJECT_DIR"
+
+# shellcheck disable=SC1090
+source "$PROJECT_DIR/deploy/load-api-env.sh"
 
 # ── 1. Dependencies ──
 echo "→ Installing dependencies..."
@@ -31,8 +35,12 @@ cd "$PROJECT_DIR"
 
 # ── 3. Prisma migrate (apply pending migrations) ──
 echo "→ Applying DB migrations..."
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "ERROR: DATABASE_URL не задан (нет .env и не удалось взять env из deploy/ecosystem.config.js)"
+  exit 1
+fi
 cd packages/database
-pnpm exec prisma migrate deploy 2>/dev/null || echo "  (no pending migrations or prisma migrate not applicable)"
+pnpm exec prisma migrate deploy
 cd "$PROJECT_DIR"
 
 # ── 4. Build API ──

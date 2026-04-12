@@ -10,26 +10,10 @@ set -euo pipefail
 ROOT="${PROJECT_DIR:-/var/www/lg}"
 cd "$ROOT"
 export CI=true
+export DEPLOY_ROOT="$ROOT"
 
-# Переменные для Prisma / CLI: сначала .env, иначе — из deploy/ecosystem.config.js (как у PM2 lg-api)
-if [ -f "$ROOT/.env" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ROOT/.env"
-  set +a
-fi
-if [ -z "${DATABASE_URL:-}" ] && [ -f "$ROOT/deploy/ecosystem.config.js" ]; then
-  eval "$(ROOT="$ROOT" node -e "
-    const path = require('path');
-    const root = process.env.ROOT;
-    const cfg = require(path.join(root, 'deploy', 'ecosystem.config.js'));
-    const env = cfg.apps && cfg.apps[0] && cfg.apps[0].env ? cfg.apps[0].env : {};
-    for (const [k, v] of Object.entries(env)) {
-      if (v === undefined || v === null) continue;
-      console.log('export ' + k + '=' + JSON.stringify(String(v)));
-    }
-  ")"
-fi
+# shellcheck disable=SC1090
+source "$ROOT/deploy/load-api-env.sh"
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "ERROR: DATABASE_URL не задан (.env отсутствует и не удалось взять env из ecosystem.config.js)"
   exit 1
