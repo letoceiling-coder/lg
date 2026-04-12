@@ -8,6 +8,7 @@ import QuizSection from '@/components/QuizSection';
 import AboutPlatform from '@/components/AboutPlatform';
 import ContactsSection from '@/components/ContactsSection';
 import { apiGet } from '@/lib/api';
+import { stripHtmlToPlainText, truncatePlain } from '@/lib/html';
 
 import complex1 from '@/assets/complex-1.jpg';
 
@@ -87,7 +88,9 @@ const News = () => {
                 <div className="p-3 flex flex-col flex-1">
                   <h3 className="font-semibold text-sm mb-1 leading-tight line-clamp-2">{n.title}</h3>
                   {n.body && (
-                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{n.body.slice(0, 120)}</p>
+                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                      {truncatePlain(stripHtmlToPlainText(n.body), 160)}
+                    </p>
                   )}
                   <div className="mt-auto flex items-center text-xs text-muted-foreground">
                     <span>{new Date(n.publishedAt ?? n.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}</span>

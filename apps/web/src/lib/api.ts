@@ -107,6 +107,19 @@ export async function apiPatch<T>(path: string, body?: unknown, init?: RequestIn
   return res.json() as Promise<T>;
 }
 
+export async function apiDelete(path: string, init?: RequestInit): Promise<void> {
+  const res = await fetch(apiUrl(path), {
+    method: 'DELETE',
+    credentials: 'include',
+    ...init,
+    headers: authHeaders(init?.headers),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new ApiError(res.status, text || `${res.status} ${res.statusText}`);
+  }
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
