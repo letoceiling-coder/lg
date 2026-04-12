@@ -89,7 +89,7 @@ const AppRoutes = () => (
     <Route path="/map" element={<RedesignMap />} />
     <Route path="/mortgage" element={<Mortgage />} />
     <Route path="/compare" element={<Compare />} />
-    <Route path="/favorites" element={<Favorites />} />
+    <Route path="/favorites" element={<RequireAuth><Favorites /></RequireAuth>} />
     <Route path="/contacts" element={<Contacts />} />
     <Route path="/privacy" element={<Privacy />} />
 

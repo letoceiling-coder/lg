@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { useFavorites } from '@/shared/hooks/useFavorites';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 import { ApiError } from '@/lib/api';
 
@@ -25,6 +26,7 @@ function parseApiMessage(err: unknown): string {
 
 const Profile = () => {
   const { user, logout, linkEmail } = useAuth();
+  const { count: favoritesCount } = useFavorites();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [linkEmailErr, setLinkEmailErr] = useState<string | null>(null);
@@ -164,7 +166,9 @@ const Profile = () => {
                 <h2 className="font-bold">Избранное</h2>
                 <Link to="/favorites" className="text-sm text-primary hover:underline">Все →</Link>
               </div>
-              <p className="text-sm text-muted-foreground">Нет избранных объектов</p>
+              <p className="text-sm text-muted-foreground">
+                {favoritesCount > 0 ? `Сохранено в избранном: ${favoritesCount}` : 'Нет избранных объектов'}
+              </p>
             </div>
             <div className="bg-card border border-border rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">

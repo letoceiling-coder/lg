@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Calculator, Heart, Share2 } from 'lucide-react';
@@ -12,6 +12,8 @@ import { mapListingRowToApartment, type ApiListingRow } from '@/redesign/lib/blo
 import { mapListingDetailToApartmentPage, type ApiListingDetail } from '@/redesign/lib/listing-page-from-api';
 import { getApartmentById, formatPrice } from '@/redesign/data/mock-data';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { useFavorites } from '@/shared/hooks/useFavorites';
 
 function parseNumericListingId(id: string | undefined): number | null {
   if (!id) return null;
@@ -22,6 +24,10 @@ function parseNumericListingId(id: string | undefined): number | null {
 
 const RedesignApartment = () => {
   const { id: idParam } = useParams<{ id: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { isListingFavorite, toggleListing } = useFavorites();
   const listingId = parseNumericListingId(idParam);
 
   const mockResult = useMemo(() => {
@@ -108,6 +114,18 @@ const RedesignApartment = () => {
 
   const roomLabel = apt.rooms === 0 ? 'Студия' : `${apt.rooms}-комнатная`;
 
+  const listingLiked = listingId != null && isListingFavorite(listingId);
+  const handleListingFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (listingId == null) return;
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: location } });
+      return;
+    }
+    void toggleListing(listingId);
+  };
+
   const loanAmount = apt.price * (1 - mortgageDown / 100);
   const monthlyRate = mortgageRate / 100 / 12;
   const months = mortgageYears * 12;
@@ -140,7 +158,22 @@ const RedesignApartment = () => {
             <span className="text-foreground font-medium">{roomLabel}, {apt.area} м²</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Heart className="w-4 h-4" /></Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              disabled={listingId == null}
+              title={listingId == null ? 'Избранное для объявлений из каталога' : undefined}
+              onClick={handleListingFavorite}
+            >
+              <Heart
+                className={cn(
+                  'w-4 h-4',
+                  listingLiked ? 'fill-destructive text-destructive' : 'text-muted-foreground',
+                )}
+              />
+            </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Share2 className="w-4 h-4" /></Button>
           </div>
         </div>

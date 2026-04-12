@@ -1,9 +1,11 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Heart } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ResidentialComplex } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { parseApiBlockId, useFavorites } from '@/shared/hooks/useFavorites';
 
 interface Props {
   complex: ResidentialComplex;
@@ -27,9 +29,13 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
-  const [liked, setLiked] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const { isBlockFavorite, toggleBlock } = useFavorites();
+  const blockNum = parseApiBlockId(complex.id);
+  const liked = blockNum != null && isBlockFavorite(blockNum);
   const fromBuildings = complex.buildings.reduce(
     (s, b) => s + b.apartments.filter((a) => a.status === 'available').length,
     0,
@@ -39,13 +45,12 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // TODO: check auth state; for now redirect to login
-    const isAuthenticated = false;
+    if (blockNum == null) return;
     if (!isAuthenticated) {
-      navigate('/login');
+      navigate('/login', { state: { from: location } });
       return;
     }
-    setLiked(!liked);
+    void toggleBlock(blockNum);
   };
 
   if (variant === 'list') {

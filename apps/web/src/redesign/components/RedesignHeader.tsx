@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { apiGet } from '@/lib/api';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { useFavorites } from '@/shared/hooks/useFavorites';
 import { useSiteSettings, setting } from '@/redesign/hooks/useSiteSettings';
 import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 import CatalogSearchHintsDropdown from '@/redesign/components/CatalogSearchHintsDropdown';
@@ -46,6 +47,7 @@ const RedesignHeader = () => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [loginModalTgError, setLoginModalTgError] = useState('');
   const { isAuthenticated, user, logout } = useAuth();
+  const { count: favoritesCount } = useFavorites();
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,11 +55,7 @@ const RedesignHeader = () => {
   const catalogRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const handleHeartClick = () => {
-    if (!isAuthenticated) {
-      navigate('/login');
-    } else {
-      navigate('/favorites');
-    }
+    navigate('/favorites');
   };
 
   const handleLogout = async () => {
@@ -147,11 +145,17 @@ const RedesignHeader = () => {
           {/* Desktop right */}
           <div className="hidden lg:flex items-center gap-2 shrink-0">
             <button
+              type="button"
               onClick={handleHeartClick}
-              className="flex items-center justify-center w-11 h-11 rounded-full hover:bg-secondary transition-colors"
+              className="relative flex items-center justify-center w-11 h-11 rounded-full hover:bg-secondary transition-colors"
               title="Избранное"
             >
               <Heart className="w-6 h-6 text-muted-foreground" />
+              {favoritesCount > 0 ? (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground flex items-center justify-center">
+                  {favoritesCount > 99 ? '99+' : favoritesCount}
+                </span>
+              ) : null}
             </button>
             <div className="w-px h-5 bg-border" />
             <a
@@ -317,8 +321,17 @@ const RedesignHeader = () => {
             <LayoutGrid className="w-5 h-5" />
             <span>Каталог</span>
           </Link>
-          <button onClick={handleHeartClick} className={cn('flex flex-col items-center gap-0.5 text-[10px] py-1', 'text-muted-foreground')}>
+          <button
+            type="button"
+            onClick={handleHeartClick}
+            className={cn('relative flex flex-col items-center gap-0.5 text-[10px] py-1', 'text-muted-foreground')}
+          >
             <Heart className="w-5 h-5" />
+            {favoritesCount > 0 ? (
+              <span className="absolute top-0 right-1/4 min-w-[14px] h-3.5 px-0.5 rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground flex items-center justify-center leading-none">
+                {favoritesCount > 9 ? '9+' : favoritesCount}
+              </span>
+            ) : null}
             <span>Избранное</span>
           </button>
         </div>

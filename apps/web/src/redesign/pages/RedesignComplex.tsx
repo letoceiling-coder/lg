@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Heart, Share2 } from 'lucide-react';
@@ -15,6 +15,8 @@ import { apiGet, apiGetOrNull } from '@/lib/api';
 import { complexes, getComplexBySlug, getLayoutGroups, formatPrice } from '@/redesign/data/mock-data';
 import type { ResidentialComplex, SortField, SortDir } from '@/redesign/data/types';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { parseApiBlockId, useFavorites } from '@/shared/hooks/useFavorites';
 import {
   buildLayoutGroupsFromApartments,
   mapApiBlockDetailToResidentialComplex,
@@ -56,6 +58,10 @@ const SimilarComplexCard = ({ complex }: { complex: ResidentialComplex }) => {
 
 const RedesignComplex = () => {
   const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { isBlockFavorite, toggleBlock } = useFavorites();
   const mockComplex = useMemo(() => getComplexBySlug(slug || ''), [slug]);
 
   const apiBlockQuery = useQuery({
@@ -81,6 +87,19 @@ const RedesignComplex = () => {
 
   const complex = apiComplex ?? mockComplex ?? null;
   const fromApi = Boolean(apiComplex);
+  const blockNum = complex ? parseApiBlockId(complex.id) : null;
+  const blockLiked = blockNum != null && isBlockFavorite(blockNum);
+
+  const handleComplexFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (blockNum == null) return;
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: location } });
+      return;
+    }
+    void toggleBlock(blockNum);
+  };
 
   const similarQuery = useQuery({
     queryKey: ['blocks', 'similar', apiBlockQuery.data?.region?.id, apiBlockQuery.data?.id],
@@ -198,7 +217,22 @@ const RedesignComplex = () => {
             <span className="text-foreground font-medium">{complex.name}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Heart className="w-4 h-4" /></Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              disabled={blockNum == null}
+              title={blockNum == null ? 'Избранное доступно для ЖК из каталога' : undefined}
+              onClick={handleComplexFavorite}
+            >
+              <Heart
+                className={cn(
+                  'w-4 h-4',
+                  blockLiked ? 'fill-destructive text-destructive' : 'text-muted-foreground',
+                )}
+              />
+            </Button>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Share2 className="w-4 h-4" /></Button>
           </div>
         </div>

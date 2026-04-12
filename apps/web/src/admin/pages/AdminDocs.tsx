@@ -186,6 +186,12 @@ Toast, Toggle, ToggleGroup, Tooltip
 - \`POST /api/v1/auth/link-email\` (Bearer) — \`{ email, password }\` для аккаунта без email (например после входа через Telegram)
 - В @BotFather для бота: команда привязки домена сайта (HTTPS), иначе виджет не откроется на проде
 
+## Избранное (API, JWT)
+- \`GET /api/v1/favorites\` — список с вложенными \`block\` / \`listing\`
+- \`GET /api/v1/favorites/ids\` — \`{ blockIds, listingIds }\`
+- \`POST /api/v1/favorites/block/:blockId\`, \`POST /api/v1/favorites/listing/:listingId\`
+- \`DELETE /api/v1/favorites/:id\` — по числовому id записи избранного
+
 ## Текущее состояние
 - ✅ Главная страница с динамическим контентом из CMS
 - ✅ Каталог ЖК с фильтрами и 3 режимами (grid/list/map)
