@@ -156,6 +156,8 @@ export class FeedProcessorService {
       });
 
       const blockStatus = this.mapBlockStatus(item.status);
+      const salesStart = this.parseBlockSalesStart(item);
+      const startPatch = salesStart ? { salesStartDate: salesStart } : {};
 
       const block = await this.prisma.block.upsert({
         where: { regionId_externalId: { regionId, externalId: item._id } },
@@ -167,6 +169,7 @@ export class FeedProcessorService {
           longitude: lng ?? null,
           crmId: this.toCrmBigInt(item.crm_id),
           ...(blockStatus && { status: blockStatus }),
+          ...startPatch,
         },
         create: {
           regionId,
@@ -180,6 +183,7 @@ export class FeedProcessorService {
           crmId: this.toCrmBigInt(item.crm_id),
           dataSource: 'FEED',
           ...(blockStatus && { status: blockStatus }),
+          ...startPatch,
         },
       });
 
@@ -475,6 +479,47 @@ export class FeedProcessorService {
   }
 
   // --- Helpers ---
+
+  /**
+   * Дата старта продаж из фида TrendAgent (разные имена полей в выгрузках).
+   * Только для непустого значения — иначе не затираем существующую дату в update.
+   */
+  private parseBlockSalesStart(item: Record<string, unknown>): Date | null {
+    const keys = [
+      'sales_start_date',
+      'sales_start',
+      'start_sales_date',
+      'start_sales',
+      'sale_start_date',
+      'begin_sales_date',
+      'sales_start_at',
+    ];
+    for (const k of keys) {
+      const d = this.coerceFeedDate(item[k]);
+      if (d) return d;
+    }
+    return null;
+  }
+
+  private coerceFeedDate(raw: unknown): Date | null {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      const ms = raw < 1e12 ? raw * 1000 : raw;
+      const d = new Date(ms);
+      return Number.isNaN(d.getTime()) ? null : this.truncateToDate(d);
+    }
+    if (typeof raw === 'string') {
+      const t = raw.trim();
+      if (!t) return null;
+      const d = new Date(t.length <= 10 ? `${t}T00:00:00.000Z` : t);
+      return Number.isNaN(d.getTime()) ? null : this.truncateToDate(d);
+    }
+    return null;
+  }
+
+  private truncateToDate(d: Date): Date {
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  }
 
   private extractCoordinates(geometry: any): [number | null, number | null] {
     if (!geometry?.coordinates) return [null, null];

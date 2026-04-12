@@ -92,6 +92,7 @@ export const DEFAULT_HOMEPAGE_SITE_SETTINGS: Array<{
   },
 ];
 
+/** Стабильные обложки (picsum по seed = не меняются между деплоями). */
 export const DEFAULT_DEMO_NEWS: Array<{
   slug: string;
   title: string;
@@ -104,41 +105,41 @@ export const DEFAULT_DEMO_NEWS: Array<{
     title: 'Обзор новостроек Москвы: что выбрать',
     body: '<p>Краткий обзор рынка новостроек Москвы и Московской области.</p>',
     source: 'Обзор',
-    imageUrl: null,
+    imageUrl: 'https://picsum.photos/seed/livegrid-news-obzor/800/480',
   },
   {
     slug: 'ipoteka-stavki-snizheny-2026',
     title: 'Ипотечные ставки снижены до 6%',
     body: '<p>Обзор актуальных ипотечных программ и условий банков.</p>',
     source: 'Ипотека',
-    imageUrl: null,
+    imageUrl: 'https://picsum.photos/seed/livegrid-news-ipoteka/800/480',
   },
   {
     slug: 'novyj-zhk-na-yuge-moskvy',
     title: 'Новый жилой комплекс на юге Москвы',
     body: '<p>Анонс нового проекта на юге столицы.</p>',
     source: 'Новостройки',
-    imageUrl: null,
+    imageUrl: 'https://picsum.photos/seed/livegrid-news-zhk/800/480',
   },
   {
     slug: 'kak-vybrat-kvartiru-sovety',
     title: 'Как выбрать квартиру: советы экспертов',
     body: '<p>Практические рекомендации при выборе квартиры в новостройке.</p>',
     source: 'Советы',
-    imageUrl: null,
+    imageUrl: 'https://picsum.photos/seed/livegrid-news-sovety/800/480',
   },
   {
     slug: 'rynok-novostroek-prognoz-2026',
     title: 'Прогноз по рынку новостроек на 2026 год',
     body: '<p>Что ждёт покупателей: спрос, цены и география запусков.</p>',
     source: 'Аналитика',
-    imageUrl: null,
+    imageUrl: 'https://picsum.photos/seed/livegrid-news-analitika/800/480',
   },
   {
     slug: 'samoletnye-programmy-rassrochki',
     title: 'Рассрочка и trade-in: какие программы актуальны',
     body: '<p>Краткий обзор условий застройщиков и банковских партнёров.</p>',
     source: 'Финансы',
-    imageUrl: null,
+    imageUrl: 'https://picsum.photos/seed/livegrid-news-finance/800/480',
   },
 ];

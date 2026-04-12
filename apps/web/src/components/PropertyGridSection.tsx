@@ -153,10 +153,32 @@ const PropertyGridSection = ({ title, type }: Props) => {
         )}
 
         {empty && (
-          <p className="text-sm text-muted-foreground text-center py-12 max-w-lg mx-auto">
-            {isHot
-              ? 'Нет жилых комплексов для этого блока. Включите «Реклама» у нужных ЖК в админке или задайте список slug в настройках «Главная страница».'
-              : 'Нет ЖК со стартом продаж в выбранном периоде. Укажите даты старта у объектов в админке или увеличьте окно дней в настройках «Главная страница».'}
+          <p className="text-sm text-muted-foreground text-center py-12 max-w-lg mx-auto space-y-2">
+            <span className="block">
+              {isHot
+                ? 'Нет жилых комплексов для этого блока. Включите «Реклама» у нужных ЖК в разделе «ЖК» или задайте режим и slug в '
+                : 'Нет ЖК со стартом продаж в выбранном периоде. Дата берётся из фида при импорте или из карточки ЖК; расширьте «Окно дней» в '}
+              {isHot ? (
+                <>
+                  <Link to="/admin/homepage" className="text-primary font-medium underline-offset-2 hover:underline">
+                    Главная (блоки)
+                  </Link>
+                  .
+                </>
+              ) : (
+                <>
+                  <Link to="/admin/homepage" className="text-primary font-medium underline-offset-2 hover:underline">
+                    Главная (блоки)
+                  </Link>
+                  . Также проверьте дату «Старт продаж» у ЖК в разделе «ЖК» и при необходимости запустите импорт фида.
+                </>
+              )}
+            </span>
+            {isHot && (
+              <span className="block text-xs">
+                Редактор страницы «Контент» здесь не задаёт список ЖК — только заголовок блока на макете.
+              </span>
+            )}
           </p>
         )}
 

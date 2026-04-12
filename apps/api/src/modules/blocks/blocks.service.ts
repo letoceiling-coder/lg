@@ -296,6 +296,12 @@ export class BlocksService {
     return BlockStatus.BUILDING;
   }
 
+  private parseSalesStartDate(raw?: string | null): Date | null {
+    if (raw === undefined || raw === null || raw === '') return null;
+    const d = new Date(`${raw}T00:00:00.000Z`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
   private parseDataSource(raw?: string): DataSource {
     if (raw && Object.values(DataSource).includes(raw as DataSource)) {
       return raw as DataSource;
@@ -317,6 +323,7 @@ export class BlocksService {
         latitude: dto.latitude,
         longitude: dto.longitude,
         isPromoted: dto.isPromoted ?? false,
+        salesStartDate: this.parseSalesStartDate(dto.salesStartDate),
         dataSource: this.parseDataSource(dto.dataSource),
       },
     });
@@ -336,6 +343,9 @@ export class BlocksService {
         ...(dto.latitude !== undefined && { latitude: dto.latitude }),
         ...(dto.longitude !== undefined && { longitude: dto.longitude }),
         ...(dto.isPromoted !== undefined && { isPromoted: dto.isPromoted }),
+        ...(dto.salesStartDate !== undefined && {
+          salesStartDate: this.parseSalesStartDate(dto.salesStartDate),
+        }),
         ...(dto.dataSource !== undefined && { dataSource: this.parseDataSource(dto.dataSource) }),
       },
     });

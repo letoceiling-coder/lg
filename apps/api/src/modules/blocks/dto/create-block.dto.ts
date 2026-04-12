@@ -5,6 +5,8 @@ import {
   IsOptional,
   IsBoolean,
   IsNumber,
+  IsDateString,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateBlockDto {
@@ -55,6 +57,12 @@ export class CreateBlockDto {
   @IsOptional()
   @IsBoolean()
   isPromoted?: boolean;
+
+  @ApiPropertyOptional({ description: 'Дата старта продаж (YYYY-MM-DD), для блока на главной' })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null && v !== '')
+  @IsDateString()
+  salesStartDate?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -76,6 +76,11 @@ export default function AdminHomepage() {
           <p className="text-sm text-muted-foreground mt-1">
             Горячие предложения, старт продаж и блок новостей. Полный список настроек — в разделе «Настройки сайта».
           </p>
+          <p className="text-sm text-muted-foreground mt-3 rounded-xl border bg-muted/40 px-4 py-3">
+            <strong className="text-foreground">Старт продаж:</strong> в блок попадают ЖК с датой старта в интервале «сегодня — сегодня+N дней»
+            (поле ниже). Дата приходит из фида при импорте; её можно задать вручную в карточке ЖК (админка → ЖК). Редактор страницы «Контент»
+            меняет только заголовок блока на макете, не список объектов.
+          </p>
         </div>
         <button
           type="button"

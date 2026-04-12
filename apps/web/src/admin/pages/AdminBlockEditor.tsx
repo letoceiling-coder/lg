@@ -12,6 +12,7 @@ type BlockDetail = {
   regionId: number;
   status: string;
   isPromoted?: boolean;
+  salesStartDate?: string | null;
 };
 
 async function apiPutJson<T>(path: string, body: unknown): Promise<T> {
@@ -43,6 +44,7 @@ export default function AdminBlockEditor() {
     description: '',
     status: 'BUILDING',
     isPromoted: false,
+    salesStartDate: '' as string,
   });
 
   const { data: block, isLoading } = useQuery({
@@ -53,6 +55,11 @@ export default function AdminBlockEditor() {
 
   useEffect(() => {
     if (!block) return;
+    const sd = block.salesStartDate;
+    const salesStartDate =
+      sd && !Number.isNaN(new Date(sd).getTime())
+        ? new Date(sd).toISOString().slice(0, 10)
+        : '';
     setForm({
       regionId: block.regionId,
       name: block.name,
@@ -60,6 +67,7 @@ export default function AdminBlockEditor() {
       description: block.description ?? '',
       status: block.status,
       isPromoted: !!block.isPromoted,
+      salesStartDate,
     });
   }, [block]);
 
@@ -72,6 +80,7 @@ export default function AdminBlockEditor() {
         description: form.description.trim() || undefined,
         status: form.status,
         isPromoted: form.isPromoted,
+        salesStartDate: form.salesStartDate.trim() ? form.salesStartDate.trim() : null,
       };
       if (isNew) {
         return apiPost<BlockDetail>('/admin/blocks', payload);
@@ -160,6 +169,20 @@ export default function AdminBlockEditor() {
           />
           Продвигаемый на главной
         </label>
+        <div>
+          <label className="text-xs text-muted-foreground font-medium">
+            Старт продаж (дата) — для блока «Старт продаж» на главной
+          </label>
+          <input
+            type="date"
+            className="mt-1 w-full border rounded-lg px-3 py-2 text-sm"
+            value={form.salesStartDate}
+            onChange={(e) => setForm((f) => ({ ...f, salesStartDate: e.target.value }))}
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Очистите поле и сохраните, чтобы сбросить дату. Диапазон дат на главной задаётся в «Главная (блоки)» → «Окно дней».
+          </p>
+        </div>
 
         <button
           type="button"

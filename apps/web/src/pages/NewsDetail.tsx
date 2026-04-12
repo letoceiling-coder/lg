@@ -1,6 +1,8 @@
 import { Link, useParams } from 'react-router-dom';
 import { ChevronRight, Calendar, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import Header from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
 import ContactsSection from '@/components/ContactsSection';
@@ -29,6 +31,11 @@ const NewsDetail = () => {
     staleTime: 60_000,
   });
 
+  const bodyHtml = useMemo(() => {
+    if (!article?.body) return '';
+    return DOMPurify.sanitize(article.body, { USE_PROFILES: { html: true } });
+  }, [article?.body]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background pb-16 lg:pb-0">
@@ -55,6 +62,7 @@ const NewsDetail = () => {
   }
 
   const date = new Date(article.publishedAt ?? article.createdAt);
+  const heroSrc = article.imageUrl || complex1;
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
@@ -71,11 +79,9 @@ const NewsDetail = () => {
       </div>
 
       <article className="max-w-[900px] mx-auto px-4 py-6">
-        {article.imageUrl && (
-          <div className="rounded-2xl overflow-hidden aspect-[16/9] mb-6">
-            <img src={article.imageUrl || complex1} alt={article.title} className="w-full h-full object-cover" />
-          </div>
-        )}
+        <div className="rounded-2xl overflow-hidden aspect-[16/9] mb-6">
+          <img src={heroSrc} alt="" className="w-full h-full object-cover" />
+        </div>
 
         <h1 className="text-2xl sm:text-3xl font-bold mb-3">{article.title}</h1>
 
@@ -97,9 +103,10 @@ const NewsDetail = () => {
         </div>
 
         {article.body && (
-          <div className="prose prose-sm max-w-none text-foreground leading-relaxed whitespace-pre-line">
-            {article.body}
-          </div>
+          <div
+            className="prose prose-sm max-w-none text-foreground leading-relaxed [&_a]:text-primary [&_p]:mb-3"
+            dangerouslySetInnerHTML={{ __html: bodyHtml }}
+          />
         )}
       </article>
 

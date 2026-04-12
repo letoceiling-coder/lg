@@ -18,6 +18,7 @@ export class ContentService implements OnModuleInit {
   async onModuleInit() {
     await this.ensureHomepageSiteSettings();
     await this.ensureDemoNewsIfEmpty();
+    await this.ensureDemoNewsCovers();
   }
 
   /** Создаёт строки site_settings для главной, если их ещё нет (прод без prisma seed). */
@@ -54,6 +55,20 @@ export class ContentService implements OnModuleInit {
       });
     }
     this.logger.log(`Seeded ${DEFAULT_DEMO_NEWS.length} demo news (DB was empty)`);
+  }
+
+  /** Добавляет обложки демо-новостям, если они уже были в БД без imageUrl (старый прод). */
+  private async ensureDemoNewsCovers() {
+    for (const article of DEFAULT_DEMO_NEWS) {
+      if (!article.imageUrl) continue;
+      const r = await this.prisma.news.updateMany({
+        where: { slug: article.slug, OR: [{ imageUrl: null }, { imageUrl: '' }] },
+        data: { imageUrl: article.imageUrl },
+      });
+      if (r.count > 0) {
+        this.logger.log(`News cover set: ${article.slug}`);
+      }
+    }
   }
 
   async getSettings() {
