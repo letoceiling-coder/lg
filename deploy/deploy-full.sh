@@ -17,7 +17,6 @@ echo "Project: $PROJECT_DIR (DEPLOY_ROOT=$DEPLOY_ROOT)"
 echo ""
 
 cd "$PROJECT_DIR"
-export DEPLOY_ROOT="$PROJECT_DIR"
 
 # shellcheck disable=SC1090
 source "$PROJECT_DIR/deploy/load-api-env.sh"
