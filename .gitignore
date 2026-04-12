@@ -1,0 +1,37 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+apps/web/dist/
+apps/admin/dist/
+apps/api/dist/
+
+# Logs
+*.log
+pm2-*.log
+
+# Data (downloaded feeds — large files; при необходимости храните локально)
+TrendAgent/
+
+# Archives
+*.tar.gz
+
+# strict-template clone (reference only)
+strict-template/

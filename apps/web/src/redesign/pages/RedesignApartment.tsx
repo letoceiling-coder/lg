@@ -1,0 +1,302 @@
+import { useParams, Link } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Calculator, Heart, Share2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import RedesignHeader from '@/redesign/components/RedesignHeader';
+import FooterSection from '@/components/FooterSection';
+import LeadForm from '@/shared/components/LeadForm';
+import { apiGet } from '@/lib/api';
+import { mapListingRowToApartment, type ApiListingRow } from '@/redesign/lib/blocks-from-api';
+import { mapListingDetailToApartmentPage, type ApiListingDetail } from '@/redesign/lib/listing-page-from-api';
+import { getApartmentById, formatPrice } from '@/redesign/data/mock-data';
+import { cn } from '@/lib/utils';
+
+function parseNumericListingId(id: string | undefined): number | null {
+  if (!id) return null;
+  const n = Number.parseInt(id, 10);
+  if (!Number.isFinite(n) || String(n) !== id) return null;
+  return n;
+}
+
+const RedesignApartment = () => {
+  const { id: idParam } = useParams<{ id: string }>();
+  const listingId = parseNumericListingId(idParam);
+
+  const mockResult = useMemo(() => {
+    if (listingId != null) return null;
+    return getApartmentById(idParam || '');
+  }, [idParam, listingId]);
+
+  const listingQuery = useQuery({
+    queryKey: ['listing', 'detail', listingId],
+    queryFn: () => apiGet<ApiListingDetail>(`/listings/${listingId}`),
+    enabled: listingId != null,
+    retry: false,
+  });
+
+  const apiPage = useMemo(() => {
+    if (!listingQuery.data) return null;
+    return mapListingDetailToApartmentPage(listingQuery.data);
+  }, [listingQuery.data]);
+
+  const blockId = listingQuery.data?.blockId ?? listingQuery.data?.block?.id ?? null;
+
+  const similarApiQuery = useQuery({
+    queryKey: ['listings', 'similar-apartments', blockId, listingId, apiPage?.apartment.rooms],
+    queryFn: () =>
+      apiGet<{ data: ApiListingRow[] }>(
+        `/listings?block_id=${blockId}&kind=APARTMENT&status=ACTIVE&per_page=40`,
+      ),
+    enabled: Boolean(apiPage && blockId != null && listingId != null),
+    select: (res) => {
+      if (blockId == null || listingId == null) return [];
+      const rooms = apiPage?.apartment.rooms;
+      if (rooms === undefined) return [];
+      return res.data
+        .filter((l) => l.id !== listingId)
+        .map((l) => mapListingRowToApartment(l, String(blockId), String(l.buildingId ?? `${blockId}-main`)))
+        .filter((a): a is NonNullable<typeof a> => a != null)
+        .filter((a) => a.rooms === rooms && a.status === 'available')
+        .slice(0, 4);
+    },
+  });
+
+  const apt = mockResult?.apartment ?? apiPage?.apartment;
+  const complex = mockResult?.complex ?? apiPage?.complex;
+  const building = mockResult?.building ?? apiPage?.building;
+
+  const similarApts = useMemo(() => {
+    if (mockResult?.complex && mockResult.apartment) {
+      return mockResult.complex.buildings
+        .flatMap((b) => b.apartments)
+        .filter((a) => a.id !== mockResult.apartment!.id && a.status === 'available' && a.rooms === mockResult.apartment!.rooms)
+        .slice(0, 4);
+    }
+    return similarApiQuery.data ?? [];
+  }, [mockResult, similarApiQuery.data]);
+
+  const [showMortgage, setShowMortgage] = useState(false);
+  const [mortgageYears, setMortgageYears] = useState(20);
+  const [mortgageRate, setMortgageRate] = useState(8);
+  const [mortgageDown, setMortgageDown] = useState(20);
+
+  const loading = listingId != null && listingQuery.isPending;
+  const apiFailed = listingId != null && (listingQuery.isError || (listingQuery.isFetched && !apiPage));
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <RedesignHeader />
+        <div className="max-w-[1400px] mx-auto px-4 py-16 text-center text-muted-foreground text-sm">Загрузка…</div>
+      </div>
+    );
+  }
+
+  if (apiFailed || !apt || !complex || !building) {
+    return (
+      <div className="min-h-screen bg-background">
+        <RedesignHeader />
+        <div className="max-w-[1400px] mx-auto px-4 py-16 text-center">
+          <p className="text-muted-foreground">Квартира не найдена</p>
+          <Link to="/catalog" className="text-primary text-sm mt-2 inline-block">← Каталог</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const roomLabel = apt.rooms === 0 ? 'Студия' : `${apt.rooms}-комнатная`;
+
+  const loanAmount = apt.price * (1 - mortgageDown / 100);
+  const monthlyRate = mortgageRate / 100 / 12;
+  const months = mortgageYears * 12;
+  const monthlyPayment = Math.round(loanAmount * monthlyRate / (1 - Math.pow(1 + monthlyRate, -months)));
+
+  const details = [
+    { icon: Layers, label: 'Комнат', value: apt.rooms === 0 ? 'Студия' : `${apt.rooms}` },
+    { icon: Ruler, label: 'Общая площадь', value: `${apt.area} м²` },
+    { icon: ChefHat, label: 'Кухня', value: `${apt.kitchenArea} м²` },
+    { icon: Building2, label: 'Этаж', value: `${apt.floor} из ${apt.totalFloors}` },
+    { icon: Paintbrush, label: 'Отделка', value: apt.finishing },
+    { icon: CalendarDays, label: 'Сдача', value: building.deadline },
+    { icon: MapPin, label: 'Район', value: complex.district },
+    { icon: Train, label: 'Метро', value: `${complex.subway} · ${complex.subwayDistance}` },
+  ];
+
+  return (
+    <div className="min-h-screen bg-background pb-16 lg:pb-0">
+      <RedesignHeader />
+      <div className="max-w-[1400px] mx-auto px-4 py-6">
+        {/* Breadcrumb */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+            <Link to="/" className="hover:text-foreground transition-colors">Главная</Link>
+            <span>/</span>
+            <Link to="/catalog" className="hover:text-foreground transition-colors">Каталог</Link>
+            <span>/</span>
+            <Link to={`/complex/${complex.slug}`} className="hover:text-foreground transition-colors">{complex.name}</Link>
+            <span>/</span>
+            <span className="text-foreground font-medium">{roomLabel}, {apt.area} м²</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Heart className="w-4 h-4" /></Button>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><Share2 className="w-4 h-4" /></Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Plan & description */}
+          <div className="lg:col-span-3 space-y-4">
+            <div className="rounded-2xl border border-border bg-card overflow-hidden">
+              <div className="aspect-[4/3] bg-muted/50 flex items-center justify-center p-12">
+                <img src={apt.planImage} alt="Планировка" className="max-w-full max-h-full object-contain" />
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <h3 className="font-semibold mb-3">О квартире</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {roomLabel} площадью {apt.area} м² на {apt.floor} этаже {apt.totalFloors}-этажного дома в ЖК «{complex.name}».
+                {apt.finishing !== 'без отделки' ? ` Отделка: ${apt.finishing}.` : ' Без отделки.'}
+                {' '}Район: {complex.district}, метро {complex.subway} ({complex.subwayDistance}).
+                {' '}Кухня {apt.kitchenArea} м². Цена за метр: {apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м².
+              </p>
+            </div>
+
+            {/* Mortgage calculator */}
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <button className="flex items-center justify-between w-full" onClick={() => setShowMortgage(!showMortgage)}>
+                <h3 className="font-semibold flex items-center gap-2"><Calculator className="w-4 h-4 text-primary" />Ипотечный калькулятор</h3>
+                <span className="text-xs text-muted-foreground">{showMortgage ? 'Скрыть' : 'Развернуть'}</span>
+              </button>
+              {showMortgage && (
+                <div className="mt-5 space-y-5">
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Первый взнос</span>
+                      <span className="font-medium">{mortgageDown}% · {formatPrice(Math.round(apt.price * mortgageDown / 100))}</span>
+                    </div>
+                    <Slider value={[mortgageDown]} onValueChange={v => setMortgageDown(v[0])} min={10} max={80} step={5} />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Срок</span>
+                      <span className="font-medium">{mortgageYears} лет</span>
+                    </div>
+                    <Slider value={[mortgageYears]} onValueChange={v => setMortgageYears(v[0])} min={1} max={30} step={1} />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Ставка</span>
+                      <span className="font-medium">{mortgageRate}%</span>
+                    </div>
+                    <Slider value={[mortgageRate]} onValueChange={v => setMortgageRate(v[0])} min={1} max={25} step={0.5} />
+                  </div>
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs text-muted-foreground mb-1">Ежемесячный платёж</p>
+                    <p className="text-2xl font-bold">{monthlyPayment.toLocaleString('ru-RU')} ₽/мес</p>
+                    <p className="text-xs text-muted-foreground mt-1">Сумма кредита: {formatPrice(Math.round(loanAmount))}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Price card */}
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <p className="text-xs text-muted-foreground mb-1">
+                <Link to={`/complex/${complex.slug}`} className="hover:text-primary transition-colors">{complex.name}</Link> · {building.name}
+              </p>
+              <h1 className="text-2xl font-bold mb-1">{roomLabel}, {apt.area} м²</h1>
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-5">
+                <MapPin className="w-3.5 h-3.5" />
+                {complex.address} · м. {complex.subway}
+              </div>
+
+              <div className="border-t border-border pt-5 mb-5">
+                <p className="text-3xl font-bold">{formatPrice(apt.price)}</p>
+                <p className="text-sm text-muted-foreground mt-1">{apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м²</p>
+                <p className="text-xs text-muted-foreground mt-0.5">~{monthlyPayment.toLocaleString('ru-RU')} ₽/мес в ипотеку</p>
+              </div>
+
+              <div className="space-y-3">
+                {details.map(d => (
+                  <div key={d.label} className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground flex items-center gap-2.5">
+                      <d.icon className="w-4 h-4" />{d.label}
+                    </span>
+                    <span className="font-medium capitalize">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* CTA */}
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-3">
+              <Button className="w-full h-12"><Phone className="w-4 h-4 mr-2" /> Позвонить</Button>
+              <Button variant="outline" className="w-full h-12"><MessageCircle className="w-4 h-4 mr-2" /> Записаться на просмотр</Button>
+              <Button variant="secondary" className="w-full h-12" onClick={() => setShowMortgage(true)}>
+                <Calculator className="w-4 h-4 mr-2" /> Рассчитать ипотеку
+              </Button>
+            </div>
+
+            {/* LeadForm */}
+            <LeadForm
+              title="Узнать подробнее"
+              source={`Квартира: ${apt.id}`}
+              blockId={blockId ?? undefined}
+              listingId={listingId ?? undefined}
+              requestType="CONSULTATION"
+            />
+
+            {/* Builder */}
+            <div className="rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center text-sm font-bold text-accent-foreground">
+                  {(complex.builder && complex.builder !== '—' ? complex.builder : 'З').charAt(0)}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{complex.builder}</p>
+                  <p className="text-xs text-muted-foreground">Застройщик</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Similar apartments */}
+        {similarApts.length > 0 && (
+          <section className="mt-12">
+            <h2 className="text-lg font-bold mb-4">Похожие квартиры в {complex.name}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {similarApts.map(a => (
+                <Link
+                  key={a.id}
+                  to={`/apartment/${a.id}`}
+                  className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-md hover:-translate-y-px transition-all"
+                >
+                  <div className="aspect-square bg-muted/50 flex items-center justify-center p-8">
+                    <img src={a.planImage} alt="План" className="max-w-full max-h-full object-contain opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="p-3 space-y-1">
+                    <h4 className="font-semibold text-sm">{a.rooms === 0 ? 'Студия' : `${a.rooms}-комн`}, {a.area} м²</h4>
+                    <p className="text-xs text-muted-foreground">Этаж {a.floor}/{a.totalFloors} · {a.finishing}</p>
+                    <p className="font-bold text-sm text-primary">{formatPrice(a.price)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+
+      <FooterSection />
+    </div>
+  );
+};
+
+export default RedesignApartment;

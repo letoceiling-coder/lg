@@ -1,0 +1,7 @@
+export enum ListingKind {
+  APARTMENT = 'APARTMENT',
+  PARKING = 'PARKING',
+  LAND = 'LAND',
+  COMMERCIAL = 'COMMERCIAL',
+  HOUSE = 'HOUSE',
+}

@@ -1,0 +1,918 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum UserRole {
+  admin
+  editor
+  manager
+  agent
+  client
+}
+
+enum DataSource {
+  FEED
+  MANUAL
+}
+
+enum ListingKind {
+  APARTMENT
+  PARKING
+  LAND
+  COMMERCIAL
+  HOUSE
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  RESERVED
+  DRAFT
+}
+
+enum BlockStatus {
+  BUILDING
+  COMPLETED
+  PROJECT
+}
+
+enum BlockImageKind {
+  RENDER
+  PLAN
+}
+
+enum MediaKind {
+  PHOTO
+  PLAN
+  RENDER
+  DOCUMENT
+}
+
+enum ImportBatchStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum RequestStatus {
+  NEW
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestType {
+  CONSULTATION
+  MORTGAGE
+  CALLBACK
+  SELECTION
+  CONTACT
+}
+
+enum ParkingType {
+  UNDERGROUND
+  GROUND
+  MULTILEVEL
+}
+
+enum CommercialType {
+  OFFICE
+  RETAIL
+  WAREHOUSE
+  RESTAURANT
+  OTHER
+}
+
+enum HouseType {
+  DETACHED
+  SEMI
+  TOWNHOUSE
+  DUPLEX
+}
+
+enum SiteSettingFieldType {
+  TEXT
+  TEXTAREA
+  URL
+  PHONE
+  EMAIL
+  IMAGE
+  BOOLEAN
+}
+
+enum ContentFieldType {
+  TEXT
+  TEXTAREA
+  RICHTEXT
+  NUMBER
+  URL
+  IMAGE
+  BOOLEAN
+  JSON_ARRAY
+}
+
+enum ContentItemFieldType {
+  TEXT
+  TEXTAREA
+  URL
+  IMAGE
+  NUMBER
+  BOOLEAN
+}
+
+// ============================================================
+// Users & Sessions
+// ============================================================
+
+model User {
+  id               String    @id @default(uuid()) @db.Uuid
+  email            String?   @unique
+  phone            String?   @unique
+  passwordHash     String?   @map("password_hash")
+  fullName         String?   @map("full_name")
+  role             UserRole  @default(client)
+  telegramId       BigInt?   @unique @map("telegram_id")
+  telegramUsername  String?   @map("telegram_username")
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  sessions         Session[]
+  auditEvents      AuditEvent[]
+  importBatches    ImportBatch[]   @relation("TriggeredImports")
+  fieldOverrides   FieldOverride[]
+  mediaFiles       MediaFile[]
+  siteSettings     SiteSetting[]   @relation("UpdatedSettings")
+  contentBlocks    ContentBlock[]  @relation("UpdatedBlocks")
+  assignedRequests Request[]       @relation("AssignedRequests")
+  favorites        Favorite[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  refreshTokenHash String   @map("refresh_token_hash")
+  expiresAt        DateTime @map("expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ============================================================
+// Regions & Geography
+// ============================================================
+
+model FeedRegion {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique
+  name           String
+  baseUrl        String?   @map("base_url")
+  isEnabled      Boolean   @default(false) @map("is_enabled")
+  lastImportedAt DateTime? @map("last_imported_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  districts     District[]
+  subways       Subway[]
+  builders      Builder[]
+  blocks        Block[]
+  buildings     Building[]
+  listings      Listing[]
+  importBatches ImportBatch[]
+
+  @@map("feed_regions")
+}
+
+model District {
+  id         Int      @id @default(autoincrement())
+  regionId   Int      @map("region_id")
+  externalId String?  @map("external_id")
+  crmId      BigInt?  @map("crm_id")
+  name       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  region   FeedRegion @relation(fields: [regionId], references: [id])
+  blocks   Block[]
+  listings Listing[]
+
+  @@unique([regionId, externalId])
+  @@map("districts")
+}
+
+model Subway {
+  id         Int      @id @default(autoincrement())
+  regionId   Int      @map("region_id")
+  externalId String?  @map("external_id")
+  crmId      BigInt?  @map("crm_id")
+  name       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  region      FeedRegion   @relation(fields: [regionId], references: [id])
+  blockSubways BlockSubway[]
+
+  @@unique([regionId, externalId])
+  @@map("subways")
+}
+
+// ============================================================
+// Builders
+// ============================================================
+
+model Builder {
+  id         Int        @id @default(autoincrement())
+  regionId   Int        @map("region_id")
+  externalId String?    @map("external_id")
+  crmId      BigInt?    @map("crm_id")
+  name       String
+  dataSource DataSource @default(FEED) @map("data_source")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  region   FeedRegion @relation(fields: [regionId], references: [id])
+  blocks   Block[]
+  listings Listing[]
+
+  @@unique([regionId, externalId])
+  @@map("builders")
+}
+
+// ============================================================
+// Reference tables
+// ============================================================
+
+model RoomType {
+  id         Int     @id @default(autoincrement())
+  externalId String? @unique @map("external_id")
+  crmId      BigInt? @map("crm_id")
+  name       String
+  nameOne    String? @map("name_one")
+
+  apartments ListingApartment[]
+
+  @@map("room_types")
+}
+
+model Finishing {
+  id         Int     @id @default(autoincrement())
+  externalId String? @unique @map("external_id")
+  crmId      BigInt? @map("crm_id")
+  name       String
+
+  apartments ListingApartment[]
+
+  @@map("finishings")
+}
+
+model BuildingType {
+  id         Int     @id @default(autoincrement())
+  externalId String? @unique @map("external_id")
+  crmId      BigInt? @map("crm_id")
+  name       String
+
+  buildings  Building[]
+  apartments ListingApartment[]
+
+  @@map("building_types")
+}
+
+// ============================================================
+// Blocks (ЖК)
+// ============================================================
+
+model Block {
+  id             Int         @id @default(autoincrement())
+  regionId       Int         @map("region_id")
+  externalId     String?     @map("external_id")
+  crmId          BigInt?     @map("crm_id")
+  slug           String      @unique
+  name           String
+  description    String?     @db.Text
+  districtId     Int?        @map("district_id")
+  builderId      Int?        @map("builder_id")
+  status         BlockStatus @default(BUILDING)
+  latitude       Decimal?    @db.Decimal(10, 8)
+  longitude      Decimal?    @db.Decimal(11, 8)
+  isPromoted     Boolean     @default(false) @map("is_promoted")
+  salesStartDate DateTime?   @map("sales_start_date") @db.Date
+  dataSource     DataSource  @default(FEED) @map("data_source")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  region    FeedRegion    @relation(fields: [regionId], references: [id])
+  district  District?     @relation(fields: [districtId], references: [id])
+  builder   Builder?      @relation(fields: [builderId], references: [id])
+  addresses BlockAddress[]
+  images    BlockImage[]
+  subways   BlockSubway[]
+  buildings Building[]
+  listings  Listing[]
+  favorites Favorite[]
+
+  @@unique([regionId, externalId])
+  @@map("blocks")
+}
+
+model BlockAddress {
+  id        Int    @id @default(autoincrement())
+  blockId   Int    @map("block_id")
+  address   String
+  sortOrder Int    @default(0) @map("sort_order")
+
+  block Block @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@map("block_addresses")
+}
+
+model BlockImage {
+  id        Int            @id @default(autoincrement())
+  blockId   Int            @map("block_id")
+  url       String
+  kind      BlockImageKind
+  sortOrder Int            @default(0) @map("sort_order")
+
+  block Block @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@map("block_images")
+}
+
+model BlockSubway {
+  id           Int   @id @default(autoincrement())
+  blockId      Int   @map("block_id")
+  subwayId     Int   @map("subway_id")
+  distanceTime Int?  @map("distance_time")
+  distanceType Int?  @map("distance_type") @db.SmallInt
+
+  block  Block  @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  subway Subway @relation(fields: [subwayId], references: [id])
+
+  @@unique([blockId, subwayId, distanceType])
+  @@map("block_subways")
+}
+
+// ============================================================
+// Buildings (Корпуса)
+// ============================================================
+
+model Building {
+  id             Int        @id @default(autoincrement())
+  regionId       Int        @map("region_id")
+  blockId        Int        @map("block_id")
+  externalId     String?    @map("external_id")
+  crmId          BigInt?    @map("crm_id")
+  name           String?
+  queue          String?
+  buildingTypeId Int?       @map("building_type_id")
+  deadline       DateTime?  @db.Date
+  deadlineKey    DateTime?  @map("deadline_key") @db.Date
+  subsidy        Boolean    @default(false)
+  latitude       Decimal?   @db.Decimal(10, 8)
+  longitude      Decimal?   @db.Decimal(11, 8)
+  dataSource     DataSource @default(FEED) @map("data_source")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  region       FeedRegion        @relation(fields: [regionId], references: [id])
+  block        Block             @relation(fields: [blockId], references: [id])
+  buildingType BuildingType?     @relation(fields: [buildingTypeId], references: [id])
+  addresses    BuildingAddress[]
+  listings     Listing[]
+
+  @@unique([regionId, externalId])
+  @@index([blockId])
+  @@map("buildings")
+}
+
+model BuildingAddress {
+  id         Int     @id @default(autoincrement())
+  buildingId Int     @map("building_id")
+  street     String?
+  house      String?
+  housing    String?
+  streetEn   String? @map("street_en")
+  houseEn    String? @map("house_en")
+  housingEn  String? @map("housing_en")
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@map("building_addresses")
+}
+
+// ============================================================
+// Listings (universal)
+// ============================================================
+
+model Listing {
+  id         Int           @id @default(autoincrement())
+  regionId   Int           @map("region_id")
+  kind       ListingKind
+  blockId    Int?          @map("block_id")
+  buildingId Int?          @map("building_id")
+  builderId  Int?          @map("builder_id")
+  districtId Int?          @map("district_id")
+  externalId String?       @map("external_id")
+  crmId      BigInt?       @map("crm_id")
+  price      Decimal?      @db.Decimal(15, 2)
+  priceBase  Decimal?      @map("price_base") @db.Decimal(15, 2)
+  currency   String        @default("RUB") @db.VarChar(3)
+  status     ListingStatus @default(ACTIVE)
+  dataSource DataSource    @default(FEED) @map("data_source")
+  isPublished Boolean      @default(true) @map("is_published")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  region    FeedRegion @relation(fields: [regionId], references: [id])
+  block     Block?     @relation(fields: [blockId], references: [id])
+  building  Building?  @relation(fields: [buildingId], references: [id])
+  builder   Builder?   @relation(fields: [builderId], references: [id])
+  district  District?  @relation(fields: [districtId], references: [id])
+
+  apartment  ListingApartment?
+  parking    ListingParking?
+  land       ListingLand?
+  commercial ListingCommercial?
+  house      ListingHouse?
+  favorites  Favorite[]
+
+  @@unique([regionId, externalId])
+  @@index([regionId, kind])
+  @@index([regionId, price])
+  @@index([regionId, districtId])
+  @@index([blockId])
+  @@index([buildingId])
+  @@index([builderId])
+  @@index([status])
+  @@index([dataSource])
+  @@map("listings")
+}
+
+// ============================================================
+// Listing Details: Apartments
+// ============================================================
+
+model ListingApartment {
+  listingId          Int       @id @map("listing_id")
+  roomTypeId         Int?      @map("room_type_id")
+  finishingId        Int?      @map("finishing_id")
+  buildingTypeId     Int?      @map("building_type_id")
+  floor              Int?
+  floorsTotal        Int?      @map("floors_total")
+  number             String?
+  areaTotal          Decimal?  @map("area_total") @db.Decimal(8, 2)
+  areaGiven          Decimal?  @map("area_given") @db.Decimal(8, 2)
+  areaRoomsTotal     Decimal?  @map("area_rooms_total") @db.Decimal(8, 2)
+  areaKitchen        Decimal?  @map("area_kitchen") @db.Decimal(8, 2)
+  areaBalconies      Decimal?  @map("area_balconies") @db.Decimal(8, 2)
+  areaRoomsDetail    String?   @map("area_rooms_detail")
+  ceilingHeight      Decimal?  @map("ceiling_height") @db.Decimal(4, 2)
+  wcCount            Int?      @map("wc_count")
+  hasMortgage        Boolean?  @map("has_mortgage")
+  hasInstallment     Boolean?  @map("has_installment")
+  hasSubsidy         Boolean?  @map("has_subsidy")
+  hasMilitaryMortgage Boolean? @map("has_military_mortgage")
+  buildingDeadline   DateTime? @map("building_deadline")
+  buildingName       String?   @map("building_name")
+  buildingQueue      String?   @map("building_queue")
+  blockAddress       String?   @map("block_address")
+  blockName          String?   @map("block_name")
+  blockIsCity        Boolean?  @map("block_is_city")
+  blockCityId        String?   @map("block_city_id")
+  planUrl            String?   @map("plan_url")
+
+  listing      Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  roomType     RoomType?     @relation(fields: [roomTypeId], references: [id])
+  finishing    Finishing?    @relation(fields: [finishingId], references: [id])
+  buildingType BuildingType? @relation(fields: [buildingTypeId], references: [id])
+
+  banks     ListingApartmentBank[]
+  contracts ListingApartmentContract[]
+
+  @@index([roomTypeId])
+  @@index([finishingId])
+  @@index([buildingTypeId])
+  @@index([floor])
+  @@index([floorsTotal])
+  @@index([areaTotal])
+  @@index([areaGiven])
+  @@index([areaRoomsTotal])
+  @@index([areaKitchen])
+  @@index([ceilingHeight])
+  @@index([wcCount])
+  @@index([buildingDeadline])
+  @@index([blockIsCity])
+  @@map("listing_apartments")
+}
+
+model ListingApartmentBank {
+  id             Int    @id @default(autoincrement())
+  listingId      Int    @map("listing_id")
+  bankExternalId String @map("bank_external_id")
+
+  apartment ListingApartment @relation(fields: [listingId], references: [listingId], onDelete: Cascade)
+
+  @@map("listing_apartment_banks")
+}
+
+model ListingApartmentContract {
+  id                 Int    @id @default(autoincrement())
+  listingId          Int    @map("listing_id")
+  contractExternalId String @map("contract_external_id")
+
+  apartment ListingApartment @relation(fields: [listingId], references: [listingId], onDelete: Cascade)
+
+  @@map("listing_apartment_contracts")
+}
+
+// ============================================================
+// Listing Details: Parking (Phase 2)
+// ============================================================
+
+model ListingParking {
+  listingId   Int          @id @map("listing_id")
+  parkingType ParkingType? @map("parking_type")
+  area        Decimal?     @db.Decimal(8, 2)
+  floor       Int?
+  number      String?
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("listing_parking")
+}
+
+// ============================================================
+// Listing Details: Land (Phase 2)
+// ============================================================
+
+model ListingLand {
+  listingId         Int      @id @map("listing_id")
+  areaSotki         Decimal? @map("area_sotki") @db.Decimal(10, 2)
+  landCategory      String?  @map("land_category")
+  cadastralNumber   String?  @map("cadastral_number")
+  hasCommunications Boolean? @map("has_communications")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("listing_land")
+}
+
+// ============================================================
+// Listing Details: Commercial (Phase 2)
+// ============================================================
+
+model ListingCommercial {
+  listingId          Int             @id @map("listing_id")
+  commercialType     CommercialType? @map("commercial_type")
+  area               Decimal?        @db.Decimal(10, 2)
+  floor              Int?
+  hasSeparateEntrance Boolean?       @map("has_separate_entrance")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("listing_commercial")
+}
+
+// ============================================================
+// Listing Details: Houses (Phase 2)
+// ============================================================
+
+model ListingHouse {
+  listingId  Int        @id @map("listing_id")
+  houseType  HouseType? @map("house_type")
+  areaTotal  Decimal?   @map("area_total") @db.Decimal(10, 2)
+  areaLand   Decimal?   @map("area_land") @db.Decimal(10, 2)
+  floorsCount Int?      @map("floors_count")
+  bedrooms   Int?
+  bathrooms  Int?
+  hasGarage  Boolean?   @map("has_garage")
+  yearBuilt  Int?       @map("year_built")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("listing_houses")
+}
+
+// ============================================================
+// Field Overrides
+// ============================================================
+
+model FieldOverride {
+  id           Int       @id @default(autoincrement())
+  entityType   String    @map("entity_type")
+  entityId     Int       @map("entity_id")
+  fieldName    String    @map("field_name")
+  valueText    String?   @map("value_text") @db.Text
+  valueNumber  Decimal?  @map("value_number")
+  valueBoolean Boolean?  @map("value_boolean")
+  overriddenBy String?   @map("overridden_by") @db.Uuid
+  overriddenAt DateTime? @map("overridden_at")
+
+  user User? @relation(fields: [overriddenBy], references: [id])
+
+  @@unique([entityType, entityId, fieldName])
+  @@map("field_overrides")
+}
+
+// ============================================================
+// Media
+// ============================================================
+
+model MediaFile {
+  id               Int       @id @default(autoincrement())
+  entityType       String?   @map("entity_type")
+  entityId         Int?      @map("entity_id")
+  kind             MediaKind
+  url              String
+  originalFilename String?   @map("original_filename")
+  sizeBytes        BigInt?   @map("size_bytes")
+  sortOrder        Int       @default(0) @map("sort_order")
+  uploadedBy       String?   @map("uploaded_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [uploadedBy], references: [id])
+
+  @@map("media_files")
+}
+
+// ============================================================
+// Import Batches
+// ============================================================
+
+model ImportBatch {
+  id             Int               @id @default(autoincrement())
+  regionId       Int               @map("region_id")
+  status         ImportBatchStatus @default(PENDING)
+  feedExportedAt DateTime?         @map("feed_exported_at")
+  startedAt      DateTime?         @map("started_at")
+  finishedAt     DateTime?         @map("finished_at")
+  stats          Json?
+  errorMessage   String?           @map("error_message") @db.Text
+  triggeredBy    String?           @map("triggered_by") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  region FeedRegion @relation(fields: [regionId], references: [id])
+  user   User?      @relation("TriggeredImports", fields: [triggeredBy], references: [id])
+
+  @@map("import_batches")
+}
+
+// ============================================================
+// Requests (CRM)
+// ============================================================
+
+model Request {
+  id           Int           @id @default(autoincrement())
+  name         String?
+  phone        String?
+  email        String?
+  type         RequestType   @default(CONSULTATION)
+  status       RequestStatus @default(NEW)
+  blockId      Int?          @map("block_id")
+  listingId    Int?          @map("listing_id")
+  sourceUrl    String?       @map("source_url")
+  assignedTo   String?       @map("assigned_to") @db.Uuid
+  comment      String?       @db.Text
+  telegramSent Boolean       @default(false) @map("telegram_sent")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  assignedUser User? @relation("AssignedRequests", fields: [assignedTo], references: [id])
+
+  @@map("requests")
+}
+
+// ============================================================
+// Favorites
+// ============================================================
+
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id") @db.Uuid
+  blockId   Int?     @map("block_id")
+  listingId Int?     @map("listing_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  block   Block?   @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  listing Listing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, blockId, listingId])
+  @@index([userId])
+  @@map("favorites")
+}
+
+// ============================================================
+// News
+// ============================================================
+
+model News {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  title       String
+  body        String?  @db.Text
+  imageUrl    String?  @map("image_url")
+  source      String?
+  sourceUrl   String?  @map("source_url")
+  publishedAt DateTime? @map("published_at")
+  isPublished Boolean  @default(false) @map("is_published")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("news")
+}
+
+// ============================================================
+// CMS: Site Settings
+// ============================================================
+
+model SiteSetting {
+  id        Int                  @id @default(autoincrement())
+  key       String               @unique
+  value     String               @db.Text
+  groupName String               @map("group_name")
+  label     String
+  fieldType SiteSettingFieldType @map("field_type")
+  sortOrder Int                  @default(0) @map("sort_order")
+  updatedBy String?              @map("updated_by") @db.Uuid
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  createdAt DateTime             @default(now()) @map("created_at")
+
+  user User? @relation("UpdatedSettings", fields: [updatedBy], references: [id])
+
+  @@index([groupName])
+  @@map("site_settings")
+}
+
+// ============================================================
+// CMS: Content Blocks
+// ============================================================
+
+model ContentBlock {
+  id        Int      @id @default(autoincrement())
+  pageSlug  String   @map("page_slug")
+  blockType String   @map("block_type")
+  sortOrder Int      @default(0) @map("sort_order")
+  isVisible Boolean  @default(true) @map("is_visible")
+  updatedBy String?  @map("updated_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User?              @relation("UpdatedBlocks", fields: [updatedBy], references: [id])
+  fields ContentBlockField[]
+  items  ContentBlockItem[]
+
+  @@unique([pageSlug, blockType])
+  @@index([pageSlug])
+  @@map("content_blocks")
+}
+
+model ContentBlockField {
+  id           Int              @id @default(autoincrement())
+  blockId      Int              @map("block_id")
+  fieldKey     String           @map("field_key")
+  fieldType    ContentFieldType @map("field_type")
+  valueText    String?          @map("value_text") @db.Text
+  valueNumber  Decimal?         @map("value_number")
+  valueBoolean Boolean?         @map("value_boolean")
+  sortOrder    Int              @default(0) @map("sort_order")
+  label        String
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  block ContentBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([blockId, fieldKey])
+  @@index([blockId])
+  @@map("content_block_fields")
+}
+
+model ContentBlockItem {
+  id            Int      @id @default(autoincrement())
+  blockId       Int      @map("block_id")
+  collectionKey String   @map("collection_key")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  block  ContentBlock           @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  fields ContentBlockItemField[]
+
+  @@index([blockId])
+  @@map("content_block_items")
+}
+
+model ContentBlockItemField {
+  id           Int                  @id @default(autoincrement())
+  itemId       Int                  @map("item_id")
+  fieldKey     String               @map("field_key")
+  fieldType    ContentItemFieldType @map("field_type")
+  valueText    String?              @map("value_text") @db.Text
+  valueNumber  Decimal?             @map("value_number")
+  valueBoolean Boolean?             @map("value_boolean")
+  label        String
+
+  item ContentBlockItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, fieldKey])
+  @@map("content_block_item_fields")
+}
+
+// ============================================================
+// CMS: Navigation
+// ============================================================
+
+model NavigationMenu {
+  id        Int      @id @default(autoincrement())
+  location  String   @unique
+  label     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items NavigationItem[]
+
+  @@map("navigation_menus")
+}
+
+model NavigationItem {
+  id         Int      @id @default(autoincrement())
+  menuId     Int      @map("menu_id")
+  parentId   Int?     @map("parent_id")
+  title      String
+  url        String
+  icon       String?
+  isExternal Boolean  @default(false) @map("is_external")
+  isVisible  Boolean  @default(true) @map("is_visible")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  menu     NavigationMenu  @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parent   NavigationItem? @relation("NavItemHierarchy", fields: [parentId], references: [id])
+  children NavigationItem[] @relation("NavItemHierarchy")
+
+  @@index([menuId])
+  @@index([parentId])
+  @@map("navigation_items")
+}
+
+// ============================================================
+// CMS: Mortgage Banks
+// ============================================================
+
+model MortgageBank {
+  id        Int      @id @default(autoincrement())
+  name      String
+  rateFrom  Decimal? @map("rate_from") @db.Decimal(5, 2)
+  rateTo    Decimal? @map("rate_to") @db.Decimal(5, 2)
+  logoUrl   String?  @map("logo_url")
+  url       String?
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("mortgage_banks")
+}
+
+// ============================================================
+// Audit
+// ============================================================
+
+model AuditEvent {
+  id         BigInt      @id @default(autoincrement())
+  userId     String?     @map("user_id") @db.Uuid
+  entityType String      @map("entity_type")
+  entityId   Int         @map("entity_id")
+  action     AuditAction
+  oldData    Json?       @map("old_data")
+  newData    Json?       @map("new_data")
+  ipAddress  String?     @map("ip_address")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_events")
+}

@@ -1,0 +1,49 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
+import { RegionsModule } from './modules/regions/regions.module';
+import { DistrictsModule } from './modules/districts/districts.module';
+import { SubwaysModule } from './modules/subways/subways.module';
+import { BuildersModule } from './modules/builders/builders.module';
+import { ReferenceModule } from './modules/reference/reference.module';
+import { BlocksModule } from './modules/blocks/blocks.module';
+import { BuildingsModule } from './modules/buildings/buildings.module';
+import { ListingsModule } from './modules/listings/listings.module';
+import { RequestsModule } from './modules/requests/requests.module';
+import { ContentModule } from './modules/content/content.module';
+import { UsersModule } from './modules/users/users.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { FeedImportModule } from './modules/feed-import/feed-import.module';
+import { StatsModule } from './modules/stats/stats.module';
+import { NewsModule } from './modules/news/news.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
+import { SearchModule } from './modules/search/search.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    HealthModule,
+    AuthModule,
+    RegionsModule,
+    DistrictsModule,
+    SubwaysModule,
+    BuildersModule,
+    ReferenceModule,
+    BlocksModule,
+    BuildingsModule,
+    ListingsModule,
+    RequestsModule,
+    ContentModule,
+    UsersModule,
+    AuditModule,
+    FeedImportModule,
+    StatsModule,
+    NewsModule,
+    FavoritesModule,
+    SearchModule,
+  ],
+})
+export class AppModule {}

@@ -1,0 +1,35 @@
+{
+  "name": "lg",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LiveGrid — платформа агрегации недвижимости",
+  "scripts": {
+    "dev:api": "pnpm --filter @lg/api dev",
+    "dev:web": "pnpm --filter @lg/web dev",
+    "dev:admin": "pnpm --filter @lg/admin dev",
+    "build:api": "pnpm --filter @lg/api build",
+    "build:web": "pnpm --filter @lg/web build",
+    "build:admin": "pnpm --filter @lg/admin build",
+    "db:generate": "pnpm --filter @lg/database generate",
+    "db:migrate": "pnpm --filter @lg/database migrate",
+    "db:seed": "pnpm --filter @lg/database seed",
+    "db:studio": "pnpm --filter @lg/database studio",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "bcrypt",
+      "esbuild",
+      "msgpackr-extract"
+    ]
+  }
+}
