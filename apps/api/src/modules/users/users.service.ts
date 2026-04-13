@@ -15,10 +15,17 @@ const USER_LIST_SELECT = {
   phone: true,
   fullName: true,
   role: true,
+  telegramId: true,
   telegramUsername: true,
   isActive: true,
   createdAt: true,
 } satisfies Prisma.UserSelect;
+
+type UserListRow = Prisma.UserGetPayload<{ select: typeof USER_LIST_SELECT }>;
+type AdminUserView = Omit<UserListRow, 'telegramId'> & {
+  telegramId: string | null;
+  telegramLinked: boolean;
+};
 
 const USER_ROLES: UserRole[] = [
   'admin',
@@ -34,9 +41,30 @@ function parseUserRole(role?: string): UserRole | undefined {
   return undefined;
 }
 
+function parseTelegramId(raw: string): bigint {
+  const value = raw.trim();
+  if (!/^-?\d+$/.test(value)) {
+    throw new BadRequestException('Invalid telegram id');
+  }
+  try {
+    return BigInt(value);
+  } catch {
+    throw new BadRequestException('Invalid telegram id');
+  }
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private toAdminUserView(user: UserListRow): AdminUserView {
+    const { telegramId, ...rest } = user;
+    return {
+      ...rest,
+      telegramId: telegramId === null ? null : telegramId.toString(),
+      telegramLinked: telegramId !== null,
+    };
+  }
 
   async findAll(
     role?: string,
@@ -44,7 +72,7 @@ export class UsersService {
     page = 1,
     perPage = 20,
   ): Promise<{
-    items: Prisma.UserGetPayload<{ select: typeof USER_LIST_SELECT }>[];
+    items: AdminUserView[];
     total: number;
     page: number;
     perPage: number;
@@ -77,7 +105,12 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
-    return { items, total, page: safePage, perPage: safePerPage };
+    return {
+      items: items.map((item) => this.toAdminUserView(item)),
+      total,
+      page: safePage,
+      perPage: safePerPage,
+    };
   }
 
   async findOne(id: string) {
@@ -86,7 +119,7 @@ export class UsersService {
       select: USER_LIST_SELECT,
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+    return this.toAdminUserView(user);
   }
 
   async create(dto: CreateUserDto) {
@@ -97,24 +130,30 @@ export class UsersService {
       if (!parsed) throw new BadRequestException('Invalid role');
       role = parsed;
     }
+    const telegramUsername = dto.telegramUsername?.trim() || null;
+    const telegramId = dto.telegramId?.trim() ? parseTelegramId(dto.telegramId) : null;
 
     try {
-      return await this.prisma.user.create({
+      const created = await this.prisma.user.create({
         data: {
           email: dto.email,
           phone: dto.phone,
           fullName: dto.fullName,
           role,
+          telegramUsername,
+          telegramId,
+          isActive: dto.isActive ?? true,
           passwordHash,
         },
         select: USER_LIST_SELECT,
       });
+      return this.toAdminUserView(created);
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        throw new ConflictException('Email or phone already exists');
+        throw new ConflictException('Email, phone or Telegram already exists');
       }
       throw e;
     }
@@ -128,6 +167,13 @@ export class UsersService {
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.telegramUsername !== undefined) {
+      data.telegramUsername = dto.telegramUsername.trim() || null;
+    }
+    if (dto.telegramId !== undefined) {
+      const v = dto.telegramId.trim();
+      data.telegramId = v === '' ? null : parseTelegramId(v);
+    }
     if (dto.role !== undefined) {
       if (dto.role === '') {
         throw new BadRequestException('Invalid role');
@@ -138,17 +184,18 @@ export class UsersService {
     }
 
     try {
-      return await this.prisma.user.update({
+      const updated = await this.prisma.user.update({
         where: { id },
         data,
         select: USER_LIST_SELECT,
       });
+      return this.toAdminUserView(updated);
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        throw new ConflictException('Email or phone already exists');
+        throw new ConflictException('Email, phone or Telegram already exists');
       }
       throw e;
     }

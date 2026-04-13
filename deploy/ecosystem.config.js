@@ -1,5 +1,6 @@
 /** Совпадает с DEPLOY_ROOT в deploy-full.sh / deploy-from-git.sh */
 const deployRoot = process.env.DEPLOY_ROOT || '/var/www/lg';
+const publicSiteUrl = process.env.PUBLIC_SITE_URL || 'https://lg.livegrid.ru';
 
 module.exports = {
   apps: [
@@ -10,6 +11,7 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       env: {
+        PUBLIC_SITE_URL: publicSiteUrl,
         NODE_ENV: 'production',
         API_PORT: 3000,
         API_PREFIX: '/api/v1',
@@ -20,7 +22,8 @@ module.exports = {
         TRENDAGENT_BASE_URL: 'https://dataout.trendagent.ru',
         TRENDAGENT_DEFAULT_REGION: 'msk',
         TRENDAGENT_REGIONS: 'msk',
-        TELEGRAM_WEBHOOK_URL: 'https://lg.livegrid.ru/api/v1/telegram-bot/webhook',
+        TELEGRAM_WEBHOOK_URL:
+          process.env.TELEGRAM_WEBHOOK_URL || `${publicSiteUrl}/api/v1/telegram-bot/webhook`,
         /** Локальные JSON вместо HTTP (путь к корню data: .../TrendAgent/data) */
         FEED_LOCAL_DIR: '',
         /** true — не регистрировать BullMQ cron (если импорт только shell-cron) */

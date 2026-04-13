@@ -22,6 +22,8 @@ export class TelegramNotifyService implements OnModuleInit {
   private cache: { token: string; at: number } | null = null;
   private static readonly CACHE_MS = 20_000;
   private readonly webhookUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim() ?? '';
+  private readonly publicSiteUrl =
+    (process.env.PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'https://lg.livegrid.ru');
 
   constructor(
     private readonly content: ContentService,
@@ -227,7 +229,7 @@ export class TelegramNotifyService implements OnModuleInit {
         await this.sendMessage(
           token,
           message.chat.id,
-          'Контакты агентства: https://lg.livegrid.ru/contacts',
+          `Контакты агентства: ${this.publicSiteUrl}/contacts`,
           undefined,
           this.quickMenu(),
         );
