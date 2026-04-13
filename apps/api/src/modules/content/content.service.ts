@@ -16,7 +16,7 @@ const homepageDefaultsByKey = new Map(DEFAULT_HOMEPAGE_SITE_SETTINGS.map((r) => 
 const integrationDefaultsByKey = new Map(DEFAULT_INTEGRATION_SITE_SETTINGS.map((r) => [r.key, r]));
 const integrationKeys = new Set(integrationDefaultsByKey.keys());
 const settingDefaultsByKey = new Map([...homepageDefaultsByKey, ...integrationDefaultsByKey]);
-const hiddenSettingsKeys = new Set(['telegram_notify_chat_id']);
+const hiddenSettingsKeys = new Set(['telegram_notify_chat_id', 'tg_news_mtproto_session']);
 
 @Injectable()
 export class ContentService implements OnModuleInit {

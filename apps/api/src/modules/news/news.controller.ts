@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query } 
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Public, Roles } from '../../auth/decorators';
 import { NewsService } from './news.service';
+import { TelegramNewsQrAuthService } from './telegram-news-qr.service';
 
 @ApiTags('News')
 @Controller('news')
@@ -28,7 +29,10 @@ export class NewsController {
 @ApiTags('Admin / News')
 @Controller('admin/news')
 export class NewsAdminController {
-  constructor(private readonly service: NewsService) {}
+  constructor(
+    private readonly service: NewsService,
+    private readonly telegramQr: TelegramNewsQrAuthService,
+  ) {}
 
   @Get('telegram-parser/status')
   @Roles('editor')
@@ -98,7 +102,7 @@ export class NewsAdminController {
   @ApiOperation({
     summary: 'Admin: импорт из Telegram (MTProto)',
     description:
-      'Каналы: из сохранённого списка (включённые), либо только выбранные id (onlyChannelIds), либо одноразово channels[]. Секреты — TG_* в env.',
+      'Каналы: из сохранённого списка (включённые), onlyChannelIds или channels[]. TG_API_ID/TG_API_HASH в .env; сессия: TG_SESSION_STRING в .env или после входа по QR (site_settings).',
   })
   syncTelegram(
     @Body()
@@ -113,6 +117,38 @@ export class NewsAdminController {
       limitPerChannel: body?.limitPerChannel ?? null,
       onlyChannelIds: body?.onlyChannelIds ?? null,
     });
+  }
+
+  @Post('telegram-qr/start')
+  @Roles('editor')
+  @ApiOperation({
+    summary: 'Admin: MTProto — начать вход по QR',
+    description:
+      'Сканируйте QR в приложении Telegram. После успеха string session сохраняется в site_settings (tg_news_mtproto_session). Нужны TG_API_ID и TG_API_HASH в .env.',
+  })
+  telegramQrStart() {
+    return this.telegramQr.startQrLogin();
+  }
+
+  @Get('telegram-qr/:flowId')
+  @Roles('editor')
+  @ApiOperation({ summary: 'Admin: MTProto — опрос статуса входа по QR (loginUrl, фаза, 2FA)' })
+  telegramQrPoll(@Param('flowId') flowId: string) {
+    return this.telegramQr.getQrLoginState(flowId);
+  }
+
+  @Post('telegram-qr/password')
+  @Roles('editor')
+  @ApiOperation({ summary: 'Admin: MTProto — отправить пароль 2FA во время входа по QR' })
+  telegramQrPassword(@Body() body: { flowId: string; password: string }) {
+    return this.telegramQr.submitQrPassword(body.flowId, body.password ?? '');
+  }
+
+  @Post('telegram-qr/cancel')
+  @Roles('editor')
+  @ApiOperation({ summary: 'Admin: MTProto — отменить текущий вход по QR' })
+  telegramQrCancel(@Body() body: { flowId: string }) {
+    return this.telegramQr.cancelQrLogin(body.flowId);
   }
 
   @Get()

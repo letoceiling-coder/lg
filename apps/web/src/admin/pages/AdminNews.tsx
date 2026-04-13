@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Newspaper,
@@ -53,6 +54,14 @@ interface TelegramParserStatus {
   credentials: { apiIdOk: boolean; apiHashOk: boolean; sessionOk: boolean };
   channels: { inDatabaseTotal: number; inDatabaseEnabled: number; envListCount: number };
   hints: string[];
+}
+
+interface TgQrPoll {
+  phase: 'starting' | 'awaiting_scan' | 'awaiting_password' | 'success' | 'error' | 'cancelled';
+  loginUrl?: string;
+  expiresAtMs?: number;
+  passwordHint?: string | null;
+  errorMessage?: string | null;
 }
 
 interface TelegramChannelRow {
@@ -301,6 +310,85 @@ export default function AdminNews() {
     onError: (e: unknown) => toast.error(formatApiError(e)),
   });
 
+  const [tgQrFlowId, setTgQrFlowId] = useState<string | null>(null);
+  const [tgQrPwd, setTgQrPwd] = useState('');
+  const [tgQrDataUrl, setTgQrDataUrl] = useState<string | null>(null);
+
+  const tgQrPollQuery = useQuery({
+    queryKey: ['admin', 'news', 'telegram-qr', tgQrFlowId],
+    queryFn: () => apiGet<TgQrPoll>(`/admin/news/telegram-qr/${tgQrFlowId}`),
+    enabled: !!tgQrFlowId,
+    refetchInterval: (q) => {
+      const p = q.state.data?.phase;
+      if (!p) return 1500;
+      if (['success', 'error', 'cancelled'].includes(p)) return false;
+      return 1500;
+    },
+  });
+  const tgQrPoll = tgQrPollQuery.data;
+
+  useEffect(() => {
+    const url = tgQrPoll?.loginUrl;
+    if (!url) {
+      setTgQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void QRCode.toDataURL(url, { width: 220, margin: 1, errorCorrectionLevel: 'M' }).then((u) => {
+      if (!cancelled) setTgQrDataUrl(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tgQrPoll?.loginUrl]);
+
+  const tgQrHandled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!tgQrFlowId || !tgQrPoll) return;
+    const mark = `${tgQrFlowId}:${tgQrPoll.phase}`;
+    if (!['success', 'error', 'cancelled'].includes(tgQrPoll.phase)) return;
+    if (tgQrHandled.current === mark) return;
+    tgQrHandled.current = mark;
+    if (tgQrPoll.phase === 'success') {
+      toast.success('Telegram MTProto: сессия сохранена. Можно запускать импорт.');
+      void qc.invalidateQueries({ queryKey: ['admin', 'news', 'telegram-parser-status'] });
+    } else if (tgQrPoll.phase === 'error' && tgQrPoll.errorMessage) {
+      toast.error(tgQrPoll.errorMessage);
+    }
+    setTgQrFlowId(null);
+    setTgQrPwd('');
+  }, [tgQrFlowId, tgQrPoll, qc]);
+
+  const tgQrStartMut = useMutation({
+    mutationFn: () => apiPost<{ flowId: string }>('/admin/news/telegram-qr/start'),
+    onSuccess: (d) => {
+      tgQrHandled.current = null;
+      setTgQrFlowId(d.flowId);
+      toast.message('Откройте Telegram на телефоне → Настройки → Устройства → Подключить устройство → Сканировать QR.');
+    },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
+  const tgQrCancelMut = useMutation({
+    mutationFn: (flowId: string) => apiPost('/admin/news/telegram-qr/cancel', { flowId }),
+    onSuccess: () => {
+      setTgQrFlowId(null);
+      setTgQrPwd('');
+      toast.message('Вход по QR отменён');
+    },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
+  const tgQrPwdMut = useMutation({
+    mutationFn: (p: { flowId: string; password: string }) =>
+      apiPost('/admin/news/telegram-qr/password', p),
+    onSuccess: () => {
+      setTgQrPwd('');
+      toast.message('Пароль отправлен…');
+    },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
   const tgChannels = tgChannelsQuery.data ?? [];
   const enabledTgIds = tgChannels.filter((c) => c.isEnabled).map((c) => c.id);
   const allEnabledSelected =
@@ -405,6 +493,94 @@ export default function AdminNews() {
             ))}
           </ul>
         )}
+
+        <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-foreground">Вход по QR (MTProto)</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                Нужны <code className="text-[11px] bg-muted px-1 rounded">TG_API_ID</code> и{' '}
+                <code className="text-[11px] bg-muted px-1 rounded">TG_API_HASH</code> в .env сервера. После сканирования
+                string session сохраняется в базе (приоритет у переменной{' '}
+                <code className="text-[11px] bg-muted px-1 rounded">TG_SESSION_STRING</code> в .env, если задана).
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={
+                  tgQrStartMut.isPending ||
+                  !!tgQrFlowId ||
+                  !tgStatusQuery.data?.credentials.apiIdOk ||
+                  !tgStatusQuery.data?.credentials.apiHashOk
+                }
+                onClick={() => tgQrStartMut.mutate()}
+                className="inline-flex items-center gap-2 text-sm border border-sky-600 text-sky-700 dark:text-sky-300 px-3 py-2 rounded-xl hover:bg-sky-500/10 disabled:opacity-50"
+              >
+                {tgQrStartMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Подключить по QR
+              </button>
+              {tgQrFlowId && (
+                <button
+                  type="button"
+                  disabled={tgQrCancelMut.isPending}
+                  onClick={() => tgQrCancelMut.mutate(tgQrFlowId)}
+                  className="text-sm text-muted-foreground underline px-2 py-2 disabled:opacity-50"
+                >
+                  Отменить
+                </button>
+              )}
+            </div>
+          </div>
+          {tgQrFlowId && (
+            <div className="flex flex-wrap gap-4 items-start">
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>
+                  Статус:{' '}
+                  <span className="font-medium text-foreground">
+                    {tgQrPoll?.phase === 'starting' && 'Подготовка…'}
+                    {tgQrPoll?.phase === 'awaiting_scan' && 'Ждём сканирование'}
+                    {tgQrPoll?.phase === 'awaiting_password' && 'Нужен пароль 2FA'}
+                    {tgQrPoll?.phase === 'success' && 'Готово'}
+                    {tgQrPoll?.phase === 'error' && 'Ошибка'}
+                    {tgQrPoll?.phase === 'cancelled' && 'Отменено'}
+                    {!tgQrPoll && '…'}
+                  </span>
+                </p>
+                {tgQrPoll?.phase === 'awaiting_password' && (
+                  <div className="flex flex-wrap gap-2 items-end pt-2">
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">Пароль 2FA</label>
+                      <input
+                        type="password"
+                        value={tgQrPwd}
+                        onChange={(e) => setTgQrPwd(e.target.value)}
+                        autoComplete="current-password"
+                        className="border rounded-lg px-2 py-1.5 text-sm w-48 bg-background"
+                        placeholder={tgQrPoll.passwordHint ? `Подсказка: ${tgQrPoll.passwordHint}` : 'Пароль'}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={tgQrPwdMut.isPending || !tgQrPwd.trim()}
+                      onClick={() =>
+                        tgQrPwdMut.mutate({ flowId: tgQrFlowId, password: tgQrPwd })
+                      }
+                      className="text-sm bg-sky-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+                    >
+                      {tgQrPwdMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Отправить'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {tgQrDataUrl && tgQrPoll?.phase !== 'awaiting_password' && (
+                <div className="shrink-0">
+                  <img src={tgQrDataUrl} alt="QR для входа в Telegram" className="w-[220px] h-[220px] rounded-lg border bg-white" />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
           <div className="rounded-xl border bg-muted/20 p-3 space-y-1">

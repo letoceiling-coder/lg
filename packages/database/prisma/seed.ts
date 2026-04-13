@@ -145,6 +145,14 @@ async function main() {
       fieldType: 'TEXT' as const,
       sortOrder: 3,
     },
+    {
+      key: 'tg_news_mtproto_session',
+      value: '',
+      groupName: 'integrations',
+      label: 'MTProto: string session (импорт новостей из Telegram; QR в админке → Новости)',
+      fieldType: 'SECRET' as const,
+      sortOrder: 15,
+    },
   ];
 
   for (const s of settings) {

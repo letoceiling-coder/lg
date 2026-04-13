@@ -158,10 +158,20 @@ export class NewsService {
     return { imported, skipped, totalInFeed: items.length, feedUrl: url };
   }
 
+  private async getTgSessionStringForParser(): Promise<string> {
+    const env = (process.env.TG_SESSION_STRING ?? '').trim();
+    if (env) return env;
+    const row = await this.prisma.siteSetting.findUnique({
+      where: { key: 'tg_news_mtproto_session' },
+      select: { value: true },
+    });
+    return (row?.value ?? '').trim();
+  }
+
   async getTelegramParserStatus() {
     const apiIdRaw = (process.env.TG_API_ID ?? '').trim();
     const apiHash = (process.env.TG_API_HASH ?? '').trim();
-    const sessionString = (process.env.TG_SESSION_STRING ?? '').trim();
+    const sessionString = await this.getTgSessionStringForParser();
     const apiId = Number(apiIdRaw);
     const apiIdOk = Number.isInteger(apiId) && apiId > 0;
     const apiHashOk = apiHash.length > 0;
@@ -181,7 +191,9 @@ export class NewsService {
       hints.push('На сервере в .env задайте TG_API_ID и TG_API_HASH (см. https://my.telegram.org).');
     }
     if (!sessionOk) {
-      hints.push('На сервере в .env задайте TG_SESSION_STRING — одноразовая авторизация MTProto для чтения каналов.');
+      hints.push(
+        'Задайте TG_SESSION_STRING в .env сервера или выполните вход по QR в блоке «Новости из Telegram» ниже (сессия сохранится в БД).',
+      );
     }
     if (!hasChannelSource) {
       hints.push('Добавьте хотя бы один канал ниже (или список TG_NEWS_CHANNELS в env как запасной вариант).');
@@ -288,7 +300,7 @@ export class NewsService {
    * Импорт новостей из Telegram-каналов через MTProto.
    * Источник каналов (по приоритету): одноразовый список `channels` в теле → включённые записи в БД
    * (можно сузить `onlyChannelIds`) → переменная окружения TG_NEWS_CHANNELS.
-   * Env: TG_API_ID, TG_API_HASH, TG_SESSION_STRING.
+   * Env: TG_API_ID, TG_API_HASH; сессия: TG_SESSION_STRING в .env или site_settings tg_news_mtproto_session (QR в админке).
    */
   async syncFromTelegramChannels(input?: {
     channels?: string[] | null;
@@ -297,7 +309,7 @@ export class NewsService {
   }) {
     const apiIdRaw = (process.env.TG_API_ID ?? '').trim();
     const apiHash = (process.env.TG_API_HASH ?? '').trim();
-    const sessionString = (process.env.TG_SESSION_STRING ?? '').trim();
+    const sessionString = await this.getTgSessionStringForParser();
 
     const apiId = Number(apiIdRaw);
     if (!Number.isInteger(apiId) || apiId <= 0 || !apiHash) {
@@ -307,7 +319,7 @@ export class NewsService {
     }
     if (!sessionString) {
       throw new BadRequestException(
-        'TG_SESSION_STRING не настроен на сервере. Нужна авторизованная MTProto-сессия для чтения каналов.',
+        'Нет MTProto-сессии: задайте TG_SESSION_STRING в .env или войдите по QR в админке → Новости.',
       );
     }
 

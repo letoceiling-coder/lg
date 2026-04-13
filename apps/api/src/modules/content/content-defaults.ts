@@ -137,6 +137,14 @@ export const DEFAULT_INTEGRATION_SITE_SETTINGS: Array<{
     fieldType: SiteSettingFieldType.TEXT,
     sortOrder: 2,
   },
+  {
+    key: 'tg_news_mtproto_session',
+    value: '',
+    groupName: INTEGRATIONS_SITE_SETTINGS_GROUP,
+    label: 'MTProto: string session (импорт новостей из Telegram; задаётся через QR в разделе Новости)',
+    fieldType: SiteSettingFieldType.SECRET,
+    sortOrder: 15,
+  },
 ];
 
 /**
