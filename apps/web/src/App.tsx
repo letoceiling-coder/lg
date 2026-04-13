@@ -55,6 +55,7 @@ const AdminTokens = lazy(() => import("./admin/pages/AdminTokens"));
 const AdminDocs = lazy(() => import("./admin/pages/AdminDocs"));
 const AdminAudit = lazy(() => import("./admin/pages/AdminAudit"));
 const AdminRequests = lazy(() => import("./admin/pages/AdminRequests"));
+const AdminTelegramNotify = lazy(() => import("./admin/pages/AdminTelegramNotify"));
 const AdminBlocks = lazy(() => import("./admin/pages/AdminBlocks"));
 const AdminBlockEditor = lazy(() => import("./admin/pages/AdminBlockEditor"));
 const AdminBuilders = lazy(() => import("./admin/pages/AdminBuilders"));
@@ -120,6 +121,7 @@ const AppRoutes = () => (
       <Route path="pages" element={<RequireAuth roles={['admin', 'editor']}><AdminPages /></RequireAuth>} />
       <Route path="page-editor/:slug" element={<RequireAuth roles={['admin', 'editor']}><AdminPageEditor /></RequireAuth>} />
       <Route path="requests" element={<AdminRequests />} />
+      <Route path="telegram-notify" element={<RequireAuth roles={['admin']}><AdminTelegramNotify /></RequireAuth>} />
       <Route path="audit" element={<RequireAuth roles={['admin']}><AdminAudit /></RequireAuth>} />
       <Route path="blocks" element={<RequireAuth roles={['admin', 'editor']}><AdminBlocks /></RequireAuth>} />
       <Route path="blocks/:id" element={<RequireAuth roles={['admin', 'editor']}><AdminBlockEditor /></RequireAuth>} />

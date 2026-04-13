@@ -16,6 +16,7 @@ const homepageDefaultsByKey = new Map(DEFAULT_HOMEPAGE_SITE_SETTINGS.map((r) => 
 const integrationDefaultsByKey = new Map(DEFAULT_INTEGRATION_SITE_SETTINGS.map((r) => [r.key, r]));
 const integrationKeys = new Set(integrationDefaultsByKey.keys());
 const settingDefaultsByKey = new Map([...homepageDefaultsByKey, ...integrationDefaultsByKey]);
+const hiddenSettingsKeys = new Set(['telegram_notify_chat_id']);
 
 @Injectable()
 export class ContentService implements OnModuleInit {
@@ -101,6 +102,9 @@ export class ContentService implements OnModuleInit {
 
   private async loadAllSettingsGrouped(): Promise<Record<string, SiteSetting[]>> {
     const rows = await this.prisma.siteSetting.findMany({
+      where: {
+        key: { notIn: [...hiddenSettingsKeys] },
+      },
       orderBy: [{ groupName: 'asc' }, { sortOrder: 'asc' }, { id: 'asc' }],
     });
     const grouped: Record<string, SiteSetting[]> = {};
@@ -143,17 +147,12 @@ export class ContentService implements OnModuleInit {
     return { apiKey: v && v.length > 0 ? v : null };
   }
 
-  async getTelegramNotifyCredentials(): Promise<{ botToken: string; notifyChatId: string }> {
-    const keys = ['telegram_bot_token', 'telegram_notify_chat_id'] as const;
-    const rows = await this.prisma.siteSetting.findMany({
-      where: { key: { in: [...keys] } },
-      select: { key: true, value: true },
+  async getTelegramBotToken(): Promise<string> {
+    const row = await this.prisma.siteSetting.findUnique({
+      where: { key: 'telegram_bot_token' },
+      select: { value: true },
     });
-    const map = Object.fromEntries(rows.map((r) => [r.key, r.value ?? '']));
-    return {
-      botToken: String(map.telegram_bot_token ?? '').trim(),
-      notifyChatId: String(map.telegram_notify_chat_id ?? '').trim(),
-    };
+    return String(row?.value ?? '').trim();
   }
 
   async updateSettings(

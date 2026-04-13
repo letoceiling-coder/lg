@@ -90,6 +90,12 @@ enum RequestType {
   CONTACT
 }
 
+enum TelegramNotifyAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum ParkingType {
   UNDERGROUND
   GROUND
@@ -169,6 +175,8 @@ model User {
   contentBlocks    ContentBlock[]  @relation("UpdatedBlocks")
   assignedRequests   Request[]       @relation("AssignedRequests")
   submittedRequests  Request[]       @relation("SubmittedRequests")
+  reviewedTelegramRequests TelegramNotifyAccessRequest[] @relation("ReviewedTelegramRequests")
+  approvedTelegramRecipients TelegramNotifyRecipient[] @relation("ApprovedTelegramRecipients")
   favorites          Favorite[]
   collections      UserCollection[]
 
@@ -736,6 +744,45 @@ model Request {
 
   @@index([userId])
   @@map("requests")
+}
+
+model TelegramNotifyAccessRequest {
+  id               Int                        @id @default(autoincrement())
+  telegramUserId   BigInt                     @map("telegram_user_id")
+  telegramChatId   BigInt                     @map("telegram_chat_id")
+  telegramUsername String?                    @map("telegram_username")
+  telegramFirstName String?                   @map("telegram_first_name")
+  telegramLastName String?                    @map("telegram_last_name")
+  status           TelegramNotifyAccessStatus @default(PENDING)
+  reviewedBy       String?                    @map("reviewed_by") @db.Uuid
+  reviewedAt       DateTime?                  @map("reviewed_at")
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+
+  reviewer User? @relation("ReviewedTelegramRequests", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([telegramUserId, status])
+  @@map("telegram_notify_access_requests")
+}
+
+model TelegramNotifyRecipient {
+  id               Int       @id @default(autoincrement())
+  telegramUserId   BigInt    @unique @map("telegram_user_id")
+  telegramChatId   BigInt    @map("telegram_chat_id")
+  telegramUsername String?   @map("telegram_username")
+  telegramFirstName String?  @map("telegram_first_name")
+  telegramLastName String?   @map("telegram_last_name")
+  isActive         Boolean   @default(true) @map("is_active")
+  approvedBy       String?   @map("approved_by") @db.Uuid
+  approvedAt       DateTime? @map("approved_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  approver User? @relation("ApprovedTelegramRecipients", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([isActive, createdAt])
+  @@map("telegram_notify_recipients")
 }
 
 // ============================================================

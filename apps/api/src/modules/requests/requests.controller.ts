@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -16,11 +17,12 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequestStatus } from '@prisma/client';
+import { RequestStatus, TelegramNotifyAccessStatus } from '@prisma/client';
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { CurrentUser, OptionalJwtUser, Public, Roles } from '../../auth/decorators';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { RequestsService } from './requests.service';
+import { TelegramNotifyService } from './telegram-notify.service';
 
 export class UpdateRequestDto {
   @ApiProperty({ enum: RequestStatus })
@@ -103,5 +105,72 @@ export class RequestsAdminController {
   ) {
     void operatorId;
     return this.service.updateStatus(id, dto.status, dto.assignedTo);
+  }
+}
+
+@ApiTags('Telegram Bot')
+@Controller('telegram-bot')
+export class TelegramBotController {
+  constructor(private readonly telegramNotify: TelegramNotifyService) {}
+
+  @Public()
+  @Post('webhook')
+  @ApiOperation({ summary: 'Telegram webhook endpoint' })
+  async webhook(@Body() body: unknown) {
+    await this.telegramNotify.handleWebhookUpdate(body);
+    return { ok: true };
+  }
+}
+
+@ApiTags('Admin / Telegram Notify')
+@ApiBearerAuth()
+@Controller('admin/telegram-notify')
+export class TelegramNotifyAdminController {
+  constructor(private readonly telegramNotify: TelegramNotifyService) {}
+
+  @Get('requests')
+  @Roles('admin')
+  @ApiOperation({ summary: 'List / filter telegram access requests' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: TelegramNotifyAccessStatus,
+  })
+  listRequests(@Query('status') status?: TelegramNotifyAccessStatus) {
+    return this.telegramNotify.listAccessRequests(status);
+  }
+
+  @Post('requests/:id/approve')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Approve telegram access request' })
+  approve(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') reviewerId: string,
+  ) {
+    return this.telegramNotify.approveAccessRequest(id, reviewerId);
+  }
+
+  @Post('requests/:id/reject')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Reject telegram access request' })
+  reject(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') reviewerId: string,
+  ) {
+    return this.telegramNotify.rejectAccessRequest(id, reviewerId);
+  }
+
+  @Get('recipients')
+  @Roles('admin')
+  @ApiOperation({ summary: 'List telegram notify recipients' })
+  listRecipients() {
+    return this.telegramNotify.listRecipients();
+  }
+
+  @Delete('recipients/:id')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Deactivate telegram recipient' })
+  deactivateRecipient(@Param('id', ParseIntPipe) id: number) {
+    return this.telegramNotify.deactivateRecipient(id);
   }
 }

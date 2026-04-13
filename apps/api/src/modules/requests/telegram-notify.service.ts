@@ -1,5 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { Request as DbRequest, RequestType } from '@prisma/client';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  RequestType,
+  TelegramNotifyAccessStatus,
+  type Request as DbRequest,
+} from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import { ContentService } from '../content/content.service';
 
 function escapeHtml(s: string): string {
@@ -13,39 +18,49 @@ function escapeHtml(s: string): string {
 @Injectable()
 export class TelegramNotifyService {
   private readonly logger = new Logger(TelegramNotifyService.name);
-  private cache: { token: string; chatId: string; at: number } | null = null;
+  private cache: { token: string; at: number } | null = null;
   private static readonly CACHE_MS = 20_000;
 
-  constructor(private readonly content: ContentService) {}
+  constructor(
+    private readonly content: ContentService,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  private async getCachedCredentials(): Promise<{ token: string; chatId: string }> {
+  private async getCachedBotToken(): Promise<string> {
     const now = Date.now();
     if (this.cache && now - this.cache.at < TelegramNotifyService.CACHE_MS) {
-      return { token: this.cache.token, chatId: this.cache.chatId };
+      return this.cache.token;
     }
-    const { botToken, notifyChatId } = await this.content.getTelegramNotifyCredentials();
-    this.cache = { token: botToken, chatId: notifyChatId, at: now };
-    return { token: botToken, chatId: notifyChatId };
+    const token = await this.content.getTelegramBotToken();
+    this.cache = { token, at: now };
+    return token;
   }
 
-  /** Сброс кэша после смены настроек в админке (опционально). */
   invalidateCache() {
     this.cache = null;
   }
 
   async isConfigured(): Promise<boolean> {
-    const { token, chatId } = await this.getCachedCredentials();
-    return Boolean(token && chatId);
+    const token = await this.getCachedBotToken();
+    if (!token) return false;
+    const recipientsCount = await this.prisma.telegramNotifyRecipient.count({
+      where: { isActive: true },
+    });
+    return recipientsCount > 0;
   }
 
-  /** Отправка уведомления о новой заявке. Возвращает true, если сообщение ушло успешно. */
   async notifyNewRequest(row: DbRequest): Promise<boolean> {
-    const { token, chatId } = await this.getCachedCredentials();
-    if (!token || !chatId) {
+    const token = await this.getCachedBotToken();
+    if (!token) {
       return false;
     }
+    const recipients = await this.prisma.telegramNotifyRecipient.findMany({
+      where: { isActive: true },
+      select: { id: true, telegramChatId: true },
+    });
+    if (recipients.length === 0) return false;
 
-    const typeLabel = this.typeRu(row.type);
+    const typeLabel = this.requestTypeRu(row.type);
     const lines = [
       '<b>Новая заявка LiveGrid</b>',
       '',
@@ -61,15 +76,279 @@ export class TelegramNotifyService {
     ].filter(Boolean) as string[];
 
     const text = lines.join('\n');
+    let sentCount = 0;
+    for (const recipient of recipients) {
+      const ok = await this.sendMessage(token, recipient.telegramChatId, text, 'HTML');
+      if (ok) {
+        sentCount += 1;
+      } else {
+        this.logger.warn(`Telegram send failed for recipient=${recipient.id}`);
+      }
+    }
+    return sentCount > 0;
+  }
+
+  async listAccessRequests(status?: TelegramNotifyAccessStatus) {
+    return this.prisma.telegramNotifyAccessRequest.findMany({
+      where: status ? { status } : {},
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async listRecipients() {
+    return this.prisma.telegramNotifyRecipient.findMany({
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async approveAccessRequest(id: number, reviewerId: string) {
+    const req = await this.prisma.telegramNotifyAccessRequest.findUnique({ where: { id } });
+    if (!req) throw new NotFoundException(`Telegram access request ${id} not found`);
+
+    const now = new Date();
+    const updatedRequest = await this.prisma.telegramNotifyAccessRequest.update({
+      where: { id },
+      data: {
+        status: TelegramNotifyAccessStatus.APPROVED,
+        reviewedBy: reviewerId,
+        reviewedAt: now,
+      },
+    });
+
+    await this.prisma.telegramNotifyRecipient.upsert({
+      where: { telegramUserId: req.telegramUserId },
+      update: {
+        telegramChatId: req.telegramChatId,
+        telegramUsername: req.telegramUsername,
+        telegramFirstName: req.telegramFirstName,
+        telegramLastName: req.telegramLastName,
+        isActive: true,
+        approvedBy: reviewerId,
+        approvedAt: now,
+      },
+      create: {
+        telegramUserId: req.telegramUserId,
+        telegramChatId: req.telegramChatId,
+        telegramUsername: req.telegramUsername,
+        telegramFirstName: req.telegramFirstName,
+        telegramLastName: req.telegramLastName,
+        isActive: true,
+        approvedBy: reviewerId,
+        approvedAt: now,
+      },
+    });
+
+    const token = await this.getCachedBotToken();
+    if (token) {
+      const displayName = [req.telegramFirstName, req.telegramLastName].filter(Boolean).join(' ').trim();
+      const hello = displayName.length > 0 ? `, ${displayName}` : '';
+      await this.sendMessage(
+        token,
+        req.telegramChatId,
+        `Готово${hello}! Доступ к уведомлениям LiveGrid одобрен. Теперь вы будете получать новые заявки.`,
+      );
+    }
+
+    return updatedRequest;
+  }
+
+  async rejectAccessRequest(id: number, reviewerId: string) {
+    const req = await this.prisma.telegramNotifyAccessRequest.findUnique({ where: { id } });
+    if (!req) throw new NotFoundException(`Telegram access request ${id} not found`);
+
+    const updated = await this.prisma.telegramNotifyAccessRequest.update({
+      where: { id },
+      data: {
+        status: TelegramNotifyAccessStatus.REJECTED,
+        reviewedBy: reviewerId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    const token = await this.getCachedBotToken();
+    if (token) {
+      await this.sendMessage(
+        token,
+        req.telegramChatId,
+        'Запрос на доступ к уведомлениям отклонён. Обратитесь к администратору LiveGrid.',
+      );
+    }
+
+    return updated;
+  }
+
+  async deactivateRecipient(id: number) {
+    return this.prisma.telegramNotifyRecipient.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  async handleWebhookUpdate(update: unknown): Promise<void> {
+    const message = this.extractMessage(update);
+    if (!message?.text) return;
+
+    const command = message.text.trim().split(/\s+/)[0]?.toLowerCase();
+    if (!command) return;
+
+    const token = await this.getCachedBotToken();
+    if (!token) return;
+
+    if (command === '/start') {
+      await this.sendMessage(
+        token,
+        message.chat.id,
+        [
+          'Добро пожаловать в LiveGrid Bot.',
+          'Команды:',
+          '/search — поиск по фильтрам (в работе)',
+          '/catalog — каталог ЖК (в работе)',
+          '/favorites — избранное (в работе)',
+          '/contacts — контакты агентства',
+          '/admin — запросить доступ к telegram-уведомлениям по заявкам',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    if (command === '/contacts') {
+      await this.sendMessage(token, message.chat.id, 'Контакты агентства: https://lg.livegrid.ru/contacts');
+      return;
+    }
+
+    if (command === '/search' || command === '/catalog' || command === '/favorites') {
+      await this.sendMessage(
+        token,
+        message.chat.id,
+        'Команда в разработке. Подключим её в следующих итерациях Telegram-бота.',
+      );
+      return;
+    }
+
+    if (command === '/admin') {
+      await this.requestAdminAccess(token, message);
+    }
+  }
+
+  private async requestAdminAccess(
+    token: string,
+    message: {
+      text: string;
+      chat: { id: bigint; type?: string };
+      from?: { id: bigint; username?: string; first_name?: string; last_name?: string };
+    },
+  ) {
+    if (!message.from) return;
+    if (message.chat.type && message.chat.type !== 'private') {
+      await this.sendMessage(token, message.chat.id, 'Команда /admin доступна только в личном чате с ботом.');
+      return;
+    }
+
+    const existingRecipient = await this.prisma.telegramNotifyRecipient.findUnique({
+      where: { telegramUserId: message.from.id },
+      select: { isActive: true },
+    });
+    if (existingRecipient?.isActive) {
+      await this.sendMessage(token, message.chat.id, 'Вы уже одобрены и получаете уведомления.');
+      return;
+    }
+
+    const pending = await this.prisma.telegramNotifyAccessRequest.findFirst({
+      where: {
+        telegramUserId: message.from.id,
+        status: TelegramNotifyAccessStatus.PENDING,
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (pending) {
+      await this.sendMessage(
+        token,
+        message.chat.id,
+        `Заявка уже отправлена и ждёт одобрения (#${pending.id}).`,
+      );
+      return;
+    }
+
+    const created = await this.prisma.telegramNotifyAccessRequest.create({
+      data: {
+        telegramUserId: message.from.id,
+        telegramChatId: message.chat.id,
+        telegramUsername: message.from.username ?? null,
+        telegramFirstName: message.from.first_name ?? null,
+        telegramLastName: message.from.last_name ?? null,
+        status: TelegramNotifyAccessStatus.PENDING,
+      },
+    });
+
+    await this.sendMessage(
+      token,
+      message.chat.id,
+      `Заявка на доступ отправлена (#${created.id}). После одобрения в админке вы начнёте получать уведомления.`,
+    );
+  }
+
+  private extractMessage(update: unknown): {
+    text: string;
+    chat: { id: bigint; type?: string };
+    from?: { id: bigint; username?: string; first_name?: string; last_name?: string };
+  } | null {
+    if (!update || typeof update !== 'object') return null;
+    const raw = update as Record<string, unknown>;
+    const message = raw.message;
+    if (!message || typeof message !== 'object') return null;
+    const msg = message as Record<string, unknown>;
+    if (typeof msg.text !== 'string') return null;
+
+    const chat = msg.chat as Record<string, unknown> | undefined;
+    const chatId = this.toBigInt(chat?.id);
+    if (!chatId) return null;
+
+    const fromRaw = msg.from as Record<string, unknown> | undefined;
+    const fromId = this.toBigInt(fromRaw?.id);
+
+    return {
+      text: msg.text,
+      chat: { id: chatId, type: typeof chat?.type === 'string' ? chat.type : undefined },
+      from: fromId
+        ? {
+            id: fromId,
+            username: typeof fromRaw?.username === 'string' ? fromRaw.username : undefined,
+            first_name: typeof fromRaw?.first_name === 'string' ? fromRaw.first_name : undefined,
+            last_name: typeof fromRaw?.last_name === 'string' ? fromRaw.last_name : undefined,
+          }
+        : undefined,
+    };
+  }
+
+  private toBigInt(value: unknown): bigint | null {
+    if (typeof value === 'bigint') return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return BigInt(Math.trunc(value));
+    if (typeof value === 'string' && value.trim() !== '') {
+      try {
+        return BigInt(value);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private async sendMessage(
+    token: string,
+    chatId: bigint,
+    text: string,
+    parseMode?: 'HTML',
+  ): Promise<boolean> {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: chatId,
+          chat_id: chatId.toString(),
           text,
-          parse_mode: 'HTML',
+          ...(parseMode ? { parse_mode: parseMode } : {}),
           disable_web_page_preview: true,
         }),
       });
@@ -85,7 +364,7 @@ export class TelegramNotifyService {
     }
   }
 
-  private typeRu(t: RequestType): string {
+  private requestTypeRu(t: RequestType): string {
     const map: Record<RequestType, string> = {
       CONSULTATION: 'Консультация',
       MORTGAGE: 'Ипотека',

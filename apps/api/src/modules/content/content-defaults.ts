@@ -121,20 +121,12 @@ export const DEFAULT_INTEGRATION_SITE_SETTINGS: Array<{
     sortOrder: 0,
   },
   {
-    key: 'telegram_notify_chat_id',
-    value: '',
-    groupName: INTEGRATIONS_SITE_SETTINGS_GROUP,
-    label: 'Telegram: ID чата/канала для уведомлений о новых заявках',
-    fieldType: SiteSettingFieldType.TEXT,
-    sortOrder: 1,
-  },
-  {
     key: 'telegram_login_bot_username',
     value: '',
     groupName: INTEGRATIONS_SITE_SETTINGS_GROUP,
     label: 'Telegram Login: username бота без @ (для виджета на сайте)',
     fieldType: SiteSettingFieldType.TEXT,
-    sortOrder: 2,
+    sortOrder: 1,
   },
   {
     key: 'yandex_maps_api_key',
@@ -143,7 +135,7 @@ export const DEFAULT_INTEGRATION_SITE_SETTINGS: Array<{
     label:
       'Yandex Maps: JavaScript API Key (публичный ключ для сайта; в кабинете разработчика ограничьте по HTTP Referrer)',
     fieldType: SiteSettingFieldType.TEXT,
-    sortOrder: 3,
+    sortOrder: 2,
   },
 ];
 
