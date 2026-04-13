@@ -1,5 +1,4 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
-import * as dns from 'node:dns';
 import * as https from 'node:https';
 import {
   RequestType,
@@ -512,7 +511,7 @@ export class TelegramNotifyService implements OnModuleInit {
                 'Content-Length': Buffer.byteLength(payload ?? '').toString(),
               }
             : undefined,
-          lookup: (hostname, _opts, cb) => dns.lookup(hostname, { family: 4 }, cb),
+          family: 4,
         },
         (res) => {
           let chunks = '';
