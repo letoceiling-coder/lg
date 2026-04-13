@@ -1,10 +1,17 @@
 # Запуск из PowerShell: git + полный деплой на сервере.
 #   .\deploy\remote-git-deploy.ps1
-# Переменные окружения (опционально): $env:LG_SSH, $env:DEPLOY_ROOT, $env:DEPLOY_BRANCH
+# Переменные окружения (опционально): $env:LG_SSH, $env:LG_REMOTE_DEPLOY_ROOT, $env:DEPLOY_BRANCH
+# Удалённый корень — только Unix-путь. Локальный Windows $env:DEPLOY_ROOT (например OSPanel) сюда не подставлять.
 
 $ErrorActionPreference = "Stop"
 $ssh = if ($env:LG_SSH) { $env:LG_SSH } else { "root@85.198.64.93" }
-$deployRoot = if ($env:DEPLOY_ROOT) { $env:DEPLOY_ROOT } else { "/var/www/lg" }
+$deployRoot = if ($env:LG_REMOTE_DEPLOY_ROOT) {
+  $env:LG_REMOTE_DEPLOY_ROOT
+} elseif ($env:DEPLOY_ROOT -match '^/') {
+  $env:DEPLOY_ROOT
+} else {
+  "/var/www/lg"
+}
 $branch = if ($env:DEPLOY_BRANCH) { $env:DEPLOY_BRANCH } else { "main" }
 $repo = if ($env:LG_REPO_URL) { $env:LG_REPO_URL } else { "https://github.com/letoceiling-coder/lg.git" }
 
