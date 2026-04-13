@@ -29,6 +29,7 @@ export class TelegramNotifyService implements OnModuleInit {
 
   async onModuleInit() {
     await this.ensureWebhookConfigured();
+    await this.ensureBotCommandsConfigured();
   }
 
   private async getCachedBotToken(): Promise<string> {
@@ -190,48 +191,99 @@ export class TelegramNotifyService implements OnModuleInit {
   }
 
   async handleWebhookUpdate(update: unknown): Promise<void> {
-    const message = this.extractMessage(update);
-    if (!message?.text) return;
+    try {
+      const message = this.extractMessage(update);
+      if (!message?.text) return;
 
-    const command = message.text.trim().split(/\s+/)[0]?.toLowerCase();
-    if (!command) return;
+      const raw = message.text.trim().split(/\s+/)[0]?.toLowerCase();
+      const command = raw?.split('@')[0] ?? '';
+      if (!command) return;
 
-    const token = await this.getCachedBotToken();
-    if (!token) return;
+      const token = await this.getCachedBotToken();
+      if (!token) return;
 
-    if (command === '/start') {
+      if (command === '/start') {
+        await this.sendMessage(
+          token,
+          message.chat.id,
+          [
+            'Добро пожаловать в LiveGrid Bot.',
+            '',
+            'Быстрое меню:',
+            '/search — поиск по фильтрам',
+            '/catalog — список ЖК (по 5)',
+            '/favorites — избранное',
+            '/contacts — контакты агентства',
+            '',
+            'Служебная команда:',
+            '/admin — запросить доступ к уведомлениям по заявкам',
+          ].join('\n'),
+          undefined,
+          this.quickMenu(),
+        );
+        return;
+      }
+
+      if (command === '/contacts') {
+        await this.sendMessage(
+          token,
+          message.chat.id,
+          'Контакты агентства: https://lg.livegrid.ru/contacts',
+          undefined,
+          this.quickMenu(),
+        );
+        return;
+      }
+
+      if (command === '/search') {
+        await this.sendMessage(
+          token,
+          message.chat.id,
+          'Поиск скоро будет доступен: город → тип → цена → результат.',
+          undefined,
+          this.quickMenu(),
+        );
+        return;
+      }
+
+      if (command === '/catalog') {
+        await this.sendMessage(
+          token,
+          message.chat.id,
+          'Каталог (с пагинацией по 5) подключим следующим шагом.',
+          undefined,
+          this.quickMenu(),
+        );
+        return;
+      }
+
+      if (command === '/favorites') {
+        await this.sendMessage(
+          token,
+          message.chat.id,
+          'Избранное будет доступно после привязки Telegram-аккаунта.',
+          undefined,
+          this.quickMenu(),
+        );
+        return;
+      }
+
+      if (command === '/admin') {
+        await this.requestAdminAccess(token, message);
+        return;
+      }
+
       await this.sendMessage(
         token,
         message.chat.id,
-        [
-          'Добро пожаловать в LiveGrid Bot.',
-          'Команды:',
-          '/search — поиск по фильтрам (в работе)',
-          '/catalog — каталог ЖК (в работе)',
-          '/favorites — избранное (в работе)',
-          '/contacts — контакты агентства',
-          '/admin — запросить доступ к telegram-уведомлениям по заявкам',
-        ].join('\n'),
+        'Неизвестная команда. Нажмите /start для меню.',
+        undefined,
+        this.quickMenu(),
       );
-      return;
-    }
-
-    if (command === '/contacts') {
-      await this.sendMessage(token, message.chat.id, 'Контакты агентства: https://lg.livegrid.ru/contacts');
-      return;
-    }
-
-    if (command === '/search' || command === '/catalog' || command === '/favorites') {
-      await this.sendMessage(
-        token,
-        message.chat.id,
-        'Команда в разработке. Подключим её в следующих итерациях Telegram-бота.',
+    } catch (e) {
+      this.logger.warn(
+        `Telegram webhook handle error: ${e instanceof Error ? e.message : String(e)}`,
       );
-      return;
-    }
-
-    if (command === '/admin') {
-      await this.requestAdminAccess(token, message);
     }
   }
 
@@ -344,6 +396,7 @@ export class TelegramNotifyService implements OnModuleInit {
     chatId: bigint,
     text: string,
     parseMode?: 'HTML',
+    replyMarkup?: Record<string, unknown>,
   ): Promise<boolean> {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
     try {
@@ -354,6 +407,7 @@ export class TelegramNotifyService implements OnModuleInit {
           chat_id: chatId.toString(),
           text,
           ...(parseMode ? { parse_mode: parseMode } : {}),
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           disable_web_page_preview: true,
         }),
       });
@@ -404,6 +458,21 @@ export class TelegramNotifyService implements OnModuleInit {
     }
   }
 
+  private async ensureBotCommandsConfigured() {
+    const token = await this.getCachedBotToken();
+    if (!token) return;
+    await this.telegramApi(token, 'setMyCommands', {
+      commands: [
+        { command: 'start', description: 'Главное меню' },
+        { command: 'search', description: 'Поиск по фильтрам' },
+        { command: 'catalog', description: 'Каталог ЖК' },
+        { command: 'favorites', description: 'Избранное' },
+        { command: 'contacts', description: 'Контакты агентства' },
+        { command: 'admin', description: 'Доступ к уведомлениям' },
+      ],
+    });
+  }
+
   private async telegramApi<T>(
     token: string,
     method: string,
@@ -437,5 +506,16 @@ export class TelegramNotifyService implements OnModuleInit {
       CONTACT: 'Контакты',
     };
     return map[t] ?? t;
+  }
+
+  private quickMenu() {
+    return {
+      keyboard: [
+        [{ text: '/search' }, { text: '/catalog' }],
+        [{ text: '/favorites' }, { text: '/contacts' }],
+      ],
+      resize_keyboard: true,
+      is_persistent: true,
+    };
   }
 }
