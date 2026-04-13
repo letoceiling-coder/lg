@@ -130,6 +130,11 @@ export default function AdminUsers() {
     onError: (e) => toast.error(parseErrorMessage(e)),
   });
 
+  const createTelegramLinkMutation = useMutation({
+    mutationFn: (id: string) => apiPost<{ url: string }>(`/admin/users/${id}/telegram-link`),
+    onError: (e) => toast.error(parseErrorMessage(e)),
+  });
+
   const unlinkTelegramMutation = useMutation({
     mutationFn: (id: string) => apiPost(`/admin/users/${id}/telegram-unlink`),
     onSuccess: () => {
@@ -209,6 +214,7 @@ export default function AdminUsers() {
     updateMutation.isPending ||
     resetPasswordMutation.isPending ||
     bindTelegramWidgetMutation.isPending ||
+    createTelegramLinkMutation.isPending ||
     unlinkTelegramMutation.isPending;
 
   return (
@@ -406,6 +412,21 @@ export default function AdminUsers() {
                 /* success toast is handled in mutation */
               }}
             />
+            <button
+              type="button"
+              className="w-full border px-4 py-2 rounded-xl text-sm disabled:opacity-60"
+              disabled={createTelegramLinkMutation.isPending}
+              onClick={async () => {
+                const res = await createTelegramLinkMutation.mutateAsync(tgBindUser.id);
+                window.open(res.url, '_blank', 'noopener,noreferrer');
+                toast.message('Открыта привязка через бота');
+              }}
+            >
+              {createTelegramLinkMutation.isPending ? 'Генерация ссылки…' : 'Привязать через бота (резервный способ)'}
+            </button>
+            <p className="text-xs text-muted-foreground">
+              Если окно Telegram Login зависает на подтверждении, используйте резервную привязку через бота.
+            </p>
             <div className="flex justify-end">
               <button
                 type="button"
