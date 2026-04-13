@@ -13,7 +13,6 @@ export class RegionsService {
         id: true,
         code: true,
         name: true,
-        baseUrl: true,
         publicSiteUrl: true,
         lastImportedAt: true,
       },
@@ -24,7 +23,6 @@ export class RegionsService {
       id: r.id,
       code: (r.code ?? '').toUpperCase(),
       name: r.name,
-      baseUrl: r.baseUrl,
       publicSiteUrl: r.publicSiteUrl,
       lastImportedAt: r.lastImportedAt,
     }));
