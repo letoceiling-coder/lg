@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Loader2, Pencil, Shield, ShieldAlert, ShieldCheck, UserPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ApiError, apiGet, apiPost, apiPut } from '@/lib/api';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
@@ -223,6 +224,17 @@ export default function AdminUsers() {
         </button>
       </div>
 
+      <div className="border rounded-2xl p-4 mb-4 bg-muted/20 space-y-2">
+        <p className="text-sm font-semibold">Привязка Telegram для входа</p>
+        <p className="text-xs text-muted-foreground">
+          Здесь настраивается только вход в аккаунт через Telegram (слияние текущего аккаунта с Telegram).
+          Уведомления о заявках команды настраиваются отдельно.
+        </p>
+        <Link to="/admin/telegram-notify" className="text-xs text-primary hover:underline">
+          Открыть раздел «Telegram уведомления команды»
+        </Link>
+      </div>
+
       {showCreateForm && (
         <form onSubmit={submitCreate} className="border rounded-2xl p-4 mb-4 bg-background space-y-3">
           <p className="font-medium">Новый пользователь</p>
@@ -312,7 +324,8 @@ export default function AdminUsers() {
                   <p className="font-medium text-sm">{u.fullName || '—'}</p>
                   <p className="text-xs text-muted-foreground">{u.email}{u.phone ? ` · ${u.phone}` : ''}</p>
                   <p className="text-xs text-muted-foreground">
-                    Telegram: {u.telegramLinked ? (u.telegramUsername ? `@${u.telegramUsername}` : `ID ${u.telegramId}`) : 'не привязан'}
+                    Telegram для входа:{' '}
+                    {u.telegramLinked ? (u.telegramUsername ? `@${u.telegramUsername}` : `ID ${u.telegramId}`) : 'не привязан'}
                   </p>
                 </div>
                 {!u.isActive && (
@@ -343,11 +356,11 @@ export default function AdminUsers() {
                       className="text-xs px-2.5 py-1 rounded-lg border"
                       onClick={() => unlinkTelegramMutation.mutate(u.id)}
                     >
-                      Отвязать TG
+                      Отвязать TG вход
                     </button>
                   ) : (
                     <span className="text-[11px] px-2 py-1 rounded-lg bg-muted text-muted-foreground">
-                      TG только для себя
+                      TG вход только для себя
                     </span>
                   )
                 ) : (
@@ -357,11 +370,11 @@ export default function AdminUsers() {
                       className="text-xs px-2.5 py-1 rounded-lg border"
                       onClick={() => setTgBindUser(u)}
                     >
-                      Привязать TG
+                      Привязать TG вход
                     </button>
                   ) : (
                     <span className="text-[11px] px-2 py-1 rounded-lg bg-muted text-muted-foreground">
-                      TG только для себя
+                      TG вход только для себя
                     </span>
                   )
                 )}
@@ -379,7 +392,7 @@ export default function AdminUsers() {
       {tgBindUser && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-background rounded-2xl border p-4 space-y-3">
-            <h3 className="text-base font-semibold">Привязка Telegram</h3>
+            <h3 className="text-base font-semibold">Привязка Telegram для входа</h3>
             <p className="text-sm text-muted-foreground">
               Пользователь: {tgBindUser.fullName || tgBindUser.email || tgBindUser.id}
             </p>

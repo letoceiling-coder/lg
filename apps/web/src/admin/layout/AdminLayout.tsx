@@ -12,7 +12,7 @@ const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Дашборд', end: true },
   { to: '/admin/pages', icon: FileText, label: 'Страницы', roles: ['admin', 'editor'] },
   { to: '/admin/requests', icon: ClipboardList, label: 'Заявки' },
-  { to: '/admin/telegram-notify', icon: BellRing, label: 'Telegram уведомления', roles: ['admin'] },
+  { to: '/admin/telegram-notify', icon: BellRing, label: 'Telegram уведомления команды', roles: ['admin'] },
   { to: '/admin/audit', icon: History, label: 'Журнал действий', roles: ['admin'] },
   { to: '/admin/blocks', icon: Building2, label: 'ЖК', roles: ['admin', 'editor'] },
   { to: '/admin/builders', icon: HardHat, label: 'Застройщики', roles: ['admin', 'editor'] },

@@ -93,11 +93,12 @@ export default function AdminTelegramNotify() {
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <MessageCircle className="w-7 h-7 text-primary" />
-          Telegram уведомления
+          Telegram уведомления команды
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Пользователь пишет боту команду <code>/admin</code>, заявка появляется здесь, после одобрения пользователь
-          добавляется в получатели уведомлений по заявкам.
+          добавляется в получатели уведомлений по заявкам. Это отдельный процесс и не влияет на привязку Telegram
+          для входа в аккаунт.
         </p>
       </div>
 
