@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ContentService } from '../content/content.service';
+import { UsersService } from '../users/users.service';
 
 function escapeHtml(s: string): string {
   return s
@@ -28,6 +29,7 @@ export class TelegramNotifyService implements OnModuleInit {
   constructor(
     private readonly content: ContentService,
     private readonly prisma: PrismaService,
+    private readonly users: UsersService,
   ) {}
 
   async onModuleInit() {
@@ -198,8 +200,10 @@ export class TelegramNotifyService implements OnModuleInit {
       const message = this.extractMessage(update);
       if (!message?.text) return;
 
-      const raw = message.text.trim().split(/\s+/)[0]?.toLowerCase();
+      const parts = message.text.trim().split(/\s+/);
+      const raw = parts[0]?.toLowerCase();
       const command = raw?.split('@')[0] ?? '';
+      const arg = parts[1] ?? '';
       if (!command) return;
       this.logger.log(`Telegram command received: ${command}`);
 
@@ -207,6 +211,43 @@ export class TelegramNotifyService implements OnModuleInit {
       if (!token) return;
 
       if (command === '/start') {
+        if (arg.startsWith('tg_link_') && message.from) {
+          const tokenArg = arg.slice('tg_link_'.length);
+          try {
+            const linked = await this.users.linkTelegramByToken(tokenArg, {
+              id: message.from.id,
+              username: message.from.username ?? null,
+            });
+            if (linked.ok) {
+              await this.sendMessage(
+                token,
+                message.chat.id,
+                `Telegram успешно привязан к пользователю ${linked.fullName || linked.userId}.`,
+                undefined,
+                this.quickMenu(),
+              );
+            } else {
+              await this.sendMessage(
+                token,
+                message.chat.id,
+                'Ссылка привязки недействительна или устарела. Запросите новую в админке.',
+                undefined,
+                this.quickMenu(),
+              );
+            }
+          } catch (e) {
+            await this.sendMessage(
+              token,
+              message.chat.id,
+              e instanceof Error
+                ? e.message
+                : 'Не удалось привязать Telegram. Обратитесь к администратору.',
+              undefined,
+              this.quickMenu(),
+            );
+          }
+          return;
+        }
         await this.sendMessage(
           token,
           message.chat.id,

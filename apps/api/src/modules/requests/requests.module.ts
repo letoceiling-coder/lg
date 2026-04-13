@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ContentModule } from '../content/content.module';
+import { UsersModule } from '../users/users.module';
 import {
   RequestsAdminController,
   RequestsController,
@@ -10,7 +11,7 @@ import { RequestsService } from './requests.service';
 import { TelegramNotifyService } from './telegram-notify.service';
 
 @Module({
-  imports: [ContentModule],
+  imports: [ContentModule, UsersModule],
   controllers: [
     RequestsController,
     RequestsAdminController,

@@ -15,8 +15,9 @@ type Props = {
   className?: string;
   /** Доп. класс для обёртки виджета (Telegram вставляет iframe/кнопку внутрь). */
   widgetWrapClassName?: string;
-  /** `login` — POST /auth/telegram; `link` — привязка к текущему аккаунту (JWT). */
-  mode?: 'login' | 'link';
+  /** `login` — POST /auth/telegram; `link` — привязка к текущему аккаунту (JWT); `custom` — внешний обработчик. */
+  mode?: 'login' | 'link' | 'custom';
+  onAuthData?: (user: Record<string, unknown>) => Promise<void> | void;
   onSuccess?: () => void;
   onError?: (message: string) => void;
 };
@@ -25,14 +26,17 @@ export function TelegramLoginButton({
   className,
   widgetWrapClassName,
   mode = 'login',
+  onAuthData,
   onSuccess,
   onError,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSuccessRef = useRef(onSuccess);
   const onErrorRef = useRef(onError);
+  const onAuthDataRef = useRef(onAuthData);
   onSuccessRef.current = onSuccess;
   onErrorRef.current = onError;
+  onAuthDataRef.current = onAuthData;
   const { loginWithTelegram, linkTelegram } = useAuth();
 
   const { data: cfg, isLoading } = useQuery({
@@ -49,7 +53,9 @@ export function TelegramLoginButton({
     el.innerHTML = '';
     window.onTelegramAuth = async (user: Record<string, unknown>) => {
       try {
-        if (mode === 'link') {
+        if (mode === 'custom') {
+          await onAuthDataRef.current?.(user);
+        } else if (mode === 'link') {
           await linkTelegram(user);
         } else {
           await loginWithTelegram(user);

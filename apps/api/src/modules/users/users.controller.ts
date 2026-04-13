@@ -63,4 +63,28 @@ export class UsersController {
   ) {
     return this.usersService.resetPassword(id, dto.password);
   }
+
+  @Post(':id/telegram-link')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Admin: create Telegram link URL for user' })
+  createTelegramLink(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.createTelegramLink(id);
+  }
+
+  @Post(':id/telegram-unlink')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Admin: unlink Telegram from user' })
+  unlinkTelegram(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.unlinkTelegram(id);
+  }
+
+  @Post(':id/telegram-bind-widget')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Admin: bind Telegram from Telegram Login Widget payload' })
+  bindTelegramWidget(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.usersService.bindTelegramFromWidget(id, body);
+  }
 }

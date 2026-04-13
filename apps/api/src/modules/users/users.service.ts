@@ -3,9 +3,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Prisma, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { verifyTelegramLoginWidget } from '../../auth/telegram-login.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
 
@@ -25,6 +29,11 @@ type UserListRow = Prisma.UserGetPayload<{ select: typeof USER_LIST_SELECT }>;
 type AdminUserView = Omit<UserListRow, 'telegramId'> & {
   telegramId: string | null;
   telegramLinked: boolean;
+};
+
+type TelegramLinkPayload = {
+  uid: string;
+  exp: number;
 };
 
 const USER_ROLES: UserRole[] = [
@@ -53,9 +62,45 @@ function parseTelegramId(raw: string): bigint {
   }
 }
 
+function signTelegramLink(data: string, secret: string): string {
+  return createHmac('sha256', secret).update(data).digest('base64url');
+}
+
+function createTelegramLinkToken(userId: string, secret: string): string {
+  const payload: TelegramLinkPayload = {
+    uid: userId,
+    exp: Math.floor(Date.now() / 1000) + 60 * 30,
+  };
+  const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const sig = signTelegramLink(body, secret);
+  return `${body}.${sig}`;
+}
+
+function verifyTelegramLinkToken(token: string, secret: string): TelegramLinkPayload | null {
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const expected = signTelegramLink(body, secret);
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as TelegramLinkPayload;
+    if (!payload?.uid || typeof payload.uid !== 'string') return null;
+    if (!payload?.exp || typeof payload.exp !== 'number') return null;
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private telegramLinkSecret(): string {
+    return process.env.JWT_ACCESS_SECRET || 'livegrid-telegram-link';
+  }
 
   private toAdminUserView(user: UserListRow): AdminUserView {
     const { telegramId, ...rest } = user;
@@ -209,5 +254,130 @@ export class UsersService {
       data: { passwordHash },
     });
     return { success: true };
+  }
+
+  async createTelegramLink(id: string) {
+    await this.findOne(id);
+    const [loginUsername, legacyUsername] = await Promise.all([
+      this.prisma.siteSetting.findUnique({
+        where: { key: 'telegram_login_bot_username' },
+        select: { value: true },
+      }),
+      this.prisma.siteSetting.findUnique({
+        where: { key: 'telegram_bot_username' },
+        select: { value: true },
+      }),
+    ]);
+    const botUsername = String(loginUsername?.value ?? legacyUsername?.value ?? '')
+      .trim()
+      .replace(/^@+/, '');
+    if (!botUsername) {
+      throw new BadRequestException('Telegram bot username is not configured');
+    }
+    const token = createTelegramLinkToken(id, this.telegramLinkSecret());
+    return {
+      botUsername,
+      url: `https://t.me/${botUsername}?start=tg_link_${token}`,
+    };
+  }
+
+  async unlinkTelegram(id: string) {
+    await this.findOne(id);
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { telegramId: null, telegramUsername: null },
+      select: USER_LIST_SELECT,
+    });
+    return this.toAdminUserView(updated);
+  }
+
+  async linkTelegramByToken(
+    token: string,
+    telegram: { id: bigint; username?: string | null },
+  ): Promise<{ ok: true; userId: string; fullName: string | null } | { ok: false }> {
+    const payload = verifyTelegramLinkToken(token, this.telegramLinkSecret());
+    if (!payload) return { ok: false };
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.uid },
+      select: { id: true, fullName: true },
+    });
+    if (!user) return { ok: false };
+    try {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          telegramId: telegram.id,
+          telegramUsername: telegram.username?.trim() || null,
+        },
+      });
+      return { ok: true, userId: user.id, fullName: user.fullName };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Этот Telegram уже привязан к другому пользователю');
+      }
+      throw e;
+    }
+  }
+
+  async bindTelegramFromWidget(id: string, body: Record<string, unknown>) {
+    const { tgId, username } = await this.parseAndVerifyTelegramWidget(body);
+    await this.findOne(id);
+    const existing = await this.prisma.user.findUnique({
+      where: { telegramId: tgId },
+      select: { id: true },
+    });
+    if (existing && existing.id !== id) {
+      throw new ConflictException('Этот Telegram уже привязан к другому пользователю');
+    }
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { telegramId: tgId, telegramUsername: username },
+      select: USER_LIST_SELECT,
+    });
+    return this.toAdminUserView(updated);
+  }
+
+  private async parseAndVerifyTelegramWidget(body: Record<string, unknown>): Promise<{
+    tgId: bigint;
+    username: string | null;
+  }> {
+    const strMap: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body)) {
+      if (v === undefined || v === null) continue;
+      strMap[k] = typeof v === 'string' ? v : String(v);
+    }
+    if (!strMap.id || !strMap.auth_date || !strMap.hash) {
+      throw new BadRequestException('Нужны поля id, auth_date и hash');
+    }
+
+    const botToken = await this.getSiteSettingValue('telegram_bot_token');
+    if (!botToken) {
+      throw new ServiceUnavailableException('Токен Telegram бота не настроен');
+    }
+    if (!verifyTelegramLoginWidget(strMap, botToken)) {
+      throw new UnauthorizedException('Неверная подпись Telegram');
+    }
+
+    const authTs = parseInt(strMap.auth_date, 10);
+    if (!Number.isFinite(authTs) || Math.abs(Date.now() / 1000 - authTs) > 86400) {
+      throw new UnauthorizedException('Устаревшие данные авторизации');
+    }
+
+    let tgId: bigint;
+    try {
+      tgId = BigInt(strMap.id);
+    } catch {
+      throw new BadRequestException('Некорректный id');
+    }
+    return { tgId, username: strMap.username?.trim() || null };
+  }
+
+  private async getSiteSettingValue(key: string): Promise<string | null> {
+    const row = await this.prisma.siteSetting.findUnique({
+      where: { key },
+      select: { value: true },
+    });
+    const v = row?.value?.trim();
+    return v && v.length > 0 ? v : null;
   }
 }

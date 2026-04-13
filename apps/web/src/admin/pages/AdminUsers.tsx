@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Loader2, Pencil, Shield, ShieldAlert, ShieldCheck, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, apiGet, apiPost, apiPut } from '@/lib/api';
+import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 
 interface ApiUser {
   id: string;
@@ -36,8 +37,6 @@ type UserForm = {
   email: string;
   phone: string;
   role: UserRole;
-  telegramUsername: string;
-  telegramId: string;
   isActive: boolean;
   password: string;
 };
@@ -47,8 +46,6 @@ const EMPTY_FORM: UserForm = {
   email: '',
   phone: '',
   role: 'client',
-  telegramUsername: '',
-  telegramId: '',
   isActive: true,
   password: '',
 };
@@ -76,6 +73,7 @@ export default function AdminUsers() {
   const [createForm, setCreateForm] = useState<UserForm>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<UserForm>(EMPTY_FORM);
+  const [tgBindUser, setTgBindUser] = useState<ApiUser | null>(null);
 
   const { data: users, isLoading, error } = useQuery({
     queryKey: ['admin', 'users'],
@@ -118,6 +116,26 @@ export default function AdminUsers() {
     onError: (e) => toast.error(parseErrorMessage(e)),
   });
 
+  const bindTelegramWidgetMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
+      apiPost(`/admin/users/${id}/telegram-bind-widget`, payload),
+    onSuccess: () => {
+      toast.success('Telegram привязан');
+      setTgBindUser(null);
+      qc.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+    onError: (e) => toast.error(parseErrorMessage(e)),
+  });
+
+  const unlinkTelegramMutation = useMutation({
+    mutationFn: (id: string) => apiPost(`/admin/users/${id}/telegram-unlink`),
+    onSuccess: () => {
+      toast.success('Telegram отвязан');
+      qc.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+    onError: (e) => toast.error(parseErrorMessage(e)),
+  });
+
   const setCreateField = <K extends keyof UserForm>(key: K, value: UserForm[K]) => {
     setCreateForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -133,8 +151,6 @@ export default function AdminUsers() {
       email: user.email ?? '',
       phone: user.phone ?? '',
       role: (ROLE_OPTIONS.includes(user.role as UserRole) ? user.role : 'client') as UserRole,
-      telegramUsername: user.telegramUsername ?? '',
-      telegramId: user.telegramId ?? '',
       isActive: user.isActive,
       password: '',
     });
@@ -156,8 +172,6 @@ export default function AdminUsers() {
       phone: createForm.phone.trim() || undefined,
       role: createForm.role,
       password: createForm.password,
-      telegramUsername: createForm.telegramUsername.trim() || undefined,
-      telegramId: createForm.telegramId.trim() || undefined,
       isActive: createForm.isActive,
     });
   };
@@ -172,8 +186,6 @@ export default function AdminUsers() {
         email: editForm.email.trim() || undefined,
         phone: editForm.phone.trim() || undefined,
         role: editForm.role,
-        telegramUsername: editForm.telegramUsername,
-        telegramId: editForm.telegramId,
         isActive: editForm.isActive,
       },
     });
@@ -190,7 +202,11 @@ export default function AdminUsers() {
   };
 
   const isBusy =
-    createMutation.isPending || updateMutation.isPending || resetPasswordMutation.isPending;
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    resetPasswordMutation.isPending ||
+    bindTelegramWidgetMutation.isPending ||
+    unlinkTelegramMutation.isPending;
 
   return (
     <div className="p-6 max-w-4xl">
@@ -219,10 +235,6 @@ export default function AdminUsers() {
               value={createForm.role} onChange={(e) => setCreateField('role', e.target.value as UserRole)}>
               {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
-            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Telegram username (без @)"
-              value={createForm.telegramUsername} onChange={(e) => setCreateField('telegramUsername', e.target.value.replace(/^@+/, ''))} />
-            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Telegram ID (число)"
-              value={createForm.telegramId} onChange={(e) => setCreateField('telegramId', e.target.value)} />
             <input className="border rounded-xl px-3 py-2 text-sm md:col-span-2" placeholder="Пароль (мин. 6)"
               type="password" value={createForm.password} onChange={(e) => setCreateField('password', e.target.value)} />
           </div>
@@ -254,10 +266,6 @@ export default function AdminUsers() {
               value={editForm.role} onChange={(e) => setEditField('role', e.target.value as UserRole)}>
               {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
-            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Telegram username (без @)"
-              value={editForm.telegramUsername} onChange={(e) => setEditField('telegramUsername', e.target.value.replace(/^@+/, ''))} />
-            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Telegram ID (пусто = отвязать)"
-              value={editForm.telegramId} onChange={(e) => setEditField('telegramId', e.target.value)} />
           </div>
           <label className="text-sm inline-flex items-center gap-2">
             <input type="checkbox" checked={editForm.isActive}
@@ -296,7 +304,7 @@ export default function AdminUsers() {
             return (
               <div key={u.id} className="flex items-center gap-4 p-4">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                  {(u.fullName || u.email).charAt(0).toUpperCase()}
+                  {(u.fullName || u.email || '?').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm">{u.fullName || '—'}</p>
@@ -326,6 +334,23 @@ export default function AdminUsers() {
                 >
                   Пароль
                 </button>
+                {u.telegramLinked ? (
+                  <button
+                    type="button"
+                    className="text-xs px-2.5 py-1 rounded-lg border"
+                    onClick={() => unlinkTelegramMutation.mutate(u.id)}
+                  >
+                    Отвязать TG
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-xs px-2.5 py-1 rounded-lg border"
+                    onClick={() => setTgBindUser(u)}
+                  >
+                    Привязать TG
+                  </button>
+                )}
               </div>
             );
           })}
@@ -334,6 +359,36 @@ export default function AdminUsers() {
               Нет пользователей
             </div>
           )}
+        </div>
+      )}
+
+      {tgBindUser && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-background rounded-2xl border p-4 space-y-3">
+            <h3 className="text-base font-semibold">Привязка Telegram</h3>
+            <p className="text-sm text-muted-foreground">
+              Пользователь: {tgBindUser.fullName || tgBindUser.email || tgBindUser.id}
+            </p>
+            <TelegramLoginButton
+              mode="custom"
+              onAuthData={async (user) => {
+                await bindTelegramWidgetMutation.mutateAsync({ id: tgBindUser.id, payload: user });
+              }}
+              onError={(msg) => toast.error(msg)}
+              onSuccess={() => {
+                /* success toast is handled in mutation */
+              }}
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="border px-4 py-2 rounded-xl text-sm"
+                onClick={() => setTgBindUser(null)}
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
