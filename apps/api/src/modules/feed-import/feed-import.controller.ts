@@ -49,6 +49,16 @@ export class FeedImportController {
     return this.service.feedVsDbDiagnostics(String(region || 'msk').toLowerCase());
   }
 
+  @Get('probe')
+  @Roles('admin', 'editor')
+  @ApiOperation({
+    summary: 'Быстрая проверка доступности фида по региону (about.json + обязательные файлы)',
+  })
+  @ApiQuery({ name: 'region', required: false, example: 'msk' })
+  probe(@Query('region') region?: string) {
+    return this.service.probeRegionFeed(String(region || 'msk').toLowerCase());
+  }
+
   @Get('history')
   @Roles('editor')
   @ApiOperation({ summary: 'Get import history' })
@@ -59,5 +69,13 @@ export class FeedImportController {
     @Query('per_page') perPage?: number,
   ) {
     return this.service.getHistory(undefined, page ? +page : 1, perPage ? +perPage : 20);
+  }
+
+  @Post('refresh-cache')
+  @Roles('admin')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Refresh materialized cache for catalog/search' })
+  refreshCache() {
+    return this.service.refreshCatalogSearchCache();
   }
 }

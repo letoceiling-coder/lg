@@ -13,6 +13,16 @@ type FeedRegion = {
   lastImportedAt: string | null;
 };
 
+type FeedProbeResult = {
+  region: string;
+  ok: boolean;
+  exportedAt: string | null;
+  filesTotal: number;
+  missingRequired: string[];
+  blocksCount: number | null;
+  warnings: string[];
+};
+
 export default function AdminRegions() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -29,6 +39,8 @@ export default function AdminRegions() {
   const [newName, setNewName] = useState('');
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [newEnabled, setNewEnabled] = useState(true);
+  const [probeByRegion, setProbeByRegion] = useState<Record<number, FeedProbeResult | null>>({});
+  const [probingRegionId, setProbingRegionId] = useState<number | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -250,18 +262,39 @@ export default function AdminRegions() {
                     />
                   </td>
                   <td className="p-3 text-right">
-                    <button
-                      type="button"
-                      title="Удалить (только если нет связанных данных)"
-                      disabled={!canManage || deleteMutation.isPending}
-                      onClick={() => {
-                        if (!confirm(`Удалить регион «${d.name}» (${d.code})?`)) return;
-                        deleteMutation.mutate(r.id);
-                      }}
-                      className="p-2 rounded-lg hover:bg-destructive/10 text-destructive disabled:opacity-40"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        title="Проверить доступность фида"
+                        disabled={probingRegionId === r.id}
+                        onClick={async () => {
+                          setProbingRegionId(r.id);
+                          try {
+                            const probe = await apiGet<FeedProbeResult>(
+                              `/admin/feed-import/probe?region=${encodeURIComponent(d.code.toLowerCase())}`,
+                            );
+                            setProbeByRegion((prev) => ({ ...prev, [r.id]: probe }));
+                          } finally {
+                            setProbingRegionId(null);
+                          }
+                        }}
+                        className="px-2 py-1.5 text-xs rounded-lg border hover:bg-muted disabled:opacity-50"
+                      >
+                        {probingRegionId === r.id ? 'Проверка…' : 'Проверить'}
+                      </button>
+                      <button
+                        type="button"
+                        title="Удалить (только если нет связанных данных)"
+                        disabled={!canManage || deleteMutation.isPending}
+                        onClick={() => {
+                          if (!confirm(`Удалить регион «${d.name}» (${d.code})?`)) return;
+                          deleteMutation.mutate(r.id);
+                        }}
+                        className="p-2 rounded-lg hover:bg-destructive/10 text-destructive disabled:opacity-40"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -269,6 +302,31 @@ export default function AdminRegions() {
           </tbody>
         </table>
       </div>
+
+      {Object.entries(probeByRegion).length > 0 && (
+        <div className="mt-4 space-y-2">
+          {Object.entries(probeByRegion).map(([id, probe]) => {
+            if (!probe) return null;
+            const region = (data ?? []).find((r) => r.id === Number(id));
+            return (
+              <div
+                key={id}
+                className={`border rounded-xl p-3 text-sm ${
+                  probe.ok ? 'bg-emerald-50/60 border-emerald-200' : 'bg-amber-50/60 border-amber-200'
+                }`}
+              >
+                <div className="font-medium">
+                  {region?.name ?? probe.region}: {probe.ok ? 'фид доступен' : 'есть проблемы'}
+                </div>
+                <div className="text-xs mt-1 text-muted-foreground">
+                  Файлов: {probe.filesTotal}; blocks.json: {probe.blocksCount ?? '—'}; missing:{' '}
+                  {probe.missingRequired.length ? probe.missingRequired.join(', ') : 'нет'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

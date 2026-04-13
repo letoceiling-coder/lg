@@ -300,6 +300,14 @@ export class FeedImportService implements OnModuleInit {
         data: { lastImportedAt: new Date() },
       });
 
+      try {
+        await this.refreshCatalogSearchCache();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push(`catalog_mv_refresh: ${msg}`);
+        this.logger.warn(`catalog_apartment_active_mv refresh failed: ${msg}`);
+      }
+
       this.setProgress('Completed', JSON.stringify(stats), 100);
       this.logger.log(`Import batch ${batchId} completed: ${JSON.stringify(stats)}`);
     } catch (err: unknown) {
@@ -502,6 +510,67 @@ export class FeedImportService implements OnModuleInit {
     };
   }
 
+  /**
+   * Лёгкая проверка доступности фида по региону:
+   * - доступен ли about.json
+   * - присутствуют ли обязательные файлы в about
+   * - удалось ли прочитать blocks.json и сколько в нём записей
+   */
+  async probeRegionFeed(regionCodeRaw: string) {
+    const regionCode = this.normalizeRegionCode(regionCodeRaw);
+    const requiredFiles = ['blocks', 'buildings', 'apartments', 'regions', 'subways', 'builders'] as const;
+    const warnings: string[] = [];
+
+    try {
+      const about = await this.fetcher.fetchAbout(regionCode);
+      const fileMap = new Map(about.map((e) => [e.name, e.url]));
+      const availableFiles = Array.from(fileMap.keys()).sort();
+      const missingRequired = requiredFiles.filter((name) => !fileMap.has(name));
+
+      let blocksCount: number | null = null;
+      let blocksReadError: string | null = null;
+      const blocksUrl = fileMap.get('blocks');
+      if (blocksUrl) {
+        try {
+          const blocksData = await this.fetcher.fetchFeedFile<unknown[]>(blocksUrl);
+          blocksCount = Array.isArray(blocksData) ? blocksData.length : null;
+        } catch (e: unknown) {
+          blocksReadError = e instanceof Error ? e.message : String(e);
+          warnings.push(`Не удалось прочитать blocks.json: ${blocksReadError}`);
+        }
+      }
+
+      if (missingRequired.length) {
+        warnings.push(`В about.json отсутствуют обязательные файлы: ${missingRequired.join(', ')}`);
+      }
+
+      return {
+        region: regionCode,
+        ok: missingRequired.length === 0 && !blocksReadError,
+        exportedAt: about[0]?.exported_at ?? null,
+        filesTotal: about.length,
+        availableFiles,
+        missingRequired,
+        blocksCount,
+        blocksReadError,
+        warnings,
+      };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        region: regionCode,
+        ok: false,
+        exportedAt: null,
+        filesTotal: 0,
+        availableFiles: [],
+        missingRequired: requiredFiles,
+        blocksCount: null,
+        blocksReadError: msg,
+        warnings: [`about.json недоступен: ${msg}`],
+      };
+    }
+  }
+
   async getHistory(regionId?: number, page = 1, perPage = 20) {
     const where = regionId ? { regionId } : {};
     const [data, total] = await Promise.all([
@@ -530,6 +599,13 @@ export class FeedImportService implements OnModuleInit {
 
   private setProgress(step: string, detail?: string, percent = 0) {
     this.currentProgress = { step, detail, percent };
+  }
+
+  async refreshCatalogSearchCache() {
+    await this.prisma.$executeRawUnsafe(
+      'REFRESH MATERIALIZED VIEW catalog_apartment_active_mv',
+    );
+    return { refreshed: true, view: 'catalog_apartment_active_mv' as const };
   }
 
   private normalizeRegionCode(regionCode: string): string {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   BlockStatus,
   DataSource,
@@ -13,6 +13,9 @@ import { catalogBlockWhereToSql } from './catalog-block-where-sql';
 
 @Injectable()
 export class BlocksService {
+  private readonly logger = new Logger(BlocksService.name);
+  private catalogMvAvailable: boolean | null = null;
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -158,6 +161,30 @@ export class BlocksService {
     };
     if (roomIds.length) {
       listingWhere.apartment = { roomTypeId: { in: roomIds } };
+    }
+
+    const whereSql = catalogBlockWhereToSql(where);
+    if (whereSql != null && (await this.isCatalogMvAvailable())) {
+      try {
+        const roomFilterSql =
+          roomIds.length > 0 ? Prisma.sql` AND mv.room_type_id IN (${Prisma.join(roomIds)})` : Prisma.empty;
+        const rows = await this.prisma.$queryRaw<{ apartments: bigint; blocks: bigint }[]>`
+          SELECT
+            COUNT(*)::bigint AS apartments,
+            COUNT(DISTINCT mv.block_id)::bigint AS blocks
+          FROM catalog_apartment_active_mv mv
+          INNER JOIN blocks b ON b.id = mv.block_id
+          WHERE ${whereSql}
+          ${roomFilterSql}
+        `;
+        const row = rows[0];
+        return {
+          blocks: Number(row?.blocks ?? 0n),
+          apartments: Number(row?.apartments ?? 0n),
+        };
+      } catch (e: unknown) {
+        this.logger.warn(`MV count fallback to base tables: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
 
     const listingTotal = await this.prisma.listing.count({ where: listingWhere });
@@ -323,6 +350,28 @@ export class BlocksService {
   ): Promise<Map<number, { min: number; max: number }>> {
     const map = new Map<number, { min: number; max: number }>();
     if (!blockIds.length) return map;
+    if (await this.isCatalogMvAvailable()) {
+      try {
+        const rows = await this.prisma.$queryRaw<
+          Array<{ block_id: number; min_p: unknown; max_p: unknown }>
+        >`
+          SELECT mv.block_id, MIN(mv.price) AS min_p, MAX(mv.price) AS max_p
+          FROM catalog_apartment_active_mv mv
+          WHERE mv.block_id IN (${Prisma.join(blockIds)})
+          GROUP BY mv.block_id
+        `;
+        for (const row of rows) {
+          if (row.block_id == null || row.min_p == null) continue;
+          map.set(Number(row.block_id), {
+            min: Number(row.min_p),
+            max: row.max_p != null ? Number(row.max_p) : Number(row.min_p),
+          });
+        }
+        return map;
+      } catch (e: unknown) {
+        this.logger.warn(`MV price bounds fallback to base tables: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     const agg = await this.prisma.listing.groupBy({
       by: ['blockId'],
       where: {
@@ -343,6 +392,19 @@ export class BlocksService {
       });
     }
     return map;
+  }
+
+  private async isCatalogMvAvailable(): Promise<boolean> {
+    if (this.catalogMvAvailable != null) return this.catalogMvAvailable;
+    try {
+      const rows = await this.prisma.$queryRaw<Array<{ reg: string | null }>>`
+        SELECT to_regclass('public.catalog_apartment_active_mv') AS reg
+      `;
+      this.catalogMvAvailable = Boolean(rows[0]?.reg);
+    } catch {
+      this.catalogMvAvailable = false;
+    }
+    return this.catalogMvAvailable;
   }
 
   private readonly blockDetailInclude = {

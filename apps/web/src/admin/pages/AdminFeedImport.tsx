@@ -108,6 +108,13 @@ export default function AdminFeedImport() {
     },
   });
 
+  const refreshCacheMutation = useMutation({
+    mutationFn: () => apiPost('/admin/feed-import/refresh-cache', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'feed-import'] });
+    },
+  });
+
   const isRunning = progress?.step !== 'idle' && progress?.step !== undefined && progress?.percent < 100;
   const rows = history?.data ?? [];
 
@@ -155,6 +162,19 @@ export default function AdminFeedImport() {
           >
             {triggerMutation.isPending || isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
             {isRunning ? 'Импорт идёт…' : 'Запустить импорт'}
+          </button>
+          <button
+            onClick={() => refreshCacheMutation.mutate()}
+            disabled={refreshCacheMutation.isPending || !canTrigger}
+            className="inline-flex items-center gap-2 border bg-background px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+            title={!canTrigger ? 'Обновление кеша доступно только администратору' : undefined}
+          >
+            {refreshCacheMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            Обновить кеш каталога
           </button>
         </div>
       </div>

@@ -1795,7 +1795,7 @@ export class AdminBlocksController { ... }
 
 ### Phase 6 — Оптимизация и масштабирование
 
-- [ ] Materialized view для витрины поиска
+- [x] Materialized view для витрины поиска
 - [ ] Meilisearch / Elasticsearch для быстрых фасетных фильтров (при необходимости)
 - [ ] PostGIS для гео-запросов (радиус, полигон)
 - [ ] Кэширование горячих запросов (Redis)
