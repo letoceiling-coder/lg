@@ -1,4 +1,6 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import * as dns from 'node:dns';
+import * as https from 'node:https';
 import {
   RequestType,
   TelegramNotifyAccessStatus,
@@ -396,23 +398,24 @@ export class TelegramNotifyService implements OnModuleInit {
     parseMode?: 'HTML',
     replyMarkup?: Record<string, unknown>,
   ): Promise<boolean> {
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const payload = {
+      chat_id: chatId.toString(),
+      text,
+      ...(parseMode ? { parse_mode: parseMode } : {}),
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+      disable_web_page_preview: true,
+    };
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId.toString(),
-            text,
-            ...(parseMode ? { parse_mode: parseMode } : {}),
-            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-            disable_web_page_preview: true,
-          }),
-        });
-        if (res.ok) return true;
-        const body = await res.text().catch(() => '');
-        this.logger.warn(`Telegram sendMessage failed [attempt ${attempt}/3]: ${res.status} ${body}`);
+        const data = await this.telegramRequest<{ ok: boolean; error_code?: number; description?: string }>(
+          token,
+          'sendMessage',
+          payload,
+        );
+        if (data.ok) return true;
+        this.logger.warn(
+          `Telegram sendMessage failed [attempt ${attempt}/3]: ${data.error_code ?? ''} ${data.description ?? ''}`,
+        );
       } catch (e) {
         this.logger.warn(
           `Telegram sendMessage error [attempt ${attempt}/3]: ${e instanceof Error ? e.message : String(e)}`,
@@ -477,17 +480,9 @@ export class TelegramNotifyService implements OnModuleInit {
     method: string,
     body?: Record<string, unknown>,
   ): Promise<T | null> {
-    const url = `https://api.telegram.org/bot${token}/${method}`;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const res = await fetch(url, {
-          method: body ? 'POST' : 'GET',
-          headers: body ? { 'Content-Type': 'application/json' } : undefined,
-          body: body ? JSON.stringify(body) : undefined,
-        });
-        if (res.ok) return (await res.json()) as T;
-        const text = await res.text().catch(() => '');
-        this.logger.warn(`Telegram ${method} failed [attempt ${attempt}/3]: ${res.status} ${text}`);
+        return await this.telegramRequest<T>(token, method, body);
       } catch (e) {
         this.logger.warn(
           `Telegram ${method} error [attempt ${attempt}/3]: ${e instanceof Error ? e.message : String(e)}`,
@@ -496,6 +491,53 @@ export class TelegramNotifyService implements OnModuleInit {
       await this.sleep(250 * attempt);
     }
     return null;
+  }
+
+  private telegramRequest<T>(
+    token: string,
+    method: string,
+    body?: Record<string, unknown>,
+  ): Promise<T> {
+    const payload = body ? JSON.stringify(body) : undefined;
+    return new Promise<T>((resolve, reject) => {
+      const req = https.request(
+        {
+          protocol: 'https:',
+          hostname: 'api.telegram.org',
+          path: `/bot${token}/${method}`,
+          method: body ? 'POST' : 'GET',
+          headers: body
+            ? {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload ?? '').toString(),
+              }
+            : undefined,
+          lookup: (hostname, _opts, cb) => dns.lookup(hostname, { family: 4 }, cb),
+        },
+        (res) => {
+          let chunks = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => {
+            chunks += chunk;
+          });
+          res.on('end', () => {
+            if ((res.statusCode ?? 500) >= 400) {
+              reject(new Error(`HTTP ${res.statusCode ?? 500}: ${chunks || 'telegram api error'}`));
+              return;
+            }
+            try {
+              resolve(JSON.parse(chunks) as T);
+            } catch {
+              reject(new Error(`Invalid Telegram JSON: ${chunks}`));
+            }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.setTimeout(8000, () => req.destroy(new Error('Telegram API timeout')));
+      if (payload) req.write(payload);
+      req.end();
+    });
   }
 
   private requestTypeRu(t: RequestType): string {
