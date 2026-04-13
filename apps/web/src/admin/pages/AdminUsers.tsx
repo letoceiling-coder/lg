@@ -4,6 +4,7 @@ import { Eye, Loader2, Pencil, Shield, ShieldAlert, ShieldCheck, UserPlus } from
 import { toast } from 'sonner';
 import { ApiError, apiGet, apiPost, apiPut } from '@/lib/api';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 interface ApiUser {
   id: string;
@@ -69,6 +70,7 @@ function parseErrorMessage(error: unknown): string {
 
 export default function AdminUsers() {
   const qc = useQueryClient();
+  const { user: currentUser } = useAuth();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createForm, setCreateForm] = useState<UserForm>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -335,21 +337,33 @@ export default function AdminUsers() {
                   Пароль
                 </button>
                 {u.telegramLinked ? (
-                  <button
-                    type="button"
-                    className="text-xs px-2.5 py-1 rounded-lg border"
-                    onClick={() => unlinkTelegramMutation.mutate(u.id)}
-                  >
-                    Отвязать TG
-                  </button>
+                  u.id === currentUser?.id ? (
+                    <button
+                      type="button"
+                      className="text-xs px-2.5 py-1 rounded-lg border"
+                      onClick={() => unlinkTelegramMutation.mutate(u.id)}
+                    >
+                      Отвязать TG
+                    </button>
+                  ) : (
+                    <span className="text-[11px] px-2 py-1 rounded-lg bg-muted text-muted-foreground">
+                      TG только для себя
+                    </span>
+                  )
                 ) : (
-                  <button
-                    type="button"
-                    className="text-xs px-2.5 py-1 rounded-lg border"
-                    onClick={() => setTgBindUser(u)}
-                  >
-                    Привязать TG
-                  </button>
+                  u.id === currentUser?.id ? (
+                    <button
+                      type="button"
+                      className="text-xs px-2.5 py-1 rounded-lg border"
+                      onClick={() => setTgBindUser(u)}
+                    >
+                      Привязать TG
+                    </button>
+                  ) : (
+                    <span className="text-[11px] px-2 py-1 rounded-lg bg-muted text-muted-foreground">
+                      TG только для себя
+                    </span>
+                  )
                 )}
               </div>
             );

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
@@ -11,7 +12,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Roles } from '../../auth/decorators';
+import { CurrentUser, Roles } from '../../auth/decorators';
 import { CreateUserDto, ResetPasswordDto, UpdateUserDto } from './dto/create-user.dto';
 import { UsersService } from './users.service';
 
@@ -67,14 +68,26 @@ export class UsersController {
   @Post(':id/telegram-link')
   @Roles('admin')
   @ApiOperation({ summary: 'Admin: create Telegram link URL for user' })
-  createTelegramLink(@Param('id', ParseUUIDPipe) id: string) {
+  createTelegramLink(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('sub') currentUserId: string,
+  ) {
+    if (id !== currentUserId) {
+      throw new ForbiddenException('Telegram binding is allowed only for current user');
+    }
     return this.usersService.createTelegramLink(id);
   }
 
   @Post(':id/telegram-unlink')
   @Roles('admin')
   @ApiOperation({ summary: 'Admin: unlink Telegram from user' })
-  unlinkTelegram(@Param('id', ParseUUIDPipe) id: string) {
+  unlinkTelegram(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('sub') currentUserId: string,
+  ) {
+    if (id !== currentUserId) {
+      throw new ForbiddenException('Telegram unbind is allowed only for current user');
+    }
     return this.usersService.unlinkTelegram(id);
   }
 
@@ -83,8 +96,12 @@ export class UsersController {
   @ApiOperation({ summary: 'Admin: bind Telegram from Telegram Login Widget payload' })
   bindTelegramWidget(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('sub') currentUserId: string,
     @Body() body: Record<string, unknown>,
   ) {
+    if (id !== currentUserId) {
+      throw new ForbiddenException('Telegram binding is allowed only for current user');
+    }
     return this.usersService.bindTelegramFromWidget(id, body);
   }
 }
