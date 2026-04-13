@@ -19,6 +19,7 @@ module.exports = {
         JWT_REFRESH_SECRET: 'livegrid-refresh-secret-change-in-production',
         TRENDAGENT_BASE_URL: 'https://dataout.trendagent.ru',
         TRENDAGENT_DEFAULT_REGION: 'msk',
+        TRENDAGENT_REGIONS: 'msk',
         /** Локальные JSON вместо HTTP (путь к корню data: .../TrendAgent/data) */
         FEED_LOCAL_DIR: '',
         /** true — не регистрировать BullMQ cron (если импорт только shell-cron) */

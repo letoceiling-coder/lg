@@ -20,12 +20,16 @@ export class FeedImportController {
   @Roles('admin')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Trigger feed import manually' })
-  @ApiQuery({ name: 'region', required: false, example: 'msk' })
+  @ApiQuery({ name: 'region', required: false, example: 'msk | all' })
   trigger(
     @CurrentUser('sub') userId: string,
     @Query('region') region?: string,
   ) {
-    return this.service.triggerImport(region || 'msk', userId);
+    const regionCode = String(region || 'msk').trim().toLowerCase();
+    if (regionCode === 'all') {
+      return this.service.triggerImportForEnabledRegions(userId);
+    }
+    return this.service.triggerImport(regionCode, userId);
   }
 
   @Get('progress')
@@ -42,7 +46,7 @@ export class FeedImportController {
   })
   @ApiQuery({ name: 'region', required: false, example: 'msk' })
   diagnostics(@Query('region') region?: string) {
-    return this.service.feedVsDbDiagnostics(region || 'msk');
+    return this.service.feedVsDbDiagnostics(String(region || 'msk').toLowerCase());
   }
 
   @Get('history')

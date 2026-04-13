@@ -45,21 +45,25 @@ export class FeedImportService implements OnModuleInit {
       this.logger.log('Repeatable feed import cron disabled (FEED_IMPORT_DISABLE_REPEAT)');
       return;
     }
-    const pattern =
-      this.config.get<string>('FEED_IMPORT_CRON') || '0 3 * * 2';
-    const regionCode =
-      this.config.get<string>('TRENDAGENT_DEFAULT_REGION') || 'msk';
+    const pattern = this.config.get<string>('FEED_IMPORT_CRON') || '0 3 * * 2';
+    const regionCodes = await this.resolveCronRegionCodes();
+    if (!regionCodes.length) {
+      this.logger.warn('No valid regions resolved for repeatable import cron registration');
+      return;
+    }
     try {
-      await this.feedImportQueue.add(
-        FEED_IMPORT_JOB_RUN,
-        { regionCode },
-        {
-          repeat: { pattern },
-          jobId: `feed-import-repeat-${regionCode}`,
-        },
-      );
+      for (const regionCode of regionCodes) {
+        await this.feedImportQueue.add(
+          FEED_IMPORT_JOB_RUN,
+          { regionCode },
+          {
+            repeat: { pattern },
+            jobId: `feed-import-repeat-${regionCode}`,
+          },
+        );
+      }
       this.logger.log(
-        `Registered BullMQ repeatable import: pattern="${pattern}" region=${regionCode}`,
+        `Registered BullMQ repeatable import: pattern="${pattern}" regions=${regionCodes.join(',')}`,
       );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -75,12 +79,40 @@ export class FeedImportService implements OnModuleInit {
    * Ручной запуск: создаёт import_batch и ставит задачу в BullMQ.
    */
   async triggerImport(regionCode: string, triggeredBy?: string) {
-    const payload = await this.createPendingBatch(regionCode, triggeredBy);
+    const payload = await this.createPendingBatch(this.normalizeRegionCode(regionCode), triggeredBy);
     await this.feedImportQueue.add(FEED_IMPORT_JOB_RUN, payload, {
       removeOnComplete: { count: 50 },
       attempts: 1,
     });
     return { batchId: payload.batchId, status: 'QUEUED' as const };
+  }
+
+  async triggerImportForEnabledRegions(triggeredBy?: string) {
+    const rows = await this.prisma.feedRegion.findMany({
+      where: { isEnabled: true },
+      orderBy: { id: 'asc' },
+      select: { code: true },
+    });
+    if (!rows.length) throw new NotFoundException('Нет включённых регионов для импорта');
+
+    const queued: Array<{ region: string; batchId: number }> = [];
+    const skipped: Array<{ region: string; reason: string }> = [];
+    for (const row of rows) {
+      const code = this.normalizeRegionCode(row.code);
+      try {
+        const result = await this.triggerImport(code, triggeredBy);
+        queued.push({ region: code, batchId: result.batchId });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        skipped.push({ region: code, reason: msg });
+      }
+    }
+    return {
+      status: 'QUEUED',
+      queued,
+      skipped,
+      total: rows.length,
+    };
   }
 
   /**
@@ -498,5 +530,45 @@ export class FeedImportService implements OnModuleInit {
 
   private setProgress(step: string, detail?: string, percent = 0) {
     this.currentProgress = { step, detail, percent };
+  }
+
+  private normalizeRegionCode(regionCode: string): string {
+    return String(regionCode || 'msk').trim().toLowerCase();
+  }
+
+  private parseConfiguredRegionCodes(): string[] {
+    const rawList = this.config.get<string>('TRENDAGENT_REGIONS')?.trim();
+    const fallback = this.config.get<string>('TRENDAGENT_DEFAULT_REGION') || 'msk';
+    const source = rawList && rawList.length > 0 ? rawList : fallback;
+    const items = source
+      .split(/[\s,;]+/)
+      .map((s) => this.normalizeRegionCode(s))
+      .filter(Boolean);
+    return Array.from(new Set(items));
+  }
+
+  private async resolveCronRegionCodes(): Promise<string[]> {
+    const configured = this.parseConfiguredRegionCodes();
+    if (!configured.length) return [];
+
+    if (configured.includes('all')) {
+      const allEnabled = await this.prisma.feedRegion.findMany({
+        where: { isEnabled: true },
+        orderBy: { id: 'asc' },
+        select: { code: true },
+      });
+      return allEnabled.map((r) => this.normalizeRegionCode(r.code));
+    }
+
+    const rows = await this.prisma.feedRegion.findMany({
+      where: { code: { in: configured } },
+      select: { code: true },
+    });
+    const existing = new Set(rows.map((r) => this.normalizeRegionCode(r.code)));
+    const missing = configured.filter((code) => !existing.has(code));
+    if (missing.length) {
+      this.logger.warn(`Skip unknown TRENDAGENT_REGIONS codes: ${missing.join(', ')}`);
+    }
+    return configured.filter((code) => existing.has(code));
   }
 }

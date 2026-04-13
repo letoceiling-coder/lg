@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Download, Loader2, Play, RefreshCw, CheckCircle2, XCircle, Clock, FileJson } from 'lucide-react';
 import { apiGet, apiPost } from '@/lib/api';
@@ -25,6 +25,12 @@ interface Progress {
   detail?: string;
 }
 
+interface RegionOption {
+  id: number;
+  code: string;
+  name: string;
+}
+
 const statusIcon: Record<string, typeof CheckCircle2> = {
   COMPLETED: CheckCircle2,
   FAILED: XCircle,
@@ -49,9 +55,22 @@ const statusColor: Record<string, string> = {
 export default function AdminFeedImport() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [region] = useState('msk');
+  const [region, setRegion] = useState('all');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const canTrigger = user?.role === 'admin';
+
+  const { data: regions = [] } = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => apiGet<RegionOption[]>('/regions'),
+    staleTime: 60_000,
+  });
+
+  const selectedRegionCode = useMemo(() => {
+    if (region === 'all') return null;
+    const selected = regions.find((r) => r.code === region);
+    if (!selected) return null;
+    return selected.code.toLowerCase();
+  }, [region, regions]);
 
   const { data: progress, isFetching: progressFetching } = useQuery({
     queryKey: ['admin', 'feed-import', 'progress'],
@@ -67,14 +86,23 @@ export default function AdminFeedImport() {
   });
 
   const { data: diagnostics, isFetching: diagLoading, refetch: refetchDiag } = useQuery({
-    queryKey: ['admin', 'feed-import', 'diagnostics', region],
-    queryFn: () => apiGet<unknown>(`/admin/feed-import/diagnostics?region=${encodeURIComponent(region)}`),
-    enabled: showDiagnostics,
+    queryKey: ['admin', 'feed-import', 'diagnostics', selectedRegionCode],
+    queryFn: () =>
+      apiGet<unknown>(
+        `/admin/feed-import/diagnostics?region=${encodeURIComponent(selectedRegionCode ?? 'msk')}`,
+      ),
+    enabled: showDiagnostics && selectedRegionCode != null,
     staleTime: 30_000,
   });
 
   const triggerMutation = useMutation({
-    mutationFn: () => apiPost(`/admin/feed-import/trigger?region=${region}`, {}),
+    mutationFn: () =>
+      apiPost(
+        `/admin/feed-import/trigger?region=${encodeURIComponent(
+          region === 'all' ? 'all' : (selectedRegionCode ?? 'msk'),
+        )}`,
+        {},
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'feed-import'] });
     },
@@ -91,12 +119,29 @@ export default function AdminFeedImport() {
           <h1 className="text-2xl font-bold">Импорт фидов</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={region}
+            onChange={(e) => {
+              setRegion(e.target.value);
+              setShowDiagnostics(false);
+            }}
+            className="h-10 rounded-xl border bg-background px-3 text-sm"
+          >
+            <option value="all">Все включённые регионы</option>
+            {regions.map((r) => (
+              <option key={r.id} value={r.code}>
+                {r.name} ({r.code})
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => {
+              if (selectedRegionCode == null) return;
               setShowDiagnostics(true);
               void refetchDiag();
             }}
+            disabled={selectedRegionCode == null}
             className="inline-flex items-center gap-2 border bg-background px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors"
           >
             {diagLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileJson className="w-4 h-4" />}
@@ -117,7 +162,9 @@ export default function AdminFeedImport() {
       {showDiagnostics && (
         <div className="bg-muted/30 border rounded-2xl p-4 mb-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold">GET /admin/feed-import/diagnostics?region={region}</span>
+            <span className="text-sm font-semibold">
+              GET /admin/feed-import/diagnostics?region={selectedRegionCode}
+            </span>
             <button
               type="button"
               className="text-xs text-primary hover:underline"
