@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 const SITE_NAME = 'LiveGrid';
-const SITE_URL = 'https://lg.livegrid.ru';
+const SITE_URL = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.replace(/\/+$/, '') || 'https://lg.livegrid.ru';
 
 type SeoMeta = {
   title: string;

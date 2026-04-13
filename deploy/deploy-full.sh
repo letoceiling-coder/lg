@@ -48,6 +48,10 @@ pnpm --filter @lg/api build
 
 # ── 5. Build frontend ──
 echo "→ Building frontend..."
+# Каноникал и prerender (sitemap, /complex/*/index.html) берут VITE_PUBLIC_SITE_URL или PUBLIC_SITE_URL
+SITE_FOR_WEB="${VITE_PUBLIC_SITE_URL:-${PUBLIC_SITE_URL:-https://lg.livegrid.ru}}"
+SITE_FOR_WEB="${SITE_FOR_WEB%/}"
+export VITE_PUBLIC_SITE_URL="$SITE_FOR_WEB"
 pnpm build:web
 
 # ── 6. Restart API via PM2 ──
