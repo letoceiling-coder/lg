@@ -857,6 +857,22 @@ model News {
   @@map("news")
 }
 
+/// Каналы Telegram для импорта новостей (MTProto). Секреты — только в env сервера.
+model NewsTelegramChannel {
+  id               Int      @id @default(autoincrement())
+  channelRef       String   @map("channel_ref") @db.VarChar(255)
+  label            String?  @db.VarChar(255)
+  isEnabled        Boolean  @default(true) @map("is_enabled")
+  limitPerRun      Int      @default(20) @map("limit_per_run")
+  publishOnImport  Boolean  @default(true) @map("publish_on_import")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([channelRef])
+  @@map("news_telegram_channels")
+}
+
 // ============================================================
 // CMS: Site Settings
 // ============================================================

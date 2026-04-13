@@ -1,7 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Newspaper, Loader2, Plus, Pencil, Trash2, Eye, EyeOff, ChevronLeft, ChevronRight, Rss } from 'lucide-react';
-import { apiGet, apiPost, apiUrl, getAccessToken } from '@/lib/api';
+import {
+  Newspaper,
+  Loader2,
+  Plus,
+  Pencil,
+  Trash2,
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight,
+  Rss,
+  MessageCircle,
+  RefreshCw,
+} from 'lucide-react';
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUrl, getAccessToken } from '@/lib/api';
 import { toast } from '@/components/ui/sonner';
 
 interface NewsRow {
@@ -20,33 +33,166 @@ interface PaginatedResult {
   meta: { page: number; per_page: number; total: number; total_pages: number };
 }
 
-async function apiPut<T>(path: string, body: unknown): Promise<T> {
-  const token = getAccessToken();
-  const res = await fetch(apiUrl(path), {
-    method: 'PUT',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
+function formatApiError(e: unknown): string {
+  if (e instanceof ApiError) {
+    try {
+      const j = JSON.parse(e.message) as { message?: string | string[] };
+      if (Array.isArray(j.message)) return j.message.join(', ');
+      if (typeof j.message === 'string') return j.message;
+    } catch {
+      /* plain text */
+    }
+    return e.message || `${e.status}`;
+  }
+  return e instanceof Error ? e.message : 'Ошибка';
 }
 
-async function apiDelete(path: string): Promise<void> {
-  const token = getAccessToken();
-  const res = await fetch(apiUrl(path), {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+interface TelegramParserStatus {
+  ready: boolean;
+  credentialsOk: boolean;
+  credentials: { apiIdOk: boolean; apiHashOk: boolean; sessionOk: boolean };
+  channels: { inDatabaseTotal: number; inDatabaseEnabled: number; envListCount: number };
+  hints: string[];
+}
+
+interface TelegramChannelRow {
+  id: number;
+  channelRef: string;
+  label: string | null;
+  isEnabled: boolean;
+  limitPerRun: number;
+  publishOnImport: boolean;
+  sortOrder: number;
+}
+
+function TelegramChannelEditorRow({
+  row,
+  selected,
+  onToggleSelect,
+  onUpdated,
+}: {
+  row: TelegramChannelRow;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onUpdated: () => void;
+}) {
+  const [channelRef, setChannelRef] = useState(row.channelRef);
+  const [label, setLabel] = useState(row.label ?? '');
+  const [isEnabled, setIsEnabled] = useState(row.isEnabled);
+  const [limitPerRun, setLimitPerRun] = useState(String(row.limitPerRun));
+  const [publishOnImport, setPublishOnImport] = useState(row.publishOnImport);
+  const [sortOrder, setSortOrder] = useState(String(row.sortOrder));
+
+  useEffect(() => {
+    setChannelRef(row.channelRef);
+    setLabel(row.label ?? '');
+    setIsEnabled(row.isEnabled);
+    setLimitPerRun(String(row.limitPerRun));
+    setPublishOnImport(row.publishOnImport);
+    setSortOrder(String(row.sortOrder));
+  }, [row]);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      apiPut(`/admin/news/telegram-channels/${row.id}`, {
+        channelRef,
+        label: label.trim() ? label.trim() : null,
+        isEnabled,
+        limitPerRun: Math.max(1, Math.min(100, Number(limitPerRun) || 20)),
+        publishOnImport,
+        sortOrder: Number(sortOrder) || 0,
+      }),
+    onSuccess: () => {
+      toast.success('Канал сохранён');
+      onUpdated();
     },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
   });
-  if (!res.ok) throw new Error(`${res.status}`);
+
+  const delMut = useMutation({
+    mutationFn: () => apiDelete(`/admin/news/telegram-channels/${row.id}`),
+    onSuccess: () => {
+      toast.success('Канал удалён');
+      onUpdated();
+    },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
+  return (
+    <tr className="border-t align-top">
+      <td className="px-3 py-2">
+        <input type="checkbox" checked={selected} onChange={onToggleSelect} className="rounded mt-1" title="Участвует в выборочном импорте" />
+      </td>
+      <td className="px-3 py-2">
+        <input
+          value={channelRef}
+          onChange={(e) => setChannelRef(e.target.value)}
+          className="border rounded-lg px-2 py-1.5 text-xs w-full min-w-[140px] bg-background"
+          placeholder="@channel или ссылка"
+        />
+      </td>
+      <td className="px-3 py-2">
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="border rounded-lg px-2 py-1.5 text-xs w-full min-w-[100px] bg-background"
+          placeholder="Подпись в списке"
+        />
+      </td>
+      <td className="px-3 py-2 text-center">
+        <input type="checkbox" checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} className="rounded" title="Участвует в импорте" />
+      </td>
+      <td className="px-3 py-2">
+        <input
+          type="number"
+          min={1}
+          max={100}
+          value={limitPerRun}
+          onChange={(e) => setLimitPerRun(e.target.value)}
+          className="border rounded-lg px-2 py-1.5 text-xs w-16 bg-background"
+          title="Сколько последних постов за один запуск"
+        />
+      </td>
+      <td className="px-3 py-2 text-center">
+        <input
+          type="checkbox"
+          checked={publishOnImport}
+          onChange={(e) => setPublishOnImport(e.target.checked)}
+          className="rounded"
+          title="Сразу на сайте или черновик"
+        />
+      </td>
+      <td className="px-3 py-2">
+        <input
+          type="number"
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
+          className="border rounded-lg px-2 py-1.5 text-xs w-14 bg-background"
+          title="Порядок в списке"
+        />
+      </td>
+      <td className="px-3 py-2 text-right whitespace-nowrap">
+        <button
+          type="button"
+          disabled={saveMut.isPending}
+          onClick={() => saveMut.mutate()}
+          className="text-xs px-2 py-1 rounded-lg border hover:bg-muted mr-1 disabled:opacity-50"
+        >
+          {saveMut.isPending ? '…' : 'Сохранить'}
+        </button>
+        <button
+          type="button"
+          disabled={delMut.isPending}
+          onClick={() => {
+            if (confirm('Удалить канал из списка?')) delMut.mutate();
+          }}
+          className="text-xs p-1 rounded-lg hover:bg-destructive/10 text-destructive disabled:opacity-50"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
 }
 
 function slugify(text: string): string {
@@ -97,9 +243,68 @@ export default function AdminNews() {
       toast.success(`RSS: добавлено ${res.imported}, пропущено ${res.skipped} (в ленте ${res.totalInFeed})`);
     },
     onError: (e: Error) => {
-      toast.error(e.message || 'Ошибка импорта RSS');
+      toast.error(formatApiError(e));
     },
   });
+
+  const [tgNewRef, setTgNewRef] = useState('');
+  const [tgNewLabel, setTgNewLabel] = useState('');
+  const [tgRunLimit, setTgRunLimit] = useState('20');
+  const [selectedTgIds, setSelectedTgIds] = useState<number[]>([]);
+
+  const tgStatusQuery = useQuery({
+    queryKey: ['admin', 'news', 'telegram-parser-status'],
+    queryFn: () => apiGet<TelegramParserStatus>('/admin/news/telegram-parser/status'),
+    staleTime: 10_000,
+  });
+
+  const tgChannelsQuery = useQuery({
+    queryKey: ['admin', 'news', 'telegram-channels'],
+    queryFn: () => apiGet<TelegramChannelRow[]>('/admin/news/telegram-channels'),
+    staleTime: 10_000,
+  });
+
+  const tgAddMutation = useMutation({
+    mutationFn: () =>
+      apiPost<TelegramChannelRow>('/admin/news/telegram-channels', {
+        channelRef: tgNewRef.trim(),
+        label: tgNewLabel.trim() ? tgNewLabel.trim() : null,
+      }),
+    onSuccess: () => {
+      setTgNewRef('');
+      setTgNewLabel('');
+      toast.success('Канал добавлен');
+      void qc.invalidateQueries({ queryKey: ['admin', 'news', 'telegram-channels'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'news', 'telegram-parser-status'] });
+    },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
+  const tgSyncMutation = useMutation({
+    mutationFn: () =>
+      apiPost<{
+        imported: number;
+        skipped: number;
+        channelsTotal: number;
+        byChannel: { channel: string; imported: number; skipped: number }[];
+      }>('/admin/news/sync-telegram', {
+        ...(selectedTgIds.length ? { onlyChannelIds: selectedTgIds } : {}),
+        limitPerChannel: Math.max(1, Math.min(100, Number(tgRunLimit) || 20)),
+      }),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ['admin', 'news'] });
+      void qc.invalidateQueries({ queryKey: ['news'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'news', 'telegram-parser-status'] });
+      const parts = res.byChannel.map((b) => `${b.channel}: +${b.imported}`).join('; ');
+      toast.success(`Telegram: новых записей ${res.imported}, пропущено ${res.skipped}. ${parts}`);
+    },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
+  const tgChannels = tgChannelsQuery.data ?? [];
+  const enabledTgIds = tgChannels.filter((c) => c.isEnabled).map((c) => c.id);
+  const allEnabledSelected =
+    enabledTgIds.length > 0 && enabledTgIds.every((id) => selectedTgIds.includes(id));
 
   function resetForm() { setForm({ title: '', slug: '', body: '', imageUrl: '', isPublished: false }); }
   function startEdit(row: NewsRow) {
@@ -149,6 +354,197 @@ export default function AdminNews() {
           >
             <Plus className="w-4 h-4" /> Добавить
           </button>
+        </div>
+      </div>
+
+      {/* Импорт из Telegram: настройки в БД, секреты только на сервере */}
+      <div className="bg-background border rounded-2xl p-5 mb-6 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-sky-600 shrink-0" />
+            <div>
+              <h2 className="font-semibold text-base">Новости из Telegram-каналов</h2>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+                Добавьте каналы (@имя или ссылка t.me/…). Для работы импорта администратор сервера указывает в .env{' '}
+                <code className="text-[11px] bg-muted px-1 rounded">TG_API_ID</code>,{' '}
+                <code className="text-[11px] bg-muted px-1 rounded">TG_API_HASH</code>,{' '}
+                <code className="text-[11px] bg-muted px-1 rounded">TG_SESSION_STRING</code>.
+                Дубликаты не создаются: совпадение по ссылке на пост.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 text-xs border rounded-lg px-2.5 py-1.5 hover:bg-muted"
+              onClick={() => {
+                void tgStatusQuery.refetch();
+                void tgChannelsQuery.refetch();
+              }}
+              disabled={tgStatusQuery.isFetching || tgChannelsQuery.isFetching}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${tgStatusQuery.isFetching || tgChannelsQuery.isFetching ? 'animate-spin' : ''}`} />
+              Обновить статус
+            </button>
+            <span
+              className={`text-xs px-2 py-1 rounded-lg font-medium ${
+                tgStatusQuery.data?.ready
+                  ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-amber-500/15 text-amber-900 dark:text-amber-100'
+              }`}
+            >
+              {tgStatusQuery.isLoading ? 'Проверка…' : tgStatusQuery.data?.ready ? 'Готово к импорту' : 'Требуется настройка'}
+            </span>
+          </div>
+        </div>
+
+        {tgStatusQuery.data && (
+          <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside border border-dashed rounded-xl px-3 py-2 bg-muted/30">
+            {tgStatusQuery.data.hints.map((h) => (
+              <li key={h}>{h}</li>
+            ))}
+          </ul>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
+          <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+            <p className="font-medium text-foreground">Сервер (env)</p>
+            <p>
+              API ID / hash / сессия:{' '}
+              {tgStatusQuery.data?.credentials.apiIdOk &&
+              tgStatusQuery.data?.credentials.apiHashOk &&
+              tgStatusQuery.data?.credentials.sessionOk
+                ? 'задано'
+                : 'неполный набор'}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+            <p className="font-medium text-foreground">Каналы в базе</p>
+            <p>
+              Включённых: {tgStatusQuery.data?.channels.inDatabaseEnabled ?? '—'} из{' '}
+              {tgStatusQuery.data?.channels.inDatabaseTotal ?? '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+            <p className="font-medium text-foreground">Запасной список в env</p>
+            <p>Каналов в TG_NEWS_CHANNELS: {tgStatusQuery.data?.channels.envListCount ?? '—'}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 items-end border-t pt-4">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs font-medium block mb-1">Канал</label>
+            <input
+              value={tgNewRef}
+              onChange={(e) => setTgNewRef(e.target.value)}
+              placeholder="@news или https://t.me/news"
+              className="border rounded-xl px-3 py-2 text-sm w-full bg-background"
+            />
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <label className="text-xs font-medium block mb-1">Подпись (необязательно)</label>
+            <input
+              value={tgNewLabel}
+              onChange={(e) => setTgNewLabel(e.target.value)}
+              placeholder="Например: Застройщик X"
+              className="border rounded-xl px-3 py-2 text-sm w-full bg-background"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={tgAddMutation.isPending || !tgNewRef.trim()}
+            onClick={() => tgAddMutation.mutate()}
+            className="inline-flex items-center gap-2 bg-sky-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-sky-700 disabled:opacity-50 h-[42px]"
+          >
+            {tgAddMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Добавить канал
+          </button>
+        </div>
+
+        {tgChannelsQuery.isLoading && (
+          <div className="flex justify-center py-6">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {!tgChannelsQuery.isLoading && tgChannels.length === 0 && (
+          <p className="text-sm text-muted-foreground">Пока нет каналов — добавьте первый выше.</p>
+        )}
+
+        {tgChannels.length > 0 && (
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-muted/40 text-left text-muted-foreground">
+                  <th className="px-3 py-2 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allEnabledSelected}
+                      onChange={() => {
+                        if (allEnabledSelected) setSelectedTgIds([]);
+                        else setSelectedTgIds([...enabledTgIds]);
+                      }}
+                      title="Выбрать все включённые (для выборочного импорта)"
+                      className="rounded"
+                    />
+                  </th>
+                  <th className="px-3 py-2 font-medium">Канал</th>
+                  <th className="px-3 py-2 font-medium">Подпись</th>
+                  <th className="px-3 py-2 font-medium text-center">Вкл.</th>
+                  <th className="px-3 py-2 font-medium">Лимит</th>
+                  <th className="px-3 py-2 font-medium text-center">Сразу на сайте</th>
+                  <th className="px-3 py-2 font-medium">Порядок</th>
+                  <th className="px-3 py-2 font-medium text-right">Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tgChannels.map((row) => (
+                  <TelegramChannelEditorRow
+                    key={row.id}
+                    row={row}
+                    selected={selectedTgIds.includes(row.id)}
+                    onToggleSelect={() =>
+                      setSelectedTgIds((prev) =>
+                        prev.includes(row.id) ? prev.filter((x) => x !== row.id) : [...prev, row.id],
+                      )
+                    }
+                    onUpdated={() => {
+                      void tgChannelsQuery.refetch();
+                      void tgStatusQuery.refetch();
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+          <div>
+            <label className="text-xs font-medium block mb-1">За один запуск (на канал), макс. 100</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={tgRunLimit}
+              onChange={(e) => setTgRunLimit(e.target.value)}
+              className="border rounded-xl px-3 py-2 text-sm w-24 bg-background"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={tgSyncMutation.isPending}
+            onClick={() => tgSyncMutation.mutate()}
+            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+          >
+            {tgSyncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+            {selectedTgIds.length ? `Импорт: выбранные (${selectedTgIds.length})` : 'Импортировать все включённые'}
+          </button>
+          {selectedTgIds.length > 0 && (
+            <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setSelectedTgIds([])}>
+              Сбросить выбор
+            </button>
+          )}
         </div>
       </div>
 
