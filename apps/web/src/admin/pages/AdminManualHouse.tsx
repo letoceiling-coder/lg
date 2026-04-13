@@ -1,0 +1,295 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { apiGet, apiPatch, apiPost, ApiError } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/sonner';
+
+type RegionRow = { id: number; code: string; name: string };
+type BlockRow = { id: number; name: string };
+type ListingHouse = {
+  houseType: 'DETACHED' | 'SEMI' | 'TOWNHOUSE' | 'DUPLEX' | null;
+  areaTotal: string | number | null;
+  areaLand: string | number | null;
+  floorsCount: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  hasGarage: boolean | null;
+  yearBuilt: number | null;
+};
+type ListingDetail = {
+  id: number;
+  kind: 'HOUSE' | string;
+  regionId: number;
+  blockId: number | null;
+  price: string | number | null;
+  status: 'ACTIVE' | 'DRAFT' | 'RESERVED' | 'SOLD';
+  isPublished: boolean;
+  house: ListingHouse | null;
+};
+
+const statusOptions = ['DRAFT', 'ACTIVE', 'RESERVED', 'SOLD'] as const;
+const houseTypeOptions = [
+  { value: '', label: '—' },
+  { value: 'DETACHED', label: 'Отдельностоящий' },
+  { value: 'SEMI', label: 'Сблокированный (SEMI)' },
+  { value: 'TOWNHOUSE', label: 'Таунхаус' },
+  { value: 'DUPLEX', label: 'Дуплекс' },
+] as const;
+
+function parseError(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) {
+    try {
+      const j = JSON.parse(e.message) as { message?: string | string[] };
+      if (Array.isArray(j.message)) return j.message.join(', ');
+      if (typeof j.message === 'string') return j.message;
+    } catch {
+      if (e.message) return e.message;
+    }
+  }
+  if (e instanceof Error) return e.message;
+  return fallback;
+}
+
+export default function AdminManualHouse() {
+  const navigate = useNavigate();
+  const { listingId } = useParams<{ listingId?: string }>();
+  const editId = listingId ? Number(listingId) : null;
+  const isEdit = Number.isFinite(editId) && editId != null;
+
+  const { data: regions = [] } = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => apiGet<RegionRow[]>('/regions'),
+    staleTime: 60_000,
+  });
+
+  const { data: current, isLoading: loadingCurrent } = useQuery({
+    queryKey: ['admin', 'manual-house', editId],
+    queryFn: () => apiGet<ListingDetail>(`/listings/${editId}`),
+    enabled: isEdit,
+    staleTime: 10_000,
+  });
+
+  const initialRegionId = useMemo(
+    () => current?.regionId ?? regions.find((r) => r.code.toLowerCase() === 'msk')?.id ?? regions[0]?.id ?? 0,
+    [current?.regionId, regions],
+  );
+
+  const [regionId, setRegionId] = useState<number>(0);
+  const [blockId, setBlockId] = useState<number | ''>('');
+  const [price, setPrice] = useState('');
+  const [status, setStatus] = useState<(typeof statusOptions)[number]>('DRAFT');
+  const [isPublished, setIsPublished] = useState(false);
+  const [houseType, setHouseType] = useState('');
+  const [areaTotal, setAreaTotal] = useState('');
+  const [areaLand, setAreaLand] = useState('');
+  const [floorsCount, setFloorsCount] = useState('');
+  const [bedrooms, setBedrooms] = useState('');
+  const [bathrooms, setBathrooms] = useState('');
+  const [hasGarage, setHasGarage] = useState(false);
+  const [yearBuilt, setYearBuilt] = useState('');
+  const [didInitForm, setDidInitForm] = useState(false);
+
+  const effectiveRegionId = regionId || initialRegionId;
+
+  const { data: blocksData } = useQuery({
+    queryKey: ['blocks', 'for-manual-house', effectiveRegionId],
+    queryFn: () =>
+      apiGet<{ data: BlockRow[] }>(`/blocks?region_id=${effectiveRegionId}&per_page=200&page=1&sort=name_asc`),
+    enabled: effectiveRegionId > 0,
+    staleTime: 30_000,
+  });
+  const blocks = blocksData?.data ?? [];
+
+  useEffect(() => {
+    if (!regionId && initialRegionId) {
+      setRegionId(initialRegionId);
+    }
+  }, [initialRegionId, regionId]);
+
+  useEffect(() => {
+    if (!isEdit || !current || didInitForm) return;
+    if (current.kind !== 'HOUSE') return;
+    setBlockId(current.blockId ?? '');
+    setPrice(current.price != null ? String(current.price) : '');
+    setStatus(current.status);
+    setIsPublished(Boolean(current.isPublished));
+    setHouseType(current.house?.houseType ?? '');
+    setAreaTotal(current.house?.areaTotal != null ? String(current.house.areaTotal) : '');
+    setAreaLand(current.house?.areaLand != null ? String(current.house.areaLand) : '');
+    setFloorsCount(current.house?.floorsCount != null ? String(current.house.floorsCount) : '');
+    setBedrooms(current.house?.bedrooms != null ? String(current.house.bedrooms) : '');
+    setBathrooms(current.house?.bathrooms != null ? String(current.house.bathrooms) : '');
+    setHasGarage(Boolean(current.house?.hasGarage));
+    setYearBuilt(current.house?.yearBuilt != null ? String(current.house.yearBuilt) : '');
+    setDidInitForm(true);
+  }, [current, didInitForm, isEdit]);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const parsedPrice = Number(price);
+      if (!effectiveRegionId) throw new Error('Выберите регион');
+      if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) throw new Error('Введите корректную цену');
+
+      const body = {
+        regionId: effectiveRegionId,
+        blockId: blockId === '' ? undefined : blockId,
+        price: parsedPrice,
+        status,
+        isPublished,
+        house: {
+          houseType: houseType || undefined,
+          areaTotal: areaTotal ? Number(areaTotal) : undefined,
+          areaLand: areaLand ? Number(areaLand) : undefined,
+          floorsCount: floorsCount ? Number(floorsCount) : undefined,
+          bedrooms: bedrooms ? Number(bedrooms) : undefined,
+          bathrooms: bathrooms ? Number(bathrooms) : undefined,
+          hasGarage,
+          yearBuilt: yearBuilt ? Number(yearBuilt) : undefined,
+        },
+      };
+      if (isEdit && editId != null) {
+        return apiPatch(`/admin/listings/${editId}/manual-house`, body);
+      }
+      return apiPost('/admin/listings/manual-house', body);
+    },
+    onSuccess: () => {
+      toast.success(isEdit ? 'Дом обновлён' : 'Дом создан');
+      navigate('/admin/listings');
+    },
+    onError: (e) => toast.error(parseError(e, 'Ошибка сохранения')),
+  });
+
+  if (isEdit && loadingCurrent) {
+    return (
+      <div className="p-6 flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-3xl space-y-4">
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" size="sm" asChild>
+          <Link to="/admin/listings">
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Назад
+          </Link>
+        </Button>
+        <h1 className="text-2xl font-bold">{isEdit ? 'Редактирование дома' : 'Новый дом (MANUAL)'}</h1>
+      </div>
+
+      <div className="rounded-xl border p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Регион</label>
+          <select
+            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={effectiveRegionId}
+            onChange={(e) => {
+              setRegionId(Number(e.target.value));
+              setBlockId('');
+            }}
+          >
+            <option value={0}>Выберите регион</option>
+            {regions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">ЖК (опционально)</label>
+          <select
+            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={blockId}
+            onChange={(e) => setBlockId(e.target.value ? Number(e.target.value) : '')}
+            disabled={effectiveRegionId <= 0}
+          >
+            <option value="">—</option>
+            {blocks.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Цена, ₽</label>
+          <Input value={price} onChange={(e) => setPrice(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Статус</label>
+          <select
+            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as (typeof statusOptions)[number])}
+          >
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Тип дома</label>
+          <select
+            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={houseType}
+            onChange={(e) => setHouseType(e.target.value)}
+          >
+            {houseTypeOptions.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Площадь дома, м²</label>
+          <Input value={areaTotal} onChange={(e) => setAreaTotal(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Площадь участка</label>
+          <Input value={areaLand} onChange={(e) => setAreaLand(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Этажей</label>
+          <Input value={floorsCount} onChange={(e) => setFloorsCount(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Спальни</label>
+          <Input value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Санузлы</label>
+          <Input value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Год постройки</label>
+          <Input value={yearBuilt} onChange={(e) => setYearBuilt(e.target.value)} />
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={hasGarage} onChange={(e) => setHasGarage(e.target.checked)} />
+          Гараж
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
+          Опубликовано
+        </label>
+      </div>
+
+      <Button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+        {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+        Сохранить
+      </Button>
+    </div>
+  );
+}

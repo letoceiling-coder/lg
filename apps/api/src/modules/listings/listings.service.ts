@@ -7,6 +7,16 @@ import type {
   CreateManualApartmentDto,
   UpdateManualApartmentDto,
 } from './dto/manual-apartment.dto';
+import type { CreateManualHouseDto, UpdateManualHouseDto } from './dto/manual-house.dto';
+import type { CreateManualLandDto, UpdateManualLandDto } from './dto/manual-land.dto';
+import type {
+  CreateManualCommercialDto,
+  UpdateManualCommercialDto,
+} from './dto/manual-commercial.dto';
+import type {
+  CreateManualParkingDto,
+  UpdateManualParkingDto,
+} from './dto/manual-parking.dto';
 
 const MEDIA_LIB_PREFIX = '/uploads/media/';
 
@@ -61,6 +71,10 @@ export class ListingsService {
           buildingType: true,
         },
       },
+      house: true,
+      land: true,
+      commercial: true,
+      parking: true,
       block: { select: { name: true, slug: true } },
       building: { select: { name: true } },
       builder: { select: { name: true } },
@@ -97,6 +111,10 @@ export class ListingsService {
             contracts: true,
           },
         },
+        house: true,
+        land: true,
+        commercial: true,
+        parking: true,
         block: {
           include: {
             addresses: { orderBy: { sortOrder: 'asc' } },
@@ -296,6 +314,210 @@ export class ListingsService {
     });
   }
 
+  async createManualHouse(dto: CreateManualHouseDto) {
+    const region = await this.prisma.feedRegion.findUnique({
+      where: { id: dto.regionId },
+      select: { id: true },
+    });
+    if (!region) throw new BadRequestException('Регион не найден');
+
+    if (dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== dto.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const externalId = `manual-${randomUUID()}`;
+    const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
+    const h = dto.house;
+
+    return this.prisma.listing.create({
+      data: {
+        regionId: dto.regionId,
+        kind: 'HOUSE',
+        blockId: dto.blockId ?? null,
+        externalId,
+        price: new Prisma.Decimal(dto.price),
+        currency: 'RUB',
+        status,
+        dataSource: 'MANUAL',
+        isPublished: dto.isPublished ?? false,
+        house: {
+          create: {
+            houseType: h.houseType ?? null,
+            areaTotal: h.areaTotal != null ? new Prisma.Decimal(h.areaTotal) : null,
+            areaLand: h.areaLand != null ? new Prisma.Decimal(h.areaLand) : null,
+            floorsCount: h.floorsCount ?? null,
+            bedrooms: h.bedrooms ?? null,
+            bathrooms: h.bathrooms ?? null,
+            hasGarage: h.hasGarage ?? null,
+            yearBuilt: h.yearBuilt ?? null,
+          },
+        },
+      },
+      include: {
+        house: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async createManualLand(dto: CreateManualLandDto) {
+    const region = await this.prisma.feedRegion.findUnique({
+      where: { id: dto.regionId },
+      select: { id: true },
+    });
+    if (!region) throw new BadRequestException('Регион не найден');
+
+    if (dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== dto.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const externalId = `manual-${randomUUID()}`;
+    const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
+    const l = dto.land;
+
+    return this.prisma.listing.create({
+      data: {
+        regionId: dto.regionId,
+        kind: 'LAND',
+        blockId: dto.blockId ?? null,
+        externalId,
+        price: new Prisma.Decimal(dto.price),
+        currency: 'RUB',
+        status,
+        dataSource: 'MANUAL',
+        isPublished: dto.isPublished ?? false,
+        land: {
+          create: {
+            areaSotki: l.areaSotki != null ? new Prisma.Decimal(l.areaSotki) : null,
+            landCategory: l.landCategory ?? null,
+            cadastralNumber: l.cadastralNumber ?? null,
+            hasCommunications: l.hasCommunications ?? null,
+          },
+        },
+      },
+      include: {
+        land: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async createManualCommercial(dto: CreateManualCommercialDto) {
+    const region = await this.prisma.feedRegion.findUnique({
+      where: { id: dto.regionId },
+      select: { id: true },
+    });
+    if (!region) throw new BadRequestException('Регион не найден');
+
+    if (dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== dto.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const externalId = `manual-${randomUUID()}`;
+    const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
+    const c = dto.commercial;
+
+    return this.prisma.listing.create({
+      data: {
+        regionId: dto.regionId,
+        kind: 'COMMERCIAL',
+        blockId: dto.blockId ?? null,
+        externalId,
+        price: new Prisma.Decimal(dto.price),
+        currency: 'RUB',
+        status,
+        dataSource: 'MANUAL',
+        isPublished: dto.isPublished ?? false,
+        commercial: {
+          create: {
+            commercialType: c.commercialType ?? null,
+            area: c.area != null ? new Prisma.Decimal(c.area) : null,
+            floor: c.floor ?? null,
+            hasSeparateEntrance: c.hasSeparateEntrance ?? null,
+          },
+        },
+      },
+      include: {
+        commercial: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async createManualParking(dto: CreateManualParkingDto) {
+    const region = await this.prisma.feedRegion.findUnique({
+      where: { id: dto.regionId },
+      select: { id: true },
+    });
+    if (!region) throw new BadRequestException('Регион не найден');
+
+    if (dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== dto.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const externalId = `manual-${randomUUID()}`;
+    const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
+    const p = dto.parking;
+
+    return this.prisma.listing.create({
+      data: {
+        regionId: dto.regionId,
+        kind: 'PARKING',
+        blockId: dto.blockId ?? null,
+        externalId,
+        price: new Prisma.Decimal(dto.price),
+        currency: 'RUB',
+        status,
+        dataSource: 'MANUAL',
+        isPublished: dto.isPublished ?? false,
+        parking: {
+          create: {
+            parkingType: p.parkingType ?? null,
+            area: p.area != null ? new Prisma.Decimal(p.area) : null,
+            floor: p.floor ?? null,
+            number: p.number ?? null,
+          },
+        },
+      },
+      include: {
+        parking: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
   async updateManualApartment(id: number, dto: UpdateManualApartmentDto) {
     const row = await this.requireManualListing(id);
 
@@ -378,6 +600,278 @@ export class ListingsService {
     });
   }
 
+  async updateManualHouse(id: number, dto: UpdateManualHouseDto) {
+    const row = await this.requireManualListing(id);
+    const current = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { id: true, kind: true },
+    });
+    if (!current || current.kind !== 'HOUSE') {
+      throw new BadRequestException('Операция доступна только для ручных домов (MANUAL + HOUSE)');
+    }
+
+    if (dto.blockId !== undefined && dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== row.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const listingPatch: Prisma.ListingUpdateInput = {};
+    if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
+    if (dto.status !== undefined) {
+      listingPatch.status = dto.status as $Enums.ListingStatus;
+    }
+    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
+    if (dto.blockId !== undefined) {
+      if (dto.blockId === null) {
+        listingPatch.block = { disconnect: true };
+      } else {
+        listingPatch.block = { connect: { id: dto.blockId } };
+      }
+    }
+
+    const housePatch: Prisma.ListingHouseUpdateInput = {};
+    if (dto.house) {
+      const h = dto.house;
+      if (h.houseType !== undefined) housePatch.houseType = h.houseType;
+      if (h.areaTotal !== undefined) {
+        housePatch.areaTotal = h.areaTotal != null ? new Prisma.Decimal(h.areaTotal) : null;
+      }
+      if (h.areaLand !== undefined) {
+        housePatch.areaLand = h.areaLand != null ? new Prisma.Decimal(h.areaLand) : null;
+      }
+      if (h.floorsCount !== undefined) housePatch.floorsCount = h.floorsCount;
+      if (h.bedrooms !== undefined) housePatch.bedrooms = h.bedrooms;
+      if (h.bathrooms !== undefined) housePatch.bathrooms = h.bathrooms;
+      if (h.hasGarage !== undefined) housePatch.hasGarage = h.hasGarage;
+      if (h.yearBuilt !== undefined) housePatch.yearBuilt = h.yearBuilt;
+    }
+
+    const hasListing = Object.keys(listingPatch).length > 0;
+    const hasHouse = Object.keys(housePatch).length > 0;
+    if (!hasListing && !hasHouse) {
+      throw new BadRequestException('Укажите хотя бы одно поле для обновления');
+    }
+
+    return this.prisma.listing.update({
+      where: { id },
+      data: {
+        ...listingPatch,
+        ...(hasHouse ? { house: { update: housePatch } } : {}),
+      },
+      include: {
+        house: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async updateManualLand(id: number, dto: UpdateManualLandDto) {
+    const row = await this.requireManualListing(id);
+    const current = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { id: true, kind: true },
+    });
+    if (!current || current.kind !== 'LAND') {
+      throw new BadRequestException('Операция доступна только для ручных участков (MANUAL + LAND)');
+    }
+
+    if (dto.blockId !== undefined && dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== row.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const listingPatch: Prisma.ListingUpdateInput = {};
+    if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
+    if (dto.status !== undefined) {
+      listingPatch.status = dto.status as $Enums.ListingStatus;
+    }
+    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
+    if (dto.blockId !== undefined) {
+      if (dto.blockId === null) {
+        listingPatch.block = { disconnect: true };
+      } else {
+        listingPatch.block = { connect: { id: dto.blockId } };
+      }
+    }
+
+    const landPatch: Prisma.ListingLandUpdateInput = {};
+    if (dto.land) {
+      const l = dto.land;
+      if (l.areaSotki !== undefined) {
+        landPatch.areaSotki = l.areaSotki != null ? new Prisma.Decimal(l.areaSotki) : null;
+      }
+      if (l.landCategory !== undefined) landPatch.landCategory = l.landCategory;
+      if (l.cadastralNumber !== undefined) landPatch.cadastralNumber = l.cadastralNumber;
+      if (l.hasCommunications !== undefined) landPatch.hasCommunications = l.hasCommunications;
+    }
+
+    const hasListing = Object.keys(listingPatch).length > 0;
+    const hasLand = Object.keys(landPatch).length > 0;
+    if (!hasListing && !hasLand) {
+      throw new BadRequestException('Укажите хотя бы одно поле для обновления');
+    }
+
+    return this.prisma.listing.update({
+      where: { id },
+      data: {
+        ...listingPatch,
+        ...(hasLand ? { land: { update: landPatch } } : {}),
+      },
+      include: {
+        land: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async updateManualCommercial(id: number, dto: UpdateManualCommercialDto) {
+    const row = await this.requireManualListing(id);
+    const current = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { id: true, kind: true },
+    });
+    if (!current || current.kind !== 'COMMERCIAL') {
+      throw new BadRequestException('Операция доступна только для ручной коммерции (MANUAL + COMMERCIAL)');
+    }
+
+    if (dto.blockId !== undefined && dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== row.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const listingPatch: Prisma.ListingUpdateInput = {};
+    if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
+    if (dto.status !== undefined) {
+      listingPatch.status = dto.status as $Enums.ListingStatus;
+    }
+    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
+    if (dto.blockId !== undefined) {
+      if (dto.blockId === null) {
+        listingPatch.block = { disconnect: true };
+      } else {
+        listingPatch.block = { connect: { id: dto.blockId } };
+      }
+    }
+
+    const commercialPatch: Prisma.ListingCommercialUpdateInput = {};
+    if (dto.commercial) {
+      const c = dto.commercial;
+      if (c.commercialType !== undefined) commercialPatch.commercialType = c.commercialType;
+      if (c.area !== undefined) {
+        commercialPatch.area = c.area != null ? new Prisma.Decimal(c.area) : null;
+      }
+      if (c.floor !== undefined) commercialPatch.floor = c.floor;
+      if (c.hasSeparateEntrance !== undefined) {
+        commercialPatch.hasSeparateEntrance = c.hasSeparateEntrance;
+      }
+    }
+
+    const hasListing = Object.keys(listingPatch).length > 0;
+    const hasCommercial = Object.keys(commercialPatch).length > 0;
+    if (!hasListing && !hasCommercial) {
+      throw new BadRequestException('Укажите хотя бы одно поле для обновления');
+    }
+
+    return this.prisma.listing.update({
+      where: { id },
+      data: {
+        ...listingPatch,
+        ...(hasCommercial ? { commercial: { update: commercialPatch } } : {}),
+      },
+      include: {
+        commercial: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async updateManualParking(id: number, dto: UpdateManualParkingDto) {
+    const row = await this.requireManualListing(id);
+    const current = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { id: true, kind: true },
+    });
+    if (!current || current.kind !== 'PARKING') {
+      throw new BadRequestException('Операция доступна только для ручного паркинга (MANUAL + PARKING)');
+    }
+
+    if (dto.blockId !== undefined && dto.blockId != null) {
+      const block = await this.prisma.block.findUnique({
+        where: { id: dto.blockId },
+        select: { id: true, regionId: true },
+      });
+      if (!block) throw new BadRequestException('ЖК не найден');
+      if (block.regionId !== row.regionId) {
+        throw new BadRequestException('ЖК относится к другому региону');
+      }
+    }
+
+    const listingPatch: Prisma.ListingUpdateInput = {};
+    if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
+    if (dto.status !== undefined) {
+      listingPatch.status = dto.status as $Enums.ListingStatus;
+    }
+    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
+    if (dto.blockId !== undefined) {
+      if (dto.blockId === null) {
+        listingPatch.block = { disconnect: true };
+      } else {
+        listingPatch.block = { connect: { id: dto.blockId } };
+      }
+    }
+
+    const parkingPatch: Prisma.ListingParkingUpdateInput = {};
+    if (dto.parking) {
+      const p = dto.parking;
+      if (p.parkingType !== undefined) parkingPatch.parkingType = p.parkingType;
+      if (p.area !== undefined) {
+        parkingPatch.area = p.area != null ? new Prisma.Decimal(p.area) : null;
+      }
+      if (p.floor !== undefined) parkingPatch.floor = p.floor;
+      if (p.number !== undefined) parkingPatch.number = p.number;
+    }
+
+    const hasListing = Object.keys(listingPatch).length > 0;
+    const hasParking = Object.keys(parkingPatch).length > 0;
+    if (!hasListing && !hasParking) {
+      throw new BadRequestException('Укажите хотя бы одно поле для обновления');
+    }
+
+    return this.prisma.listing.update({
+      where: { id },
+      data: {
+        ...listingPatch,
+        ...(hasParking ? { parking: { update: parkingPatch } } : {}),
+      },
+      include: {
+        parking: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
   async deleteManualListing(id: number) {
     await this.requireManualListing(id);
     await this.prisma.listing.delete({ where: { id } });
@@ -405,6 +899,10 @@ export class ListingsService {
       },
       include: {
         apartment: { include: { roomType: true, finishing: true } },
+        house: true,
+        land: true,
+        commercial: true,
+        parking: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
       },

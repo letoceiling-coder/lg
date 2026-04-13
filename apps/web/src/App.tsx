@@ -7,6 +7,7 @@ import ScrollToTop from "./components/ScrollToTop";
 import { lazy, Suspense } from "react";
 import { AuthProvider, useAuthState } from "@/shared/hooks/useAuth";
 import { RequireAuth } from "@/shared/components/RequireAuth";
+import SeoRouteMeta from "@/shared/components/SeoRouteMeta";
 
 // Main pages
 const RedesignIndex = lazy(() => import("./redesign/pages/RedesignIndex"));
@@ -60,6 +61,10 @@ const AdminBuilders = lazy(() => import("./admin/pages/AdminBuilders"));
 const AdminBuildings = lazy(() => import("./admin/pages/AdminBuildings"));
 const AdminListings = lazy(() => import("./admin/pages/AdminListings"));
 const AdminManualListing = lazy(() => import("./admin/pages/AdminManualListing"));
+const AdminManualHouse = lazy(() => import("./admin/pages/AdminManualHouse"));
+const AdminManualLand = lazy(() => import("./admin/pages/AdminManualLand"));
+const AdminManualCommercial = lazy(() => import("./admin/pages/AdminManualCommercial"));
+const AdminManualParking = lazy(() => import("./admin/pages/AdminManualParking"));
 const AdminFeedImport = lazy(() => import("./admin/pages/AdminFeedImport"));
 const AdminNews = lazy(() => import("./admin/pages/AdminNews"));
 const AdminRegions = lazy(() => import("./admin/pages/AdminRegions"));
@@ -123,6 +128,14 @@ const AppRoutes = () => (
       <Route path="listings" element={<AdminListings />} />
       <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualListing /></RequireAuth>} />
+      <Route path="listings/manual-house/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualHouse /></RequireAuth>} />
+      <Route path="listings/manual-house/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualHouse /></RequireAuth>} />
+      <Route path="listings/manual-land/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualLand /></RequireAuth>} />
+      <Route path="listings/manual-land/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualLand /></RequireAuth>} />
+      <Route path="listings/manual-commercial/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualCommercial /></RequireAuth>} />
+      <Route path="listings/manual-commercial/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualCommercial /></RequireAuth>} />
+      <Route path="listings/manual-parking/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualParking /></RequireAuth>} />
+      <Route path="listings/manual-parking/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualParking /></RequireAuth>} />
       <Route path="feed-import" element={<RequireAuth roles={['admin', 'editor']}><AdminFeedImport /></RequireAuth>} />
       <Route path="news" element={<RequireAuth roles={['admin', 'editor']}><AdminNews /></RequireAuth>} />
       <Route path="regions" element={<RequireAuth roles={['admin', 'editor']}><AdminRegions /></RequireAuth>} />
@@ -156,6 +169,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <ScrollToTop />
+        <SeoRouteMeta />
         <Suspense fallback={<Loading />}>
           <AppWithAuth />
         </Suspense>

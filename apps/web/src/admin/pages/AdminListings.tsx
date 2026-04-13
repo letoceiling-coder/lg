@@ -9,6 +9,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 
 type ListingRow = {
   id: number;
+  kind?: string;
   price: string | number | null;
   dataSource?: string;
   status?: string;
@@ -18,6 +19,28 @@ type ListingRow = {
     areaTotal: string | number | null;
     floor: number | null;
     roomType: { name: string } | null;
+  } | null;
+  house: {
+    houseType: string | null;
+    areaTotal: string | number | null;
+    floorsCount: number | null;
+  } | null;
+  land: {
+    areaSotki: string | number | null;
+    landCategory: string | null;
+    hasCommunications: boolean | null;
+  } | null;
+  commercial: {
+    commercialType: string | null;
+    area: string | number | null;
+    floor: number | null;
+    hasSeparateEntrance: boolean | null;
+  } | null;
+  parking: {
+    parkingType: string | null;
+    area: string | number | null;
+    floor: number | null;
+    number: string | null;
   } | null;
 };
 
@@ -50,6 +73,7 @@ export default function AdminListings() {
   const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [sourceTab, setSourceTab] = useState<'feed' | 'manual'>('feed');
+  const [kindTab, setKindTab] = useState<'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING'>('APARTMENT');
   const perPage = 30;
   const canManage = user?.role === 'admin' || user?.role === 'editor';
 
@@ -63,13 +87,13 @@ export default function AdminListings() {
     regions?.find((r) => (r.code ?? '').toLowerCase() === 'msk')?.id ?? regions?.[0]?.id;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'listings', regionIdDefault, page, sourceTab],
+    queryKey: ['admin', 'listings', regionIdDefault, page, sourceTab, kindTab],
     queryFn: () => {
       const sp = new URLSearchParams({
         region_id: String(regionIdDefault),
         page: String(page),
         per_page: String(perPage),
-        kind: 'APARTMENT',
+        kind: kindTab,
         data_source: sourceTab === 'feed' ? 'FEED' : 'MANUAL',
       });
       if (sourceTab === 'feed') sp.set('status', 'ACTIVE');
@@ -111,7 +135,17 @@ export default function AdminListings() {
         <div className="flex items-center gap-3">
           <Home className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Квартиры</h1>
+            <h1 className="text-2xl font-bold">
+              {kindTab === 'APARTMENT'
+                ? 'Квартиры'
+                : kindTab === 'HOUSE'
+                  ? 'Дома'
+                  : kindTab === 'LAND'
+                    ? 'Участки'
+                    : kindTab === 'COMMERCIAL'
+                      ? 'Коммерция'
+                      : 'Паркинг'}
+            </h1>
             <p className="text-sm text-muted-foreground mt-1">
               Витрина из фида и ручные объявления (<code className="text-xs bg-muted px-1 rounded">MANUAL</code>).
               Ручные: создание и правка на отдельной странице; импорт TrendAgent не перезаписывает их по{' '}
@@ -122,21 +156,119 @@ export default function AdminListings() {
         {sourceTab === 'manual' ? (
           canManage ? (
             <Button type="button" className="shrink-0" asChild>
-              <Link to="/admin/listings/manual/new">
+              <Link
+                to={
+                  kindTab === 'APARTMENT'
+                    ? '/admin/listings/manual/new'
+                    : kindTab === 'HOUSE'
+                      ? '/admin/listings/manual-house/new'
+                      : kindTab === 'LAND'
+                        ? '/admin/listings/manual-land/new'
+                        : kindTab === 'COMMERCIAL'
+                          ? '/admin/listings/manual-commercial/new'
+                          : '/admin/listings/manual-parking/new'
+                }
+              >
                 <Plus className="w-4 h-4 mr-2" />
-                Ручная квартира
+                {kindTab === 'APARTMENT'
+                  ? 'Ручная квартира'
+                  : kindTab === 'HOUSE'
+                    ? 'Ручной дом'
+                    : kindTab === 'LAND'
+                      ? 'Ручной участок'
+                      : kindTab === 'COMMERCIAL'
+                        ? 'Ручная коммерция'
+                        : 'Ручной паркинг'}
               </Link>
             </Button>
           ) : (
             <Button type="button" className="shrink-0" disabled>
               <Plus className="w-4 h-4 mr-2" />
-              Ручная квартира
+              {kindTab === 'APARTMENT'
+                ? 'Ручная квартира'
+                : kindTab === 'HOUSE'
+                  ? 'Ручной дом'
+                  : kindTab === 'LAND'
+                    ? 'Ручной участок'
+                    : kindTab === 'COMMERCIAL'
+                      ? 'Ручная коммерция'
+                      : 'Ручной паркинг'}
             </Button>
           )
         ) : null}
       </div>
 
       <div className="flex gap-2 mb-4 border-b">
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            kindTab === 'APARTMENT'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => {
+            setKindTab('APARTMENT');
+            setPage(1);
+          }}
+        >
+          Квартиры
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            kindTab === 'LAND'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => {
+            setKindTab('LAND');
+            setPage(1);
+          }}
+        >
+          Участки
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            kindTab === 'HOUSE'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => {
+            setKindTab('HOUSE');
+            setPage(1);
+          }}
+        >
+          Дома
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            kindTab === 'COMMERCIAL'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => {
+            setKindTab('COMMERCIAL');
+            setPage(1);
+          }}
+        >
+          Коммерция
+        </button>
+        <button
+          type="button"
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            kindTab === 'PARKING'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => {
+            setKindTab('PARKING');
+            setPage(1);
+          }}
+        >
+          Паркинг
+        </button>
         <button
           type="button"
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -185,9 +317,29 @@ export default function AdminListings() {
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="px-4 py-3 font-medium">ID</th>
                   <th className="px-4 py-3 font-medium">Источник</th>
-                  <th className="px-4 py-3 font-medium">Комн.</th>
+                  <th className="px-4 py-3 font-medium">
+                    {kindTab === 'APARTMENT'
+                      ? 'Комн.'
+                      : kindTab === 'HOUSE'
+                        ? 'Тип'
+                        : kindTab === 'LAND'
+                          ? 'Категория'
+                          : kindTab === 'COMMERCIAL'
+                            ? 'Тип'
+                            : 'Тип'}
+                  </th>
                   <th className="px-4 py-3 font-medium">Площадь</th>
-                  <th className="px-4 py-3 font-medium">Этаж</th>
+                  <th className="px-4 py-3 font-medium">
+                    {kindTab === 'APARTMENT'
+                      ? 'Этаж'
+                      : kindTab === 'HOUSE'
+                        ? 'Этажей'
+                        : kindTab === 'LAND'
+                          ? 'Комм.'
+                          : kindTab === 'COMMERCIAL'
+                            ? 'Этаж'
+                            : 'Место'}
+                  </th>
                   <th className="px-4 py-3 font-medium">Статус</th>
                   <th className="px-4 py-3 font-medium text-center">Публ.</th>
                   <th className="px-4 py-3 font-medium text-right">Цена</th>
@@ -200,15 +352,47 @@ export default function AdminListings() {
               <tbody className="divide-y">
                 {rows.map((r) => {
                   const priceN = r.price != null ? Number(r.price) : 0;
-                  const area = r.apartment?.areaTotal != null ? Number(r.apartment.areaTotal) : null;
+                  const area = kindTab === 'APARTMENT'
+                    ? (r.apartment?.areaTotal != null ? Number(r.apartment.areaTotal) : null)
+                    : kindTab === 'HOUSE'
+                      ? (r.house?.areaTotal != null ? Number(r.house.areaTotal) : null)
+                      : kindTab === 'LAND'
+                        ? (r.land?.areaSotki != null ? Number(r.land.areaSotki) : null)
+                        : kindTab === 'COMMERCIAL'
+                          ? (r.commercial?.area != null ? Number(r.commercial.area) : null)
+                          : (r.parking?.area != null ? Number(r.parking.area) : null);
                   const isManual = (r.dataSource ?? '').toUpperCase() === 'MANUAL';
                   return (
                     <tr key={r.id} className="hover:bg-muted/40">
                       <td className="px-4 py-2 text-muted-foreground text-xs">{r.id}</td>
                       <td className="px-4 py-2 text-xs">{r.dataSource ?? '—'}</td>
-                      <td className="px-4 py-2">{r.apartment?.roomType?.name ?? '—'}</td>
-                      <td className="px-4 py-2">{area != null && Number.isFinite(area) ? `${area} м²` : '—'}</td>
-                      <td className="px-4 py-2">{r.apartment?.floor ?? '—'}</td>
+                      <td className="px-4 py-2">
+                        {kindTab === 'APARTMENT'
+                          ? (r.apartment?.roomType?.name ?? '—')
+                          : kindTab === 'HOUSE'
+                            ? (r.house?.houseType ?? '—')
+                            : kindTab === 'LAND'
+                              ? (r.land?.landCategory ?? '—')
+                              : kindTab === 'COMMERCIAL'
+                                ? (r.commercial?.commercialType ?? '—')
+                                : (r.parking?.parkingType ?? '—')}
+                      </td>
+                      <td className="px-4 py-2">
+                        {area != null && Number.isFinite(area)
+                          ? `${area} ${kindTab === 'LAND' ? 'сот.' : 'м²'}`
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-2">
+                        {kindTab === 'APARTMENT'
+                          ? (r.apartment?.floor ?? '—')
+                          : kindTab === 'HOUSE'
+                            ? (r.house?.floorsCount ?? '—')
+                            : kindTab === 'LAND'
+                              ? (r.land?.hasCommunications == null ? '—' : r.land.hasCommunications ? 'Да' : 'Нет')
+                              : kindTab === 'COMMERCIAL'
+                                ? (r.commercial?.floor ?? '—')
+                                : (r.parking?.number ?? '—')}
+                      </td>
                       <td className="px-4 py-2">
                         <select
                           className="h-8 rounded-md border bg-background px-2 text-xs"
@@ -244,19 +428,33 @@ export default function AdminListings() {
                         {priceN > 0 ? `${(priceN / 1_000_000).toFixed(1)} млн` : '—'}
                       </td>
                       <td className="px-4 py-2 text-center">
-                        <Link
-                          to={`/apartment/${r.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary inline-flex justify-center"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </Link>
+                        {kindTab === 'APARTMENT' ? (
+                          <Link
+                            to={`/apartment/${r.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary inline-flex justify-center"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       {sourceTab === 'manual' && isManual && canManage ? (
                         <td className="px-4 py-2 text-right whitespace-nowrap">
                           <Link
-                            to={`/admin/listings/manual/${r.id}/edit`}
+                            to={
+                              kindTab === 'APARTMENT'
+                                ? `/admin/listings/manual/${r.id}/edit`
+                                : kindTab === 'HOUSE'
+                                  ? `/admin/listings/manual-house/${r.id}/edit`
+                                  : kindTab === 'LAND'
+                                    ? `/admin/listings/manual-land/${r.id}/edit`
+                                    : kindTab === 'COMMERCIAL'
+                                      ? `/admin/listings/manual-commercial/${r.id}/edit`
+                                      : `/admin/listings/manual-parking/${r.id}/edit`
+                            }
                             className="inline-flex p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground mr-1"
                             title="Править"
                           >

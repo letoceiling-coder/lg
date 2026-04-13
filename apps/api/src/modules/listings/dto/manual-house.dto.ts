@@ -1,0 +1,168 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+export class ManualHouseFieldsDto {
+  @ApiPropertyOptional({ enum: ['DETACHED', 'SEMI', 'TOWNHOUSE', 'DUPLEX'] })
+  @IsOptional()
+  @IsIn(['DETACHED', 'SEMI', 'TOWNHOUSE', 'DUPLEX'])
+  houseType?: 'DETACHED' | 'SEMI' | 'TOWNHOUSE' | 'DUPLEX';
+
+  @ApiPropertyOptional({ example: 140.5 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  areaTotal?: number;
+
+  @ApiPropertyOptional({ example: 6.2 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  areaLand?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  floorsCount?: number;
+
+  @ApiPropertyOptional({ example: 3 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  bedrooms?: number;
+
+  @ApiPropertyOptional({ example: 2 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  bathrooms?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  hasGarage?: boolean;
+
+  @ApiPropertyOptional({ example: 2022 })
+  @IsOptional()
+  @IsInt()
+  @Min(1800)
+  yearBuilt?: number;
+}
+
+export class CreateManualHouseDto {
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  regionId: number;
+
+  @ApiPropertyOptional({ description: 'ID ЖК (должен быть в том же регионе)' })
+  @IsOptional()
+  @IsInt()
+  blockId?: number;
+
+  @ApiProperty({ example: 18_000_000 })
+  @IsNumber()
+  @Min(1)
+  price: number;
+
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'] })
+  @IsOptional()
+  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'])
+  status?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isPublished?: boolean;
+
+  @ApiProperty({ type: ManualHouseFieldsDto })
+  @ValidateNested()
+  @Type(() => ManualHouseFieldsDto)
+  house: ManualHouseFieldsDto;
+}
+
+export class ManualHousePatchDto {
+  @ApiPropertyOptional({ enum: ['DETACHED', 'SEMI', 'TOWNHOUSE', 'DUPLEX'] })
+  @IsOptional()
+  @IsIn(['DETACHED', 'SEMI', 'TOWNHOUSE', 'DUPLEX'])
+  houseType?: 'DETACHED' | 'SEMI' | 'TOWNHOUSE' | 'DUPLEX' | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  areaTotal?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  areaLand?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  floorsCount?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  bedrooms?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  bathrooms?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  hasGarage?: boolean | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1800)
+  yearBuilt?: number | null;
+}
+
+export class UpdateManualHouseDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  blockId?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  price?: number;
+
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'] })
+  @IsOptional()
+  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'])
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualHousePatchDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualHousePatchDto)
+  house?: ManualHousePatchDto;
+}
