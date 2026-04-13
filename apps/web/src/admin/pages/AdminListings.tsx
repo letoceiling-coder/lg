@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Home, Loader2, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2 } from 'lucide-react';
-import { apiGet, apiDelete, ApiError } from '@/lib/api';
+import { apiGet, apiDelete, apiPatch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/sonner';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 type ListingRow = {
   id: number;
@@ -25,12 +27,31 @@ interface Paginated {
 }
 
 type RegionRow = { id: number; code: string; name: string };
+type ListingStatus = 'DRAFT' | 'ACTIVE' | 'SOLD' | 'RESERVED';
+
+function parseApiErrorMessage(e: unknown, fallback: string): string {
+  let msg = fallback;
+  if (e instanceof ApiError) {
+    try {
+      const j = JSON.parse(e.message) as { message?: string | string[] };
+      if (Array.isArray(j.message)) msg = j.message.join(', ');
+      else if (typeof j.message === 'string') msg = j.message;
+    } catch {
+      if (e.message) msg = e.message;
+    }
+  } else if (e instanceof Error) {
+    msg = e.message;
+  }
+  return msg;
+}
 
 export default function AdminListings() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [sourceTab, setSourceTab] = useState<'feed' | 'manual'>('feed');
   const perPage = 30;
+  const canManage = user?.role === 'admin' || user?.role === 'editor';
 
   const { data: regions } = useQuery({
     queryKey: ['regions'],
@@ -52,7 +73,7 @@ export default function AdminListings() {
         data_source: sourceTab === 'feed' ? 'FEED' : 'MANUAL',
       });
       if (sourceTab === 'feed') sp.set('status', 'ACTIVE');
-      return apiGet<Paginated>(`/listings?${sp}`);
+      return apiGet<Paginated>(`/admin/listings?${sp}`);
     },
     enabled: regionIdDefault != null,
     staleTime: 20_000,
@@ -60,21 +81,24 @@ export default function AdminListings() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiDelete(`/admin/listings/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'listings'] });
+    onSuccess: async () => {
+      toast.success('Объявление удалено');
+      await qc.invalidateQueries({ queryKey: ['admin', 'listings'] });
     },
     onError: (e: unknown) => {
-      let msg = 'Ошибка удаления';
-      if (e instanceof ApiError) {
-        try {
-          const j = JSON.parse(e.message) as { message?: string | string[] };
-          if (Array.isArray(j.message)) msg = j.message.join(', ');
-          else if (typeof j.message === 'string') msg = j.message;
-        } catch {
-          if (e.message) msg = e.message;
-        }
-      } else if (e instanceof Error) msg = e.message;
-      window.alert(msg);
+      toast.error(parseApiErrorMessage(e, 'Ошибка удаления'));
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: { status?: ListingStatus; isPublished?: boolean } }) =>
+      apiPatch(`/admin/listings/${id}`, patch),
+    onSuccess: async () => {
+      toast.success('Объявление обновлено');
+      await qc.invalidateQueries({ queryKey: ['admin', 'listings'] });
+    },
+    onError: (e: unknown) => {
+      toast.error(parseApiErrorMessage(e, 'Ошибка обновления'));
     },
   });
 
@@ -96,12 +120,19 @@ export default function AdminListings() {
           </div>
         </div>
         {sourceTab === 'manual' ? (
-          <Button type="button" className="shrink-0" asChild>
-            <Link to="/admin/listings/manual/new">
+          canManage ? (
+            <Button type="button" className="shrink-0" asChild>
+              <Link to="/admin/listings/manual/new">
+                <Plus className="w-4 h-4 mr-2" />
+                Ручная квартира
+              </Link>
+            </Button>
+          ) : (
+            <Button type="button" className="shrink-0" disabled>
               <Plus className="w-4 h-4 mr-2" />
               Ручная квартира
-            </Link>
-          </Button>
+            </Button>
+          )
         ) : null}
       </div>
 
@@ -157,6 +188,8 @@ export default function AdminListings() {
                   <th className="px-4 py-3 font-medium">Комн.</th>
                   <th className="px-4 py-3 font-medium">Площадь</th>
                   <th className="px-4 py-3 font-medium">Этаж</th>
+                  <th className="px-4 py-3 font-medium">Статус</th>
+                  <th className="px-4 py-3 font-medium text-center">Публ.</th>
                   <th className="px-4 py-3 font-medium text-right">Цена</th>
                   <th className="px-4 py-3 font-medium text-center">Сайт</th>
                   {sourceTab === 'manual' ? (
@@ -176,6 +209,37 @@ export default function AdminListings() {
                       <td className="px-4 py-2">{r.apartment?.roomType?.name ?? '—'}</td>
                       <td className="px-4 py-2">{area != null && Number.isFinite(area) ? `${area} м²` : '—'}</td>
                       <td className="px-4 py-2">{r.apartment?.floor ?? '—'}</td>
+                      <td className="px-4 py-2">
+                        <select
+                          className="h-8 rounded-md border bg-background px-2 text-xs"
+                          value={(r.status ?? 'DRAFT') as ListingStatus}
+                          disabled={updateMutation.isPending || !canManage}
+                          onChange={(e) =>
+                            updateMutation.mutate({
+                              id: r.id,
+                              patch: { status: e.target.value as ListingStatus },
+                            })
+                          }
+                        >
+                          <option value="DRAFT">DRAFT</option>
+                          <option value="ACTIVE">ACTIVE</option>
+                          <option value="SOLD">SOLD</option>
+                          <option value="RESERVED">RESERVED</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(r.isPublished)}
+                          disabled={updateMutation.isPending || !canManage}
+                          onChange={(e) =>
+                            updateMutation.mutate({
+                              id: r.id,
+                              patch: { isPublished: e.target.checked },
+                            })
+                          }
+                        />
+                      </td>
                       <td className="px-4 py-2 text-right font-medium">
                         {priceN > 0 ? `${(priceN / 1_000_000).toFixed(1)} млн` : '—'}
                       </td>
@@ -189,7 +253,7 @@ export default function AdminListings() {
                           <ExternalLink className="w-3.5 h-3.5" />
                         </Link>
                       </td>
-                      {sourceTab === 'manual' && isManual ? (
+                      {sourceTab === 'manual' && isManual && canManage ? (
                         <td className="px-4 py-2 text-right whitespace-nowrap">
                           <Link
                             to={`/admin/listings/manual/${r.id}/edit`}

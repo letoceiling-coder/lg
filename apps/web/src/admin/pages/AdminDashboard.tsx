@@ -4,11 +4,14 @@ import { useContentStore } from '../store/content-store';
 import { FileText, Image, Users, Building2, Home, Layers, Plus, ClipboardList, HardHat } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiGet } from '@/lib/api';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 type Counters = { blocks: number; apartments: number; builders: number; regions: number };
 type RequestRow = { id: number; name: string | null; phone: string | null; status: string; createdAt: string };
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const canEditContent = user?.role === 'admin' || user?.role === 'editor';
   const { pages: cmsPages, media } = useCMSStore();
   const { pages: contentPages } = useContentStore();
 
@@ -49,13 +52,15 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-bold">Дашборд</h1>
           <p className="text-muted-foreground text-sm mt-1">Обзор платформы</p>
         </div>
-        <Link
-          to="/admin/pages"
-          className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Управление страницами
-        </Link>
+        {canEditContent ? (
+          <Link
+            to="/admin/pages"
+            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Управление страницами
+          </Link>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -100,35 +105,37 @@ export default function AdminDashboard() {
       )}
 
       {/* Content pages */}
-      <div className="bg-background border rounded-2xl p-5 mb-6">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Layers className="w-4 h-4 text-primary" /> Контентные страницы
-        </h2>
-        <div className="space-y-2">
-          {contentPages.map(p => (
-            <Link
-              key={p.slug}
-              to={`/admin/page-editor/${encodeURIComponent(p.slug)}`}
-              className="flex items-center justify-between p-3 rounded-xl hover:bg-muted transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <FileText className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">{p.title}</span>
-                <span className="text-xs text-muted-foreground">{p.slug}</span>
-                <span className="text-xs text-muted-foreground">• {p.sections.length} секций</span>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-lg ${
-                p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-              }`}>
-                {p.status === 'published' ? 'Опубликовано' : 'Черновик'}
-              </span>
-            </Link>
-          ))}
+      {canEditContent ? (
+        <div className="bg-background border rounded-2xl p-5 mb-6">
+          <h2 className="font-semibold mb-4 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-primary" /> Контентные страницы
+          </h2>
+          <div className="space-y-2">
+            {contentPages.map(p => (
+              <Link
+                key={p.slug}
+                to={`/admin/page-editor/${encodeURIComponent(p.slug)}`}
+                className="flex items-center justify-between p-3 rounded-xl hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">{p.title}</span>
+                  <span className="text-xs text-muted-foreground">{p.slug}</span>
+                  <span className="text-xs text-muted-foreground">• {p.sections.length} секций</span>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-lg ${
+                  p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {p.status === 'published' ? 'Опубликовано' : 'Черновик'}
+                </span>
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* CMS pages */}
-      {cmsPages.length > 0 && (
+      {canEditContent && cmsPages.length > 0 && (
         <div className="bg-background border rounded-2xl p-5">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <Users className="w-4 h-4 text-muted-foreground" /> Конструктор страниц

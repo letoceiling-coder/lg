@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Download, Loader2, Play, RefreshCw, CheckCircle2, XCircle, Clock, FileJson } from 'lucide-react';
 import { apiGet, apiPost } from '@/lib/api';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 interface ImportHistoryRow {
   id: number;
@@ -47,8 +48,10 @@ const statusColor: Record<string, string> = {
 
 export default function AdminFeedImport() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [region] = useState('msk');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const canTrigger = user?.role === 'admin';
 
   const { data: progress, isFetching: progressFetching } = useQuery({
     queryKey: ['admin', 'feed-import', 'progress'],
@@ -101,8 +104,9 @@ export default function AdminFeedImport() {
           </button>
           <button
             onClick={() => triggerMutation.mutate()}
-            disabled={triggerMutation.isPending || isRunning}
+            disabled={triggerMutation.isPending || isRunning || !canTrigger}
             className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            title={!canTrigger ? 'Запуск импорта доступен только администратору' : undefined}
           >
             {triggerMutation.isPending || isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
             {isRunning ? 'Импорт идёт…' : 'Запустить импорт'}

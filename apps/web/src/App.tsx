@@ -52,15 +52,19 @@ const AdminUsers = lazy(() => import("./admin/pages/AdminUsers"));
 const AdminSettings = lazy(() => import("./admin/pages/AdminSettings"));
 const AdminTokens = lazy(() => import("./admin/pages/AdminTokens"));
 const AdminDocs = lazy(() => import("./admin/pages/AdminDocs"));
+const AdminAudit = lazy(() => import("./admin/pages/AdminAudit"));
 const AdminRequests = lazy(() => import("./admin/pages/AdminRequests"));
 const AdminBlocks = lazy(() => import("./admin/pages/AdminBlocks"));
 const AdminBlockEditor = lazy(() => import("./admin/pages/AdminBlockEditor"));
+const AdminBuilders = lazy(() => import("./admin/pages/AdminBuilders"));
+const AdminBuildings = lazy(() => import("./admin/pages/AdminBuildings"));
 const AdminListings = lazy(() => import("./admin/pages/AdminListings"));
 const AdminManualListing = lazy(() => import("./admin/pages/AdminManualListing"));
 const AdminFeedImport = lazy(() => import("./admin/pages/AdminFeedImport"));
 const AdminNews = lazy(() => import("./admin/pages/AdminNews"));
 const AdminRegions = lazy(() => import("./admin/pages/AdminRegions"));
 const AdminHomepage = lazy(() => import("./admin/pages/AdminHomepage"));
+const AdminReference = lazy(() => import("./admin/pages/AdminReference"));
 const EditorPage = lazy(() => import("./admin/components/editor/EditorPage"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -108,22 +112,26 @@ const AppRoutes = () => (
     {/* Admin — protected, requires editor+ role */}
     <Route path="/admin" element={<RequireAuth roles={['admin', 'editor', 'manager']}><AdminLayout /></RequireAuth>}>
       <Route index element={<AdminDashboard />} />
-      <Route path="pages" element={<AdminPages />} />
-      <Route path="page-editor/:slug" element={<AdminPageEditor />} />
+      <Route path="pages" element={<RequireAuth roles={['admin', 'editor']}><AdminPages /></RequireAuth>} />
+      <Route path="page-editor/:slug" element={<RequireAuth roles={['admin', 'editor']}><AdminPageEditor /></RequireAuth>} />
       <Route path="requests" element={<AdminRequests />} />
-      <Route path="blocks" element={<AdminBlocks />} />
-      <Route path="blocks/:id" element={<AdminBlockEditor />} />
+      <Route path="audit" element={<RequireAuth roles={['admin']}><AdminAudit /></RequireAuth>} />
+      <Route path="blocks" element={<RequireAuth roles={['admin', 'editor']}><AdminBlocks /></RequireAuth>} />
+      <Route path="blocks/:id" element={<RequireAuth roles={['admin', 'editor']}><AdminBlockEditor /></RequireAuth>} />
+      <Route path="builders" element={<RequireAuth roles={['admin', 'editor']}><AdminBuilders /></RequireAuth>} />
+      <Route path="buildings" element={<RequireAuth roles={['admin', 'editor']}><AdminBuildings /></RequireAuth>} />
       <Route path="listings" element={<AdminListings />} />
-      <Route path="listings/manual/new" element={<AdminManualListing />} />
-      <Route path="listings/manual/:listingId/edit" element={<AdminManualListing />} />
-      <Route path="feed-import" element={<AdminFeedImport />} />
-      <Route path="news" element={<AdminNews />} />
-      <Route path="regions" element={<AdminRegions />} />
-      <Route path="homepage" element={<AdminHomepage />} />
-      <Route path="media" element={<AdminMedia />} />
-      <Route path="users" element={<AdminUsers />} />
-      <Route path="settings" element={<AdminSettings />} />
-      <Route path="tokens" element={<AdminTokens />} />
+      <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualListing /></RequireAuth>} />
+      <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualListing /></RequireAuth>} />
+      <Route path="feed-import" element={<RequireAuth roles={['admin', 'editor']}><AdminFeedImport /></RequireAuth>} />
+      <Route path="news" element={<RequireAuth roles={['admin', 'editor']}><AdminNews /></RequireAuth>} />
+      <Route path="regions" element={<RequireAuth roles={['admin', 'editor']}><AdminRegions /></RequireAuth>} />
+      <Route path="reference" element={<RequireAuth roles={['admin', 'editor']}><AdminReference /></RequireAuth>} />
+      <Route path="homepage" element={<RequireAuth roles={['admin', 'editor']}><AdminHomepage /></RequireAuth>} />
+      <Route path="media" element={<RequireAuth roles={['admin', 'editor']}><AdminMedia /></RequireAuth>} />
+      <Route path="users" element={<RequireAuth roles={['admin']}><AdminUsers /></RequireAuth>} />
+      <Route path="settings" element={<RequireAuth roles={['admin', 'editor']}><AdminSettings /></RequireAuth>} />
+      <Route path="tokens" element={<RequireAuth roles={['admin']}><AdminTokens /></RequireAuth>} />
       <Route path="docs" element={<AdminDocs />} />
     </Route>
     <Route path="/admin/editor/:pageId" element={<RequireAuth roles={['admin', 'editor']}><EditorPage /></RequireAuth>} />

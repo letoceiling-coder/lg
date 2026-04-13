@@ -384,6 +384,33 @@ export class ListingsService {
     return { deleted: true, id };
   }
 
+  async updateAdminListing(
+    id: number,
+    dto: { status?: 'DRAFT' | 'ACTIVE' | 'SOLD' | 'RESERVED'; isPublished?: boolean },
+  ) {
+    if (dto.status === undefined && dto.isPublished === undefined) {
+      throw new BadRequestException('Укажите хотя бы одно поле: status или isPublished');
+    }
+    const exists = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('Объявление не найдено');
+
+    return this.prisma.listing.update({
+      where: { id },
+      data: {
+        ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(dto.isPublished !== undefined ? { isPublished: dto.isPublished } : {}),
+      },
+      include: {
+        apartment: { include: { roomType: true, finishing: true } },
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
   private async requireManualListing(id: number) {
     const row = await this.prisma.listing.findUnique({
       where: { id },

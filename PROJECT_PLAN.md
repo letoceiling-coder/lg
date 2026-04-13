@@ -1743,7 +1743,7 @@ export class AdminBlocksController { ... }
 - [x] Настроить `docker-compose.yml` для локальной разработки (Postgres + Redis)
 - [x] Создать Prisma schema, первая миграция
 - [x] Seed: справочники из фида (rooms, finishings, building_types)
-- [ ] Настроить CI (опционально: GitHub Actions — lint, typecheck)
+- [x] Настроить CI (опционально: GitHub Actions — lint, typecheck)
 
 ### Phase 1 — Backend MVP (2–3 недели)
 
@@ -1751,7 +1751,7 @@ export class AdminBlocksController { ... }
 - [x] Модули: regions, builders, blocks, buildings, subways, reference
 - [ ] Модуль listings/apartments — CRUD + фильтрация + пагинация *(публичные `GET /listings` + фильтры/пагинация; мутаций нет)*
 - [x] Модуль feed-import — BullMQ job, полный pipeline для MSK
-- [ ] Модуль media — загрузка файлов *(UI «Медиа» в админке без отдельного Nest-модуля загрузки в `AppModule`)*
+- [x] Модуль media — загрузка файлов *(реализован `MediaModule` + UI «Медиа» в админке)*
 - [x] Модуль audit — логирование действий *(API/сервис; отдельного экрана журнала в админке пока нет)*
 - [x] OpenAPI / Swagger документация
 - [x] Деплой API на сервер (PM2 / systemd + nginx reverse proxy)
@@ -1761,10 +1761,10 @@ export class AdminBlocksController { ... }
 - [x] Scaffold admin app (Vite + React + shadcn) *(раздел `/admin` в том же SPA, не отдельное приложение)*
 - [x] Авторизация (login, роли, guards)
 - [x] Dashboard
-- [ ] CRUD экраны: ЖК, корпуса, квартиры, застройщики *(ЖК: список + редактор; квартиры: read-only список; корпуса/застройщики — без CRUD-экранов)*
-- [ ] Справочники (read-only для editor, CRUD для admin) *(фильтры каталога тянут справочники с API; inline CRUD справочников в админке не завершён)*
+- [x] CRUD экраны: ЖК, корпуса, квартиры, застройщики *(ЖК: список + редактор; квартиры: ручные CRUD + админ-статусы/публикация; корпуса/застройщики — CRUD для MANUAL)*
+- [x] Справочники (read-only для editor, CRUD для admin) *(admin/reference + UI справочников в админке)*
 - [x] Импорт фидов: кнопка запуска, история, логи
-- [ ] Журнал действий *(нет UI просмотра `audit_events`)*
+- [x] Журнал действий *(реализован UI `/admin/audit` + фильтры и пагинация)*
 - [x] Управление пользователями
 - [x] Деплой админки (отдельный vhost или path `/admin`)
 
@@ -2224,7 +2224,7 @@ modules/
 - [x] Модуль requests: POST + Telegram-уведомление *(POST `/requests`; токен и chat id — в админке → Настройки → Интеграции)*
 - [x] Модуль favorites: CRUD + sync *(API + страница `/favorites` под JWT; гостевой буфер в localStorage до входа, слияние на логине)*
 - [x] Модуль stats: счётчики
-- [ ] Модуль media: загрузка файлов
+- [x] Модуль media: загрузка файлов
 - [x] OpenAPI / Swagger
 - [x] Деплой API
 

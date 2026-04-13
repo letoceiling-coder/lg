@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Globe, Loader2, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import { apiGet, apiPatch, apiPost, apiDelete } from '@/lib/api';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 type FeedRegion = {
   id: number;
@@ -14,6 +15,8 @@ type FeedRegion = {
 
 export default function AdminRegions() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin';
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'regions'],
     queryFn: () => apiGet<FeedRegion[]>('/admin/regions'),
@@ -98,8 +101,9 @@ export default function AdminRegions() {
         <button
           type="button"
           onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending || Object.keys(draft).length === 0}
+          disabled={!canManage || saveMutation.isPending || Object.keys(draft).length === 0}
           className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          title={!canManage ? 'Изменение регионов доступно только администратору' : undefined}
         >
           {saveMutation.isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -132,6 +136,7 @@ export default function AdminRegions() {
               value={newCode}
               onChange={(e) => setNewCode(e.target.value)}
               placeholder="belgorod"
+              disabled={!canManage}
             />
           </div>
           <div>
@@ -141,6 +146,7 @@ export default function AdminRegions() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Белгород"
+              disabled={!canManage}
             />
           </div>
           <div className="sm:col-span-2 lg:col-span-1">
@@ -152,6 +158,7 @@ export default function AdminRegions() {
               value={newBaseUrl}
               onChange={(e) => setNewBaseUrl(e.target.value)}
               placeholder="https://… или пусто"
+              disabled={!canManage}
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -161,13 +168,14 @@ export default function AdminRegions() {
                 checked={newEnabled}
                 onChange={(e) => setNewEnabled(e.target.checked)}
                 className="rounded border-input"
+                disabled={!canManage}
               />
               Витрина
             </label>
             <button
               type="button"
               disabled={
-                createMutation.isPending || !newCode.trim() || !newName.trim()
+                !canManage || createMutation.isPending || !newCode.trim() || !newName.trim()
               }
               onClick={() => createMutation.mutate()}
               className="inline-flex items-center gap-2 bg-secondary text-secondary-foreground px-3 py-2 rounded-xl text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
@@ -204,6 +212,7 @@ export default function AdminRegions() {
                     <input
                       className="w-full border rounded-lg px-2 py-1.5 bg-background"
                       value={d.name}
+                      disabled={!canManage}
                       onChange={(e) =>
                         setDraft((prev) => ({
                           ...prev,
@@ -217,6 +226,7 @@ export default function AdminRegions() {
                       className="w-full border rounded-lg px-2 py-1.5 bg-background text-xs"
                       value={d.baseUrl ?? ''}
                       placeholder="https://…"
+                      disabled={!canManage}
                       onChange={(e) =>
                         setDraft((prev) => ({
                           ...prev,
@@ -229,6 +239,7 @@ export default function AdminRegions() {
                     <input
                       type="checkbox"
                       checked={d.isEnabled}
+                      disabled={!canManage}
                       onChange={(e) =>
                         setDraft((prev) => ({
                           ...prev,
@@ -242,7 +253,7 @@ export default function AdminRegions() {
                     <button
                       type="button"
                       title="Удалить (только если нет связанных данных)"
-                      disabled={deleteMutation.isPending}
+                      disabled={!canManage || deleteMutation.isPending}
                       onClick={() => {
                         if (!confirm(`Удалить регион «${d.name}» (${d.code})?`)) return;
                         deleteMutation.mutate(r.id);

@@ -2,30 +2,43 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Image, Users, Settings, ChevronLeft,
-  ChevronRight, Palette, BookOpen, ClipboardList, Building2, Download, Newspaper, Home,
+  ChevronRight, Palette, BookOpen, ClipboardList, Building2, Building, Download, Newspaper, Home, History, HardHat,
   Globe, LayoutTemplate,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Дашборд', end: true },
-  { to: '/admin/pages', icon: FileText, label: 'Страницы' },
+  { to: '/admin/pages', icon: FileText, label: 'Страницы', roles: ['admin', 'editor'] },
   { to: '/admin/requests', icon: ClipboardList, label: 'Заявки' },
-  { to: '/admin/blocks', icon: Building2, label: 'ЖК' },
+  { to: '/admin/audit', icon: History, label: 'Журнал действий', roles: ['admin'] },
+  { to: '/admin/blocks', icon: Building2, label: 'ЖК', roles: ['admin', 'editor'] },
+  { to: '/admin/builders', icon: HardHat, label: 'Застройщики', roles: ['admin', 'editor'] },
+  { to: '/admin/buildings', icon: Building, label: 'Корпуса', roles: ['admin', 'editor'] },
   { to: '/admin/listings', icon: Home, label: 'Квартиры' },
-  { to: '/admin/feed-import', icon: Download, label: 'Импорт фидов' },
-  { to: '/admin/regions', icon: Globe, label: 'Регионы' },
-  { to: '/admin/homepage', icon: LayoutTemplate, label: 'Главная: блоки API' },
-  { to: '/admin/news', icon: Newspaper, label: 'Новости' },
-  { to: '/admin/media', icon: Image, label: 'Медиа' },
-  { to: '/admin/users', icon: Users, label: 'Пользователи' },
-  { to: '/admin/tokens', icon: Palette, label: 'Токены' },
+  { to: '/admin/feed-import', icon: Download, label: 'Импорт фидов', roles: ['admin', 'editor'] },
+  { to: '/admin/reference', icon: BookOpen, label: 'Справочники', roles: ['admin', 'editor'] },
+  { to: '/admin/regions', icon: Globe, label: 'Регионы', roles: ['admin', 'editor'] },
+  { to: '/admin/homepage', icon: LayoutTemplate, label: 'Главная: блоки API', roles: ['admin', 'editor'] },
+  { to: '/admin/news', icon: Newspaper, label: 'Новости', roles: ['admin', 'editor'] },
+  { to: '/admin/media', icon: Image, label: 'Медиа', roles: ['admin', 'editor'] },
+  { to: '/admin/users', icon: Users, label: 'Пользователи', roles: ['admin'] },
+  { to: '/admin/tokens', icon: Palette, label: 'Токены', roles: ['admin'] },
   { to: '/admin/docs', icon: BookOpen, label: 'Документация' },
-  { to: '/admin/settings', icon: Settings, label: 'Настройки' },
+  { to: '/admin/settings', icon: Settings, label: 'Настройки', roles: ['admin', 'editor'] },
 ];
 
 export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
+  const { user } = useAuth();
+
+  const availableNavItems = navItems.filter((item) => {
+    if (!item.roles?.length) return true;
+    const role = user?.role;
+    if (!role) return false;
+    return item.roles.includes(role);
+  });
 
   return (
     <div className="flex h-screen bg-muted/30 overflow-hidden">
@@ -43,7 +56,7 @@ export default function AdminLayout() {
           {!collapsed && <span className="font-bold text-sm truncate">Live Grid CMS</span>}
         </div>
         <nav className="flex-1 py-2 space-y-0.5 px-2 overflow-y-auto">
-          {navItems.map(item => (
+          {availableNavItems.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
