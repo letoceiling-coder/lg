@@ -198,6 +198,7 @@ export class TelegramNotifyService implements OnModuleInit {
       const raw = message.text.trim().split(/\s+/)[0]?.toLowerCase();
       const command = raw?.split('@')[0] ?? '';
       if (!command) return;
+      this.logger.log(`Telegram command received: ${command}`);
 
       const token = await this.getCachedBotToken();
       if (!token) return;
@@ -214,9 +215,6 @@ export class TelegramNotifyService implements OnModuleInit {
             '/catalog — список ЖК (по 5)',
             '/favorites — избранное',
             '/contacts — контакты агентства',
-            '',
-            'Служебная команда:',
-            '/admin — запросить доступ к уведомлениям по заявкам',
           ].join('\n'),
           undefined,
           this.quickMenu(),
@@ -352,7 +350,7 @@ export class TelegramNotifyService implements OnModuleInit {
   } | null {
     if (!update || typeof update !== 'object') return null;
     const raw = update as Record<string, unknown>;
-    const message = raw.message;
+    const message = raw.message ?? raw.edited_message ?? raw.channel_post;
     if (!message || typeof message !== 'object') return null;
     const msg = message as Record<string, unknown>;
     if (typeof msg.text !== 'string') return null;
@@ -468,7 +466,6 @@ export class TelegramNotifyService implements OnModuleInit {
         { command: 'catalog', description: 'Каталог ЖК' },
         { command: 'favorites', description: 'Избранное' },
         { command: 'contacts', description: 'Контакты агентства' },
-        { command: 'admin', description: 'Доступ к уведомлениям' },
       ],
     });
   }
