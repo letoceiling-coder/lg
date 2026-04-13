@@ -20,6 +20,7 @@ module.exports = {
         TRENDAGENT_BASE_URL: 'https://dataout.trendagent.ru',
         TRENDAGENT_DEFAULT_REGION: 'msk',
         TRENDAGENT_REGIONS: 'msk',
+        TELEGRAM_WEBHOOK_URL: 'https://lg.livegrid.ru/api/v1/telegram-bot/webhook',
         /** Локальные JSON вместо HTTP (путь к корню data: .../TrendAgent/data) */
         FEED_LOCAL_DIR: '',
         /** true — не регистрировать BullMQ cron (если импорт только shell-cron) */

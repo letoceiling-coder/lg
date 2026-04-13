@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import {
   RequestType,
   TelegramNotifyAccessStatus,
@@ -16,15 +16,20 @@ function escapeHtml(s: string): string {
 }
 
 @Injectable()
-export class TelegramNotifyService {
+export class TelegramNotifyService implements OnModuleInit {
   private readonly logger = new Logger(TelegramNotifyService.name);
   private cache: { token: string; at: number } | null = null;
   private static readonly CACHE_MS = 20_000;
+  private readonly webhookUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim() ?? '';
 
   constructor(
     private readonly content: ContentService,
     private readonly prisma: PrismaService,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureWebhookConfigured();
+  }
 
   private async getCachedBotToken(): Promise<string> {
     const now = Date.now();
@@ -361,6 +366,65 @@ export class TelegramNotifyService {
     } catch (e) {
       this.logger.warn(`Telegram sendMessage error: ${e instanceof Error ? e.message : String(e)}`);
       return false;
+    }
+  }
+
+  private async ensureWebhookConfigured() {
+    if (!this.webhookUrl) {
+      this.logger.log('TELEGRAM_WEBHOOK_URL not set; webhook auto-registration skipped');
+      return;
+    }
+    const token = await this.getCachedBotToken();
+    if (!token) {
+      this.logger.warn('telegram_bot_token is empty; webhook auto-registration skipped');
+      return;
+    }
+
+    const info = await this.telegramApi<{ ok: boolean; result?: { url?: string } }>(
+      token,
+      'getWebhookInfo',
+    );
+    const currentUrl = info?.result?.url?.trim() ?? '';
+    if (currentUrl === this.webhookUrl) {
+      this.logger.log(`Telegram webhook already configured: ${this.webhookUrl}`);
+      return;
+    }
+
+    const setResult = await this.telegramApi<{ ok: boolean; description?: string }>(
+      token,
+      'setWebhook',
+      { url: this.webhookUrl },
+    );
+    if (setResult?.ok) {
+      this.logger.log(`Telegram webhook configured: ${this.webhookUrl}`);
+    } else {
+      this.logger.warn(
+        `Telegram setWebhook failed: ${setResult?.description ?? 'unknown error'}`,
+      );
+    }
+  }
+
+  private async telegramApi<T>(
+    token: string,
+    method: string,
+    body?: Record<string, unknown>,
+  ): Promise<T | null> {
+    const url = `https://api.telegram.org/bot${token}/${method}`;
+    try {
+      const res = await fetch(url, {
+        method: body ? 'POST' : 'GET',
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        this.logger.warn(`Telegram ${method} failed: ${res.status} ${text}`);
+        return null;
+      }
+      return (await res.json()) as T;
+    } catch (e) {
+      this.logger.warn(`Telegram ${method} error: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
     }
   }
 
