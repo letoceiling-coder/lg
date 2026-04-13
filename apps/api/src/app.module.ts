@@ -22,10 +22,12 @@ import { FavoritesModule } from './modules/favorites/favorites.module';
 import { CollectionsModule } from './modules/collections/collections.module';
 import { SearchModule } from './modules/search/search.module';
 import { MediaModule } from './modules/media/media.module';
+import { CacheModule } from './common/cache/cache.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    CacheModule,
     PrismaModule,
     HealthModule,
     AuthModule,

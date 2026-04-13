@@ -10,13 +10,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { QueryBlocksDto } from './dto/query-blocks.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { catalogBlockWhereToSql } from './catalog-block-where-sql';
+import { CacheService } from '../../common/cache/cache.service';
 
 @Injectable()
 export class BlocksService {
   private readonly logger = new Logger(BlocksService.name);
   private catalogMvAvailable: boolean | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   /**
    * Shared block filters for catalog list, counts, and stats.
@@ -141,9 +145,15 @@ export class BlocksService {
 
   /** Count blocks + active apartment listings matching the same filters as GET /blocks */
   async countCatalog(query: QueryBlocksDto): Promise<{ blocks: number; apartments: number }> {
+    const cacheKey = this.makeCacheKey('api:catalog:counts:', query);
+    const cached = await this.cache.getJson<{ blocks: number; apartments: number }>(cacheKey);
+    if (cached) return cached;
+
     const { where, noMatch } = await this.buildCatalogBlockWhere(query);
     if (noMatch) {
-      return { blocks: 0, apartments: 0 };
+      const empty = { blocks: 0, apartments: 0 };
+      await this.cache.setJson(cacheKey, empty, 60);
+      return empty;
     }
 
     const roomIds =
@@ -178,10 +188,12 @@ export class BlocksService {
           ${roomFilterSql}
         `;
         const row = rows[0];
-        return {
+        const result = {
           blocks: Number(row?.blocks ?? 0n),
           apartments: Number(row?.apartments ?? 0n),
         };
+        await this.cache.setJson(cacheKey, result, 60);
+        return result;
       } catch (e: unknown) {
         this.logger.warn(`MV count fallback to base tables: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -195,15 +207,26 @@ export class BlocksService {
     });
     const blocksWithListings = grouped.filter((g) => g.blockId != null).length;
 
-    return { blocks: blocksWithListings, apartments: listingTotal };
+    const result = { blocks: blocksWithListings, apartments: listingTotal };
+    await this.cache.setJson(cacheKey, result, 60);
+    return result;
   }
 
   async findAll(query: QueryBlocksDto) {
+    const cacheKey = this.makeCacheKey('api:catalog:blocks:', query);
+    const cached = await this.cache.getJson<{
+      data: unknown[];
+      meta: { page: number; per_page: number; total: number; total_pages: number };
+    }>(cacheKey);
+    if (cached) return cached;
+
     const { page = 1, per_page = 20, sort } = query;
 
     const { where, noMatch } = await this.buildCatalogBlockWhere(query);
     if (noMatch) {
-      return { data: [], meta: { page, per_page, total: 0, total_pages: 0 } };
+      const empty = { data: [], meta: { page, per_page, total: 0, total_pages: 0 } };
+      await this.cache.setJson(cacheKey, empty, 45);
+      return empty;
     }
 
     const listInclude = {
@@ -228,7 +251,9 @@ export class BlocksService {
 
     const total = await this.prisma.block.count({ where });
     if (total === 0) {
-      return { data: [], meta: { page, per_page, total: 0, total_pages: 0 } };
+      const empty = { data: [], meta: { page, per_page, total: 0, total_pages: 0 } };
+      await this.cache.setJson(cacheKey, empty, 45);
+      return empty;
     }
 
     const isPriceSort = sort === 'price_asc' || sort === 'price_desc';
@@ -339,10 +364,12 @@ export class BlocksService {
       };
     });
 
-    return {
+    const result = {
       data,
       meta: { page, per_page, total, total_pages: Math.ceil(total / per_page) },
     };
+    await this.cache.setJson(cacheKey, result, 45);
+    return result;
   }
 
   private async listingPriceBoundsByBlockIds(
@@ -405,6 +432,17 @@ export class BlocksService {
       this.catalogMvAvailable = false;
     }
     return this.catalogMvAvailable;
+  }
+
+  async invalidateCatalogCache() {
+    await this.cache.delByPrefix('api:catalog:');
+  }
+
+  private makeCacheKey(prefix: string, query: QueryBlocksDto): string {
+    const entries = Object.entries(query as Record<string, unknown>)
+      .filter(([, value]) => value !== undefined && value !== null && value !== '')
+      .sort(([a], [b]) => a.localeCompare(b));
+    return `${prefix}${JSON.stringify(entries)}`;
   }
 
   private readonly blockDetailInclude = {
@@ -474,7 +512,7 @@ export class BlocksService {
 
   async create(dto: CreateBlockDto) {
     const slug = dto.slug || this.generateSlug(dto.name);
-    return this.prisma.block.create({
+    const created = await this.prisma.block.create({
       data: {
         regionId: dto.regionId,
         name: dto.name,
@@ -490,11 +528,13 @@ export class BlocksService {
         dataSource: this.parseDataSource(dto.dataSource),
       },
     });
+    await this.invalidateCatalogCache();
+    return created;
   }
 
   async update(id: number, dto: Partial<CreateBlockDto>) {
     await this.findOne(id);
-    return this.prisma.block.update({
+    const updated = await this.prisma.block.update({
       where: { id },
       data: {
         ...(dto.slug !== undefined && dto.slug !== '' && { slug: dto.slug }),
@@ -512,11 +552,14 @@ export class BlocksService {
         ...(dto.dataSource !== undefined && { dataSource: this.parseDataSource(dto.dataSource) }),
       },
     });
+    await this.invalidateCatalogCache();
+    return updated;
   }
 
   async remove(id: number) {
     await this.findOne(id);
     await this.prisma.block.delete({ where: { id } });
+    await this.invalidateCatalogCache();
     return { deleted: true };
   }
 

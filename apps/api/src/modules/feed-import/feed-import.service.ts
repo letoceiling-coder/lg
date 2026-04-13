@@ -302,6 +302,7 @@ export class FeedImportService implements OnModuleInit {
 
       try {
         await this.refreshCatalogSearchCache();
+        await this.blocks.invalidateCatalogCache();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         errors.push(`catalog_mv_refresh: ${msg}`);

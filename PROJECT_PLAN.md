@@ -1798,7 +1798,7 @@ export class AdminBlocksController { ... }
 - [x] Materialized view для витрины поиска
 - [ ] Meilisearch / Elasticsearch для быстрых фасетных фильтров (при необходимости)
 - [ ] PostGIS для гео-запросов (радиус, полигон)
-- [ ] Кэширование горячих запросов (Redis)
+- [x] Кэширование горячих запросов (Redis)
 - [ ] Мониторинг (Sentry, Prometheus + Grafana)
 
 ---
