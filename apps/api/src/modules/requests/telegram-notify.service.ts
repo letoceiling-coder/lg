@@ -397,28 +397,30 @@ export class TelegramNotifyService implements OnModuleInit {
     replyMarkup?: Record<string, unknown>,
   ): Promise<boolean> {
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId.toString(),
-          text,
-          ...(parseMode ? { parse_mode: parseMode } : {}),
-          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-          disable_web_page_preview: true,
-        }),
-      });
-      if (!res.ok) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId.toString(),
+            text,
+            ...(parseMode ? { parse_mode: parseMode } : {}),
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+            disable_web_page_preview: true,
+          }),
+        });
+        if (res.ok) return true;
         const body = await res.text().catch(() => '');
-        this.logger.warn(`Telegram sendMessage failed: ${res.status} ${body}`);
-        return false;
+        this.logger.warn(`Telegram sendMessage failed [attempt ${attempt}/3]: ${res.status} ${body}`);
+      } catch (e) {
+        this.logger.warn(
+          `Telegram sendMessage error [attempt ${attempt}/3]: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
-      return true;
-    } catch (e) {
-      this.logger.warn(`Telegram sendMessage error: ${e instanceof Error ? e.message : String(e)}`);
-      return false;
+      await this.sleep(250 * attempt);
     }
+    return false;
   }
 
   private async ensureWebhookConfigured() {
@@ -476,22 +478,24 @@ export class TelegramNotifyService implements OnModuleInit {
     body?: Record<string, unknown>,
   ): Promise<T | null> {
     const url = `https://api.telegram.org/bot${token}/${method}`;
-    try {
-      const res = await fetch(url, {
-        method: body ? 'POST' : 'GET',
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      if (!res.ok) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: body ? 'POST' : 'GET',
+          headers: body ? { 'Content-Type': 'application/json' } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        if (res.ok) return (await res.json()) as T;
         const text = await res.text().catch(() => '');
-        this.logger.warn(`Telegram ${method} failed: ${res.status} ${text}`);
-        return null;
+        this.logger.warn(`Telegram ${method} failed [attempt ${attempt}/3]: ${res.status} ${text}`);
+      } catch (e) {
+        this.logger.warn(
+          `Telegram ${method} error [attempt ${attempt}/3]: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
-      return (await res.json()) as T;
-    } catch (e) {
-      this.logger.warn(`Telegram ${method} error: ${e instanceof Error ? e.message : String(e)}`);
-      return null;
+      await this.sleep(250 * attempt);
     }
+    return null;
   }
 
   private requestTypeRu(t: RequestType): string {
@@ -514,5 +518,9 @@ export class TelegramNotifyService implements OnModuleInit {
       resize_keyboard: true,
       is_persistent: true,
     };
+  }
+
+  private sleep(ms: number) {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 }
