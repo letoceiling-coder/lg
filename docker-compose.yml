@@ -34,7 +34,54 @@ services:
     volumes:
       - minio_data:/data
 
+  # Профиль monitoring: Prometheus + Grafana. Скрап API на хосте: host.docker.internal:3000
+  # Запуск: docker compose --profile monitoring up -d
+  prometheus:
+    profiles: ['monitoring']
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    ports:
+      - '9090:9090'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  meilisearch:
+    profiles: ['search']
+    image: getmeili/meilisearch:v1.11
+    restart: unless-stopped
+    ports:
+      - '7700:7700'
+    environment:
+      MEILI_NO_ANALYTICS: 'true'
+      MEILI_ENV: development
+    volumes:
+      - meili_data:/meili_data
+
+  grafana:
+    profiles: ['monitoring']
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    ports:
+      - '3001:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
 volumes:
   pg_data:
   redis_data:
   minio_data:
+  prometheus_data:
+  grafana_data:
+  meili_data:

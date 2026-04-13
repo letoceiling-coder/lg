@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
@@ -23,10 +25,13 @@ import { CollectionsModule } from './modules/collections/collections.module';
 import { SearchModule } from './modules/search/search.module';
 import { MediaModule } from './modules/media/media.module';
 import { CacheModule } from './common/cache/cache.module';
+import { MonitoringModule } from './monitoring/monitoring.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    SentryModule.forRoot(),
+    MonitoringModule,
     CacheModule,
     PrismaModule,
     HealthModule,
@@ -51,5 +56,6 @@ import { CacheModule } from './common/cache/cache.module';
     SearchModule,
     MediaModule,
   ],
+  providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
 })
 export class AppModule {}

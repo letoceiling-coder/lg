@@ -13,14 +13,20 @@ export class RegionsService {
         id: true,
         code: true,
         name: true,
+        baseUrl: true,
+        publicSiteUrl: true,
         lastImportedAt: true,
       },
     });
     // В БД/фиде коды в нижнем регистре (msk); публичный API отдаёт канонический верхний регистр,
     // чтобы витрина и счётчики стабильно выбирали Москву (MSK), как у TrendAgent.
     return rows.map((r) => ({
-      ...r,
+      id: r.id,
       code: (r.code ?? '').toUpperCase(),
+      name: r.name,
+      baseUrl: r.baseUrl,
+      publicSiteUrl: r.publicSiteUrl,
+      lastImportedAt: r.lastImportedAt,
     }));
   }
 
@@ -32,13 +38,16 @@ export class RegionsService {
 
   async updateAdmin(
     id: number,
-    data: { name?: string; baseUrl?: string | null; isEnabled?: boolean },
+    data: { name?: string; baseUrl?: string | null; publicSiteUrl?: string | null; isEnabled?: boolean },
   ) {
     return this.prisma.feedRegion.update({
       where: { id },
       data: {
         ...(data.name !== undefined ? { name: data.name } : {}),
         ...(data.baseUrl !== undefined ? { baseUrl: data.baseUrl || null } : {}),
+        ...(data.publicSiteUrl !== undefined
+          ? { publicSiteUrl: data.publicSiteUrl?.trim() ? data.publicSiteUrl.trim() : null }
+          : {}),
         ...(data.isEnabled !== undefined ? { isEnabled: data.isEnabled } : {}),
       },
     });
@@ -48,6 +57,7 @@ export class RegionsService {
     code: string;
     name: string;
     baseUrl?: string | null;
+    publicSiteUrl?: string | null;
     isEnabled?: boolean;
   }) {
     const code = dto.code.trim().toLowerCase();
@@ -62,6 +72,10 @@ export class RegionsService {
         baseUrl:
           dto.baseUrl != null && String(dto.baseUrl).trim() !== ''
             ? String(dto.baseUrl).trim()
+            : null,
+        publicSiteUrl:
+          dto.publicSiteUrl != null && String(dto.publicSiteUrl).trim() !== ''
+            ? String(dto.publicSiteUrl).trim()
             : null,
         isEnabled: dto.isEnabled ?? false,
       },

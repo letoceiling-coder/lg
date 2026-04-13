@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: livegrid
+    orgId: 1
+    folder: LiveGrid
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

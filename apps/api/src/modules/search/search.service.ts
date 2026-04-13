@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BlocksService } from '../blocks/blocks.service';
 import { QueryBlocksDto } from '../blocks/dto/query-blocks.dto';
+import { CatalogMeilisearchService } from '../meilisearch/catalog-meilisearch.service';
 
 export type CatalogHintsResult = {
   complexes: Array<{
@@ -27,6 +28,7 @@ export class SearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly blocks: BlocksService,
+    private readonly catalogSearch: CatalogMeilisearchService,
   ) {}
 
   async catalogHints(regionId: number, rawQ: string, limit = 15): Promise<CatalogHintsResult> {
@@ -44,28 +46,58 @@ export class SearchService {
       require_active_listings: true,
     };
 
-    const { where, noMatch } = await this.blocks.buildCatalogBlockWhere(queryDto);
+    const select = {
+      id: true,
+      slug: true,
+      name: true,
+      district: { select: { name: true } },
+      images: { orderBy: { sortOrder: 'asc' as const }, take: 1, select: { url: true } },
+      subways: {
+        orderBy: { distanceTime: 'asc' as const },
+        take: 1,
+        select: { subway: { select: { name: true } } },
+      },
+    } as const;
 
-    const [complexRows, metroRows, districtRows, addressRows] = await Promise.all([
-      noMatch
-        ? Promise.resolve([])
-        : this.prisma.block.findMany({
-            where,
-            take,
-            orderBy: { name: 'asc' },
-            select: {
-              id: true,
-              slug: true,
-              name: true,
-              district: { select: { name: true } },
-              images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
-              subways: {
-                orderBy: { distanceTime: 'asc' },
-                take: 1,
-                select: { subway: { select: { name: true } } },
-              },
-            },
-          }),
+    let complexRows: Array<{
+      id: number;
+      slug: string;
+      name: string;
+      district: { name: string } | null;
+      images: Array<{ url: string }>;
+      subways: Array<{ subway: { name: string } }>;
+    }> = [];
+
+    const useMeili = this.catalogSearch.isEnabled();
+    const meiliIds = useMeili ? await this.catalogSearch.searchBlockIds(regionId, q, take * 4) : null;
+
+    if (useMeili && meiliIds !== null) {
+      const { where, noMatch } = await this.blocks.buildCatalogBlockWhere({ ...queryDto, search: undefined });
+      if (!noMatch && meiliIds.length > 0) {
+        const rows = await this.prisma.block.findMany({
+          where: { AND: [where, { id: { in: meiliIds } }] },
+          take: take * 4,
+          orderBy: { name: 'asc' },
+          select,
+        });
+        const rank = new Map(meiliIds.map((id, i) => [id, i]));
+        complexRows = [...rows]
+          .sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999))
+          .slice(0, take);
+      }
+    } else {
+      const { where, noMatch } = await this.blocks.buildCatalogBlockWhere(queryDto);
+      if (!noMatch) {
+        complexRows = await this.prisma.block.findMany({
+          where,
+          take,
+          orderBy: { name: 'asc' },
+          select,
+        });
+      }
+    }
+
+    const [metroRows, districtRows, addressRows] = await Promise.all([
       this.prisma.subway.findMany({
         where: {
           regionId,

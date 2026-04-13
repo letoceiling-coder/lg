@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Query,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -111,13 +112,19 @@ export class RequestsAdminController {
 @ApiTags('Telegram Bot')
 @Controller('telegram-bot')
 export class TelegramBotController {
+  private readonly logger = new Logger(TelegramBotController.name);
+
   constructor(private readonly telegramNotify: TelegramNotifyService) {}
 
   @Public()
   @Post('webhook')
   @ApiOperation({ summary: 'Telegram webhook endpoint' })
   async webhook(@Body() body: unknown) {
-    await this.telegramNotify.handleWebhookUpdate(body);
+    // Reply to Telegram immediately to avoid webhook timeouts.
+    // Command handling is performed asynchronously.
+    void this.telegramNotify.handleWebhookUpdate(body).catch((e) => {
+      this.logger.error(`Telegram webhook async handler failed: ${e instanceof Error ? e.message : String(e)}`);
+    });
     return { ok: true };
   }
 }

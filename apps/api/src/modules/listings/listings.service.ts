@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, $Enums } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { GeoSpatialService } from '../geo/geo-spatial.service';
 import { QueryListingsDto } from './dto/query-listings.dto';
 import type {
   CreateManualApartmentDto,
@@ -55,12 +56,15 @@ function validateManualApartmentMedia(apt: {
 
 @Injectable()
 export class ListingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly geo: GeoSpatialService,
+  ) {}
 
   async findAll(query: QueryListingsDto) {
     const page = query.page ?? 1;
     const per_page = query.per_page ?? 20;
-    const where = this.buildWhere(query);
+    const where = await this.buildWhere(query);
     const orderBy = this.parseSort(query.sort);
 
     const include = {
@@ -136,14 +140,31 @@ export class ListingsService {
     return listing;
   }
 
-  private buildWhere(query: QueryListingsDto): Prisma.ListingWhereInput {
+  private async buildWhere(query: QueryListingsDto): Promise<Prisma.ListingWhereInput> {
     const where: Prisma.ListingWhereInput = {};
 
     if (query.region_id != null) where.regionId = query.region_id;
+
+    const geoRes = await this.geo.resolveGeoBlockIds({
+      region_id: query.region_id,
+      geo_lat: query.geo_lat,
+      geo_lng: query.geo_lng,
+      geo_radius_m: query.geo_radius_m,
+      geo_polygon: query.geo_polygon,
+      geo_preset: query.geo_preset,
+    });
+    if (geoRes.noMatch) {
+      where.id = { lt: 0 };
+      return where;
+    }
+    const geoIds = geoRes.ids;
+    if (geoIds && query.block_id != null && !geoIds.includes(query.block_id)) {
+      where.id = { lt: 0 };
+      return where;
+    }
     if (query.kind) where.kind = query.kind as $Enums.ListingKind;
     if (query.status) where.status = query.status as $Enums.ListingStatus;
     if (query.data_source) where.dataSource = query.data_source as $Enums.DataSource;
-    if (query.block_id != null) where.blockId = query.block_id;
     if (query.builder_id != null) where.builderId = query.builder_id;
     if (query.district_id != null) where.districtId = query.district_id;
 
@@ -154,9 +175,17 @@ export class ListingsService {
 
     if (query.subway_id != null) {
       where.block = {
-        ...(query.block_id != null ? { id: query.block_id } : {}),
+        ...(query.block_id != null
+          ? { id: query.block_id }
+          : geoIds
+            ? { id: { in: geoIds } }
+            : {}),
         subways: { some: { subwayId: query.subway_id } },
       };
+    } else if (query.block_id != null) {
+      where.blockId = query.block_id;
+    } else if (geoIds) {
+      where.blockId = { in: geoIds };
     }
 
     const apartmentParts = this.buildApartmentWhereParts(query);

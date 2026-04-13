@@ -8,6 +8,7 @@ import {
   type Request as DbRequest,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MetricsService } from '../../monitoring/metrics.service';
 import { ContentService } from '../content/content.service';
 import { UsersService } from '../users/users.service';
 
@@ -32,6 +33,7 @@ export class TelegramNotifyService implements OnModuleInit {
     private readonly content: ContentService,
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
+    private readonly metrics: MetricsService,
   ) {}
 
   async onModuleInit() {
@@ -443,34 +445,91 @@ export class TelegramNotifyService implements OnModuleInit {
     if (parts[0] === 'sr') {
       const regionId = parseInt(parts[1] ?? '', 10);
       if (Number.isFinite(regionId) && regionId > 0) {
-        await this.sendSearchTypeStep(token, callback.chatId, regionId);
+        await this.sendSearchDistrictStep(token, callback.chatId, regionId);
+      }
+      return;
+    }
+    if (parts[0] === 'sd') {
+      const regionId = parseInt(parts[1] ?? '', 10);
+      const districtId = Math.max(0, parseInt(parts[2] ?? '0', 10) || 0);
+      if (Number.isFinite(regionId) && regionId > 0) {
+        await this.sendSearchTypeStep(token, callback.chatId, regionId, districtId);
       }
       return;
     }
     if (parts[0] === 'st') {
       const regionId = parseInt(parts[1] ?? '', 10);
-      const kindCode = (parts[2] ?? 'A').toUpperCase();
+      const oldKindCode = (parts[2] ?? 'A').toUpperCase();
+      const districtId = Math.max(0, parseInt(parts[2] ?? '0', 10) || 0);
+      const kindCode = (parts[3] ?? oldKindCode).toUpperCase();
       if (Number.isFinite(regionId) && regionId > 0) {
-        await this.sendSearchPriceStep(token, callback.chatId, regionId, kindCode);
+        if (parts.length >= 4) {
+          if (kindCode === 'A') {
+            await this.sendSearchRoomsStep(token, callback.chatId, regionId, districtId, kindCode);
+          } else {
+            await this.sendSearchPriceStep(token, callback.chatId, regionId, districtId, kindCode, '0');
+          }
+        } else {
+          // Backward compatibility for old callbacks without district step.
+          await this.sendSearchPriceStep(token, callback.chatId, regionId, 0, kindCode, '0');
+        }
+      }
+      return;
+    }
+    if (parts[0] === 'sm') {
+      const regionId = parseInt(parts[1] ?? '', 10);
+      const districtId = Math.max(0, parseInt(parts[2] ?? '0', 10) || 0);
+      const kindCode = (parts[3] ?? 'A').toUpperCase();
+      const roomCode = (parts[4] ?? '0').toUpperCase();
+      if (Number.isFinite(regionId) && regionId > 0) {
+        await this.sendSearchPriceStep(token, callback.chatId, regionId, districtId, kindCode, roomCode);
       }
       return;
     }
     if (parts[0] === 'sp') {
       const regionId = parseInt(parts[1] ?? '', 10);
-      const kindCode = (parts[2] ?? 'A').toUpperCase();
-      const priceCode = (parts[3] ?? '0').toUpperCase();
+      const oldKindCode = (parts[2] ?? 'A').toUpperCase();
+      const oldPriceCode = (parts[3] ?? '0').toUpperCase();
+      const districtId = Math.max(0, parseInt(parts[2] ?? '0', 10) || 0);
+      const kindCode = (parts[3] ?? oldKindCode).toUpperCase();
+      const roomCode = (parts[4] ?? '0').toUpperCase();
+      const priceCode = (parts[5] ?? oldPriceCode).toUpperCase();
       if (Number.isFinite(regionId) && regionId > 0) {
-        await this.sendSearchResults(token, callback.chatId, regionId, kindCode, priceCode, 1);
+        if (parts.length >= 6) {
+          await this.sendSearchResults(token, callback.chatId, regionId, districtId, kindCode, roomCode, priceCode, 1);
+        } else {
+          // Backward compatibility for old callbacks without district/rooms.
+          await this.sendSearchResults(token, callback.chatId, regionId, 0, kindCode, '0', priceCode, 1);
+        }
       }
       return;
     }
     if (parts[0] === 'ss') {
       const regionId = parseInt(parts[1] ?? '', 10);
-      const kindCode = (parts[2] ?? 'A').toUpperCase();
-      const priceCode = (parts[3] ?? '0').toUpperCase();
-      const page = Math.max(1, parseInt(parts[4] ?? '1', 10) || 1);
+      const oldKindCode = (parts[2] ?? 'A').toUpperCase();
+      const oldPriceCode = (parts[3] ?? '0').toUpperCase();
+      const oldPage = Math.max(1, parseInt(parts[4] ?? '1', 10) || 1);
+      const districtId = Math.max(0, parseInt(parts[2] ?? '0', 10) || 0);
+      const kindCode = (parts[3] ?? oldKindCode).toUpperCase();
+      const roomCode = (parts[4] ?? '0').toUpperCase();
+      const priceCode = (parts[5] ?? oldPriceCode).toUpperCase();
+      const page = Math.max(1, parseInt(parts[6] ?? String(oldPage), 10) || 1);
       if (Number.isFinite(regionId) && regionId > 0) {
-        await this.sendSearchResults(token, callback.chatId, regionId, kindCode, priceCode, page);
+        if (parts.length >= 7) {
+          await this.sendSearchResults(
+            token,
+            callback.chatId,
+            regionId,
+            districtId,
+            kindCode,
+            roomCode,
+            priceCode,
+            page,
+          );
+        } else {
+          // Backward compatibility for old callbacks without district/rooms.
+          await this.sendSearchResults(token, callback.chatId, regionId, 0, kindCode, '0', priceCode, page);
+        }
       }
     }
   }
@@ -502,6 +561,7 @@ export class TelegramNotifyService implements OnModuleInit {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       disable_web_page_preview: true,
     };
+    let lastFailureKind: 'not_ok' | 'http_error' = 'http_error';
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const data = await this.telegramRequest<{ ok: boolean; error_code?: number; description?: string }>(
@@ -510,16 +570,26 @@ export class TelegramNotifyService implements OnModuleInit {
           payload,
         );
         if (data.ok) return true;
+        lastFailureKind = 'not_ok';
         this.logger.warn(
           `Telegram sendMessage failed [attempt ${attempt}/3]: ${data.error_code ?? ''} ${data.description ?? ''}`,
         );
       } catch (e) {
+        if (this.isTelegramBadRequest(e)) {
+          this.logger.warn(
+            `Telegram sendMessage bad request (no retry): ${e instanceof Error ? e.message : String(e)}`,
+          );
+          this.metrics.recordTelegramSendFailure('sendMessage', 'bad_request');
+          return false;
+        }
+        lastFailureKind = 'http_error';
         this.logger.warn(
           `Telegram sendMessage error [attempt ${attempt}/3]: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
       await this.sleep(250 * attempt);
     }
+    this.metrics.recordTelegramSendFailure('sendMessage', lastFailureKind);
     return false;
   }
 
@@ -538,6 +608,7 @@ export class TelegramNotifyService implements OnModuleInit {
       ...(parseMode ? { parse_mode: parseMode } : {}),
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     };
+    let lastFailureKind: 'not_ok' | 'http_error' = 'http_error';
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const data = await this.telegramRequest<{ ok: boolean; error_code?: number; description?: string }>(
@@ -546,16 +617,26 @@ export class TelegramNotifyService implements OnModuleInit {
           payload,
         );
         if (data.ok) return true;
+        lastFailureKind = 'not_ok';
         this.logger.warn(
           `Telegram sendPhoto failed [attempt ${attempt}/3]: ${data.error_code ?? ''} ${data.description ?? ''}`,
         );
       } catch (e) {
+        if (this.isTelegramBadRequest(e)) {
+          this.logger.warn(
+            `Telegram sendPhoto bad request (no retry): ${e instanceof Error ? e.message : String(e)}`,
+          );
+          this.metrics.recordTelegramSendFailure('sendPhoto', 'bad_request');
+          return false;
+        }
+        lastFailureKind = 'http_error';
         this.logger.warn(
           `Telegram sendPhoto error [attempt ${attempt}/3]: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
       await this.sleep(250 * attempt);
     }
+    this.metrics.recordTelegramSendFailure('sendPhoto', lastFailureKind);
     return false;
   }
 
@@ -653,7 +734,34 @@ export class TelegramNotifyService implements OnModuleInit {
     );
   }
 
-  private async sendSearchTypeStep(token: string, chatId: bigint, regionId: number) {
+  private async sendSearchDistrictStep(token: string, chatId: bigint, regionId: number) {
+    const districts = await this.prisma.district.findMany({
+      where: { regionId },
+      orderBy: { name: 'asc' },
+      take: 8,
+      select: { id: true, name: true },
+    });
+    const keyboardRows: Array<Array<{ text: string; callback_data: string }>> = [
+      [{ text: 'Весь город/регион', callback_data: `sd|${regionId}|0` }],
+    ];
+    for (const d of districts) {
+      keyboardRows.push([{ text: d.name, callback_data: `sd|${regionId}|${d.id}` }]);
+    }
+    await this.sendMessage(
+      token,
+      chatId,
+      'Поиск: выберите район (или весь город).',
+      undefined,
+      { inline_keyboard: keyboardRows },
+    );
+  }
+
+  private async sendSearchTypeStep(
+    token: string,
+    chatId: bigint,
+    regionId: number,
+    districtId: number,
+  ) {
     const types = [
       { code: 'A', label: 'Квартиры' },
       { code: 'H', label: 'Дома' },
@@ -663,17 +771,38 @@ export class TelegramNotifyService implements OnModuleInit {
     ];
     const keyboard = {
       inline_keyboard: types.map((t) => [
-        { text: t.label, callback_data: `st|${regionId}|${t.code}` },
+        { text: t.label, callback_data: `st|${regionId}|${districtId}|${t.code}` },
       ]),
     };
     await this.sendMessage(token, chatId, 'Поиск: выберите тип объекта.', undefined, keyboard);
+  }
+
+  private async sendSearchRoomsStep(
+    token: string,
+    chatId: bigint,
+    regionId: number,
+    districtId: number,
+    kindCode: string,
+  ) {
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: 'Любая комнатность', callback_data: `sm|${regionId}|${districtId}|${kindCode}|0` }],
+        [{ text: 'Студия', callback_data: `sm|${regionId}|${districtId}|${kindCode}|S` }],
+        [{ text: '1-комнатная', callback_data: `sm|${regionId}|${districtId}|${kindCode}|1` }],
+        [{ text: '2-комнатная', callback_data: `sm|${regionId}|${districtId}|${kindCode}|2` }],
+        [{ text: '3-комнатная и больше', callback_data: `sm|${regionId}|${districtId}|${kindCode}|3P` }],
+      ],
+    };
+    await this.sendMessage(token, chatId, 'Поиск: выберите комнатность.', undefined, keyboard);
   }
 
   private async sendSearchPriceStep(
     token: string,
     chatId: bigint,
     regionId: number,
+    districtId: number,
     kindCode: string,
+    roomCode: string,
   ) {
     const ranges = [
       { code: '0', label: 'Любая цена' },
@@ -684,7 +813,7 @@ export class TelegramNotifyService implements OnModuleInit {
     ];
     const keyboard = {
       inline_keyboard: ranges.map((r) => [
-        { text: r.label, callback_data: `sp|${regionId}|${kindCode}|${r.code}` },
+        { text: r.label, callback_data: `sp|${regionId}|${districtId}|${kindCode}|${roomCode}|${r.code}` },
       ]),
     };
     await this.sendMessage(token, chatId, 'Поиск: выберите диапазон цены.', undefined, keyboard);
@@ -694,25 +823,34 @@ export class TelegramNotifyService implements OnModuleInit {
     token: string,
     chatId: bigint,
     regionId: number,
+    districtId: number,
     kindCode: string,
+    roomCode: string,
     priceCode: string,
     page: number,
   ) {
     const perPage = 5;
     const kind = this.kindByCode(kindCode);
     const price = this.priceRangeByCode(priceCode);
+    const roomTypeIds = await this.roomTypeIdsByCode(roomCode);
     const where: {
       regionId: number;
+      districtId?: number;
       kind?: Listing['kind'];
       status: Listing['status'];
       isPublished: boolean;
       price?: { gte?: number; lte?: number; not: null };
+      apartment?: { roomTypeId: { in: number[] } };
     } = {
       regionId,
       status: 'ACTIVE',
       isPublished: true,
+      ...(districtId > 0 ? { districtId } : {}),
       ...(kind ? { kind } : {}),
       ...(price ? { price: { ...price, not: null } } : {}),
+      ...(roomTypeIds.length > 0 && kind === 'APARTMENT'
+        ? { apartment: { roomTypeId: { in: roomTypeIds } } }
+        : {}),
     };
     const total = await this.prisma.listing.count({ where });
     if (total === 0) {
@@ -741,7 +879,7 @@ export class TelegramNotifyService implements OnModuleInit {
     await this.sendMessage(
       token,
       chatId,
-      `Результаты поиска — страница ${safePage}/${totalPages}.`,
+      `Результаты поиска (${this.searchSummary(kindCode, roomCode, priceCode, districtId)}) — страница ${safePage}/${totalPages}.`,
       undefined,
       this.quickMenu(),
     );
@@ -750,8 +888,18 @@ export class TelegramNotifyService implements OnModuleInit {
     }
     const nav: Array<Array<{ text: string; callback_data: string }>> = [];
     const line: Array<{ text: string; callback_data: string }> = [];
-    if (safePage > 1) line.push({ text: '⬅️ Назад', callback_data: `ss|${regionId}|${kindCode}|${priceCode}|${safePage - 1}` });
-    if (safePage < totalPages) line.push({ text: 'Далее ➡️', callback_data: `ss|${regionId}|${kindCode}|${priceCode}|${safePage + 1}` });
+    if (safePage > 1) {
+      line.push({
+        text: '⬅️ Назад',
+        callback_data: `ss|${regionId}|${districtId}|${kindCode}|${roomCode}|${priceCode}|${safePage - 1}`,
+      });
+    }
+    if (safePage < totalPages) {
+      line.push({
+        text: 'Далее ➡️',
+        callback_data: `ss|${regionId}|${districtId}|${kindCode}|${roomCode}|${priceCode}|${safePage + 1}`,
+      });
+    }
     if (line.length) nav.push(line);
     if (nav.length) {
       await this.sendMessage(token, chatId, 'Навигация по результатам:', undefined, { inline_keyboard: nav });
@@ -836,8 +984,8 @@ export class TelegramNotifyService implements OnModuleInit {
     const caption = lines.join('\n');
     const photo = this.makePublicUrl(block.images?.[0]?.url ?? null);
     if (photo) {
-      await this.sendPhoto(token, chatId, photo, caption, 'HTML');
-      return;
+      const sentPhoto = await this.sendPhoto(token, chatId, photo, caption, 'HTML');
+      if (sentPhoto) return;
     }
     await this.sendMessage(token, chatId, caption, 'HTML');
   }
@@ -882,8 +1030,8 @@ export class TelegramNotifyService implements OnModuleInit {
       this.makePublicUrl(listing.apartment?.planUrl ?? null) ||
       this.makePublicUrl(listing.block?.images?.[0]?.url ?? null);
     if (photo) {
-      await this.sendPhoto(token, chatId, photo, caption, 'HTML');
-      return;
+      const sentPhoto = await this.sendPhoto(token, chatId, photo, caption, 'HTML');
+      if (sentPhoto) return;
     }
     await this.sendMessage(token, chatId, caption, 'HTML');
   }
@@ -940,6 +1088,91 @@ export class TelegramNotifyService implements OnModuleInit {
     }
   }
 
+  private async roomTypeIdsByCode(code: string): Promise<number[]> {
+    if (!code || code === '0') return [];
+    const rows = await this.prisma.roomType.findMany({
+      select: { id: true, name: true, nameOne: true },
+    });
+    const normalized = (v: string | null | undefined) => (v ?? '').toLowerCase();
+    if (code === 'S') {
+      return rows
+        .filter((r) => {
+          const n = `${normalized(r.name)} ${normalized(r.nameOne)}`;
+          return /студ|studio|0/.test(n);
+        })
+        .map((r) => r.id);
+    }
+    if (code === '1') {
+      return rows
+        .filter((r) => {
+          const n = `${normalized(r.name)} ${normalized(r.nameOne)}`;
+          return /\b1\b|одн|однокомн/.test(n);
+        })
+        .map((r) => r.id);
+    }
+    if (code === '2') {
+      return rows
+        .filter((r) => {
+          const n = `${normalized(r.name)} ${normalized(r.nameOne)}`;
+          return /\b2\b|дву|двухкомн/.test(n);
+        })
+        .map((r) => r.id);
+    }
+    if (code === '3P') {
+      return rows
+        .filter((r) => {
+          const n = `${normalized(r.name)} ${normalized(r.nameOne)}`;
+          return /\b3\b|\b4\b|\b5\b|трехкомн|четырехкомн|многокомн/.test(n);
+        })
+        .map((r) => r.id);
+    }
+    return [];
+  }
+
+  private roomLabelByCode(code: string): string {
+    switch (code) {
+      case 'S':
+        return 'студия';
+      case '1':
+        return '1-комн';
+      case '2':
+        return '2-комн';
+      case '3P':
+        return '3+ комн';
+      default:
+        return 'любая комнатность';
+    }
+  }
+
+  private searchSummary(
+    kindCode: string,
+    roomCode: string,
+    priceCode: string,
+    districtId: number,
+  ): string {
+    const kind = this.kindByCode(kindCode);
+    const kindLabel = kind ? this.kindLabel(kind) : 'любой тип';
+    const roomLabel = kind === 'APARTMENT' ? this.roomLabelByCode(roomCode) : 'комнатность не выбрана';
+    const priceLabel = this.priceLabelByCode(priceCode);
+    const district = districtId > 0 ? `район #${districtId}` : 'весь город';
+    return `${kindLabel}, ${roomLabel}, ${priceLabel}, ${district}`;
+  }
+
+  private priceLabelByCode(code: string): string {
+    switch (code) {
+      case '1':
+        return 'до 5 млн';
+      case '2':
+        return '5-10 млн';
+      case '3':
+        return '10-20 млн';
+      case '4':
+        return 'от 20 млн';
+      default:
+        return 'любая цена';
+    }
+  }
+
   private formatPrice(v: number): string {
     return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v)} ₽`;
   }
@@ -979,6 +1212,11 @@ export class TelegramNotifyService implements OnModuleInit {
       }
     }
     return { label: 'Не указан', url: row.sourceUrl ?? null };
+  }
+
+  private isTelegramBadRequest(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    return /HTTP 400:/i.test(msg);
   }
 
   private async ensureWebhookConfigured() {

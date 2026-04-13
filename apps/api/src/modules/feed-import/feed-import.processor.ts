@@ -1,6 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { MetricsService } from '../../monitoring/metrics.service';
 import { FeedImportService } from './feed-import.service';
 import {
   FEED_IMPORT_QUEUE,
@@ -25,7 +26,10 @@ function isBatchJob(data: FeedImportJobData): data is FeedImportBatchJob {
 export class FeedImportProcessor extends WorkerHost {
   private readonly logger = new Logger(FeedImportProcessor.name);
 
-  constructor(private readonly feedImport: FeedImportService) {
+  constructor(
+    private readonly feedImport: FeedImportService,
+    private readonly metrics: MetricsService,
+  ) {
     super();
   }
 
@@ -35,13 +39,18 @@ export class FeedImportProcessor extends WorkerHost {
       return;
     }
 
-    if (isBatchJob(job.data)) {
-      this.logger.log(`Execute import batch ${job.data.batchId} (${job.data.regionCode})`);
-      await this.feedImport.executeBatch(job.data);
-      return;
+    try {
+      if (isBatchJob(job.data)) {
+        this.logger.log(`Execute import batch ${job.data.batchId} (${job.data.regionCode})`);
+        await this.feedImport.executeBatch(job.data);
+      } else {
+        this.logger.log(`Scheduled import for region ${job.data.regionCode}`);
+        await this.feedImport.runScheduledImport(job.data.regionCode);
+      }
+      this.metrics.recordFeedImportJob('completed');
+    } catch (e) {
+      this.metrics.recordFeedImportJob('failed');
+      throw e;
     }
-
-    this.logger.log(`Scheduled import for region ${job.data.regionCode}`);
-    await this.feedImport.runScheduledImport(job.data.regionCode);
   }
 }

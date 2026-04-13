@@ -11,6 +11,18 @@ import { QueryBlocksDto } from './dto/query-blocks.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { catalogBlockWhereToSql } from './catalog-block-where-sql';
 import { CacheService } from '../../common/cache/cache.service';
+import { GeoSpatialService } from '../geo/geo-spatial.service';
+import { CatalogMeilisearchService } from '../meilisearch/catalog-meilisearch.service';
+
+function intersectBlockIdFilter(current: Prisma.BlockWhereInput['id'], ids: number[]): number[] {
+  if (!current || typeof current !== 'object' || !('in' in current)) {
+    return ids;
+  }
+  const existing = (current as { in: number[] }).in;
+  if (!Array.isArray(existing) || existing.length === 0) return ids;
+  const s = new Set(ids);
+  return existing.filter((id) => s.has(id));
+}
 
 @Injectable()
 export class BlocksService {
@@ -20,6 +32,8 @@ export class BlocksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly geo: GeoSpatialService,
+    private readonly catalogSearch: CatalogMeilisearchService,
   ) {}
 
   /**
@@ -35,6 +49,7 @@ export class BlocksService {
       price_min, price_max,
       district_names, subway_names, builder_names,
       is_promoted, sales_start_from, sales_start_to, block_slugs, require_active_listings,
+      geo_lat, geo_lng, geo_radius_m, geo_polygon, geo_preset,
     } = query;
 
     const where: Prisma.BlockWhereInput = {};
@@ -44,15 +59,43 @@ export class BlocksService {
     if (status && Object.values(BlockStatus).includes(status as BlockStatus)) {
       where.status = status as BlockStatus;
     }
+
+    const geoRes = await this.geo.resolveGeoBlockIds({
+      region_id,
+      geo_lat,
+      geo_lng,
+      geo_radius_m,
+      geo_polygon,
+      geo_preset,
+    });
+    if (geoRes.noMatch) {
+      return { where: {}, noMatch: true };
+    }
+    if (geoRes.ids) {
+      where.id = { in: geoRes.ids };
+    }
+
     if (search?.trim()) {
       const q = search.trim();
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { addresses: { some: { address: { contains: q, mode: 'insensitive' } } } },
-        { district: { name: { contains: q, mode: 'insensitive' } } },
-        { builder: { name: { contains: q, mode: 'insensitive' } } },
-        { subways: { some: { subway: { name: { contains: q, mode: 'insensitive' } } } } },
-      ];
+      let meiliIds: number[] | null = null;
+      if (region_id && this.catalogSearch.isEnabled()) {
+        meiliIds = await this.catalogSearch.searchBlockIds(region_id, q, 2000);
+      }
+      if (meiliIds !== null) {
+        const merged = intersectBlockIdFilter(where.id, meiliIds);
+        if (merged.length === 0) {
+          return { where: {}, noMatch: true };
+        }
+        where.id = { in: merged };
+      } else {
+        where.OR = [
+          { name: { contains: q, mode: 'insensitive' } },
+          { addresses: { some: { address: { contains: q, mode: 'insensitive' } } } },
+          { district: { name: { contains: q, mode: 'insensitive' } } },
+          { builder: { name: { contains: q, mode: 'insensitive' } } },
+          { subways: { some: { subway: { name: { contains: q, mode: 'insensitive' } } } } },
+        ];
+      }
     }
     if (subway_id) {
       where.subways = { some: { subwayId: subway_id } };
@@ -130,9 +173,18 @@ export class BlocksService {
         by: ['blockId'],
         where: priceWhere,
       });
-      const priceFilteredBlockIds = qualifying
+      let priceFilteredBlockIds = qualifying
         .map((r) => r.blockId)
         .filter((id): id is number => id != null);
+
+      const curIn =
+        where.id && typeof where.id === 'object' && 'in' in where.id
+          ? (where.id as { in: number[] }).in
+          : undefined;
+      if (curIn?.length) {
+        const set = new Set(priceFilteredBlockIds);
+        priceFilteredBlockIds = curIn.filter((id) => set.has(id));
+      }
 
       if (priceFilteredBlockIds.length === 0) {
         return { where, noMatch: true };

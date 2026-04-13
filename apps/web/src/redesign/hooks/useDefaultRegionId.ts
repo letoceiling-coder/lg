@@ -2,7 +2,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
 
-export type RegionRow = { id: number; code: string; name?: string; lastImportedAt?: string | null };
+export type RegionRow = {
+  id: number;
+  code: string;
+  name?: string;
+  baseUrl?: string | null;
+  publicSiteUrl?: string | null;
+  lastImportedAt?: string | null;
+};
 
 const STORAGE_KEY = 'lg_region_id';
 

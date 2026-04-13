@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsInt, IsString, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsInt, IsString, IsNumber, Min, Max } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
 export class QueryListingsDto {
@@ -33,4 +33,10 @@ export class QueryListingsDto {
   @ApiPropertyOptional() @IsOptional() @IsString() sort?: string;
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number) page?: number = 1;
   @ApiPropertyOptional({ default: 20 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number) per_page?: number = 20;
+
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) geo_lat?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) geo_lng?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(1) @Max(200_000) @Type(() => Number) geo_radius_m?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() geo_polygon?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() geo_preset?: string;
 }

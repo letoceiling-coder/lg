@@ -71,6 +71,12 @@ const RedesignCatalog = () => {
     }
   }, [urlRegionId, setStoredRegionId]);
 
+  const geoPreset = searchParams.get('geo_preset') ?? undefined;
+  const geoPolygon = searchParams.get('geo_polygon') ?? undefined;
+  const geoLat = searchParams.get('geo_lat');
+  const geoLng = searchParams.get('geo_lng');
+  const geoRadius = searchParams.get('geo_radius_m');
+
   const typeParam = searchParams.get('type');
   const searchParam = searchParams.get('search');
   useEffect(() => {
@@ -119,6 +125,13 @@ const RedesignCatalog = () => {
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
       if (filters.subway.length) sp.set('subway_names', filters.subway.join(','));
       if (filters.builder.length) sp.set('builder_names', filters.builder.join(','));
+      if (geoPreset) sp.set('geo_preset', geoPreset);
+      if (geoPolygon) sp.set('geo_polygon', geoPolygon);
+      if (geoLat && geoLng && geoRadius) {
+        sp.set('geo_lat', geoLat);
+        sp.set('geo_lng', geoLng);
+        sp.set('geo_radius_m', geoRadius);
+      }
       return apiGet<{
         data: ApiBlockListRow[];
         meta: { page: number; per_page: number; total: number; total_pages: number };

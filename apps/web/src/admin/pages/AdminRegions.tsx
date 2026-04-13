@@ -9,6 +9,7 @@ type FeedRegion = {
   code: string;
   name: string;
   baseUrl: string | null;
+  publicSiteUrl: string | null;
   isEnabled: boolean;
   lastImportedAt: string | null;
 };
@@ -38,6 +39,7 @@ export default function AdminRegions() {
   const [newCode, setNewCode] = useState('');
   const [newName, setNewName] = useState('');
   const [newBaseUrl, setNewBaseUrl] = useState('');
+  const [newPublicSiteUrl, setNewPublicSiteUrl] = useState('');
   const [newEnabled, setNewEnabled] = useState(true);
   const [probeByRegion, setProbeByRegion] = useState<Record<number, FeedProbeResult | null>>({});
   const [probingRegionId, setProbingRegionId] = useState<number | null>(null);
@@ -74,6 +76,7 @@ export default function AdminRegions() {
       setNewCode('');
       setNewName('');
       setNewBaseUrl('');
+      setNewPublicSiteUrl('');
       setNewEnabled(true);
     },
   });
@@ -173,6 +176,18 @@ export default function AdminRegions() {
               disabled={!canManage}
             />
           </div>
+          <div className="sm:col-span-2 lg:col-span-1">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Публичный URL витрины
+            </label>
+            <input
+              className="w-full border rounded-lg px-2 py-2 bg-background text-xs"
+              value={newPublicSiteUrl}
+              onChange={(e) => setNewPublicSiteUrl(e.target.value)}
+              placeholder="https://belgorod.… или пусто"
+              disabled={!canManage}
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -243,6 +258,20 @@ export default function AdminRegions() {
                         setDraft((prev) => ({
                           ...prev,
                           [r.id]: { ...prev[r.id], baseUrl: e.target.value || null },
+                        }))
+                      }
+                    />
+                  </td>
+                  <td className="p-3">
+                    <input
+                      className="w-full border rounded-lg px-2 py-1.5 bg-background text-xs"
+                      value={d.publicSiteUrl ?? ''}
+                      placeholder="https://…"
+                      disabled={!canManage}
+                      onChange={(e) =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          [r.id]: { ...prev[r.id], publicSiteUrl: e.target.value || null },
                         }))
                       }
                     />

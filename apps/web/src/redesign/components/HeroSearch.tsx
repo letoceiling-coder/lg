@@ -176,7 +176,12 @@ const HeroSearch = () => {
 
   const onBelgorodClick = useCallback(() => {
     if (belgorodRegion) {
-      setStoredRegionId(isBelgorodActive ? null : belgorodRegion.id);
+      if (isBelgorodActive) {
+        setStoredRegionId(null);
+        return;
+      }
+      setStoredRegionId(belgorodRegion.id);
+      navigate(`/catalog?region_id=${belgorodRegion.id}&geo_preset=belgorod`);
       return;
     }
     navigate('/belgorod');

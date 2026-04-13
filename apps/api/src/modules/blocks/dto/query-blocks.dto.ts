@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsInt, IsString, Min, IsBoolean, IsDateString } from 'class-validator';
+import { IsOptional, IsInt, IsString, Min, IsBoolean, IsDateString, IsNumber, Max } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
 function toBool(v: unknown): boolean | undefined {
@@ -129,4 +129,36 @@ export class QueryBlocksDto {
   @Transform(({ value }) => toBool(value))
   @IsBoolean()
   include_empty_blocks?: boolean;
+
+  @ApiPropertyOptional({ description: 'Широта центра поиска по радиусу (WGS84), вместе с geo_lng и geo_radius_m' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  geo_lat?: number;
+
+  @ApiPropertyOptional({ description: 'Долгота центра поиска по радиусу (WGS84)' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  geo_lng?: number;
+
+  @ApiPropertyOptional({ description: 'Радиус в метрах (PostGIS ST_DWithin)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(200_000)
+  @Type(() => Number)
+  geo_radius_m?: number;
+
+  @ApiPropertyOptional({
+    description: 'GeoJSON Polygon как JSON-строка: coordinates [[[lng,lat],...]]',
+  })
+  @IsOptional()
+  @IsString()
+  geo_polygon?: string;
+
+  @ApiPropertyOptional({ description: 'Встроенный полигон (например belgorod для geo_preset=belgorod)' })
+  @IsOptional()
+  @IsString()
+  geo_preset?: string;
 }

@@ -23,6 +23,12 @@ export class CreateFeedRegionDto {
   @MaxLength(500)
   baseUrl?: string | null;
 
+  @ApiPropertyOptional({ description: 'Публичный URL витрины (мультирегион)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  publicSiteUrl?: string | null;
+
   @ApiPropertyOptional({ description: 'Показывать в гео-селекторе на сайте' })
   @IsOptional()
   @IsBoolean()

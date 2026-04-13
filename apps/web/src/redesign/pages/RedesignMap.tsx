@@ -1,6 +1,6 @@
-import { useState, useMemo, useDeferredValue } from 'react';
+import { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import MapSearch from '@/redesign/components/MapSearch';
 import FilterSidebar from '@/redesign/components/FilterSidebar';
@@ -19,11 +19,29 @@ const PER_PAGE = 200;
 const statusMap: Record<string, string> = { building: 'BUILDING', completed: 'COMPLETED', planned: 'PROJECT' };
 
 const RedesignMap = () => {
+  const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState<CatalogFilters>({ ...defaultFilters });
   const [active, setActive] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  const { data: regionId, isLoading: regionLoading } = useDefaultRegionId();
+  const geoPreset = searchParams.get('geo_preset') ?? undefined;
+  const geoPolygon = searchParams.get('geo_polygon') ?? undefined;
+  const geoLat = searchParams.get('geo_lat');
+  const geoLng = searchParams.get('geo_lng');
+  const geoRadius = searchParams.get('geo_radius_m');
+
+  const { data: defaultRegionId, setStoredRegionId, isLoading: regionLoading } = useDefaultRegionId();
+  const urlRegionIdRaw = searchParams.get('region_id');
+  const urlRegionId = urlRegionIdRaw ? parseInt(urlRegionIdRaw, 10) : NaN;
+  const regionId =
+    Number.isFinite(urlRegionId) && urlRegionId > 0 ? urlRegionId : defaultRegionId;
+
+  useEffect(() => {
+    if (Number.isFinite(urlRegionId) && urlRegionId > 0) {
+      setStoredRegionId(urlRegionId);
+    }
+  }, [urlRegionId, setStoredRegionId]);
+
   const deferredSearch = useDeferredValue(filters.search);
 
   const blocksQuery = useQuery({
@@ -38,6 +56,11 @@ const RedesignMap = () => {
       filters.district,
       filters.subway,
       filters.builder,
+      geoPreset,
+      geoPolygon,
+      geoLat,
+      geoLng,
+      geoRadius,
     ],
     queryFn: async () => {
       const sp = new URLSearchParams();
@@ -56,6 +79,13 @@ const RedesignMap = () => {
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
       if (filters.subway.length) sp.set('subway_names', filters.subway.join(','));
       if (filters.builder.length) sp.set('builder_names', filters.builder.join(','));
+      if (geoPreset) sp.set('geo_preset', geoPreset);
+      if (geoPolygon) sp.set('geo_polygon', geoPolygon);
+      if (geoLat && geoLng && geoRadius) {
+        sp.set('geo_lat', geoLat);
+        sp.set('geo_lng', geoLng);
+        sp.set('geo_radius_m', geoRadius);
+      }
       return apiGet<{ data: ApiBlockListRow[] }>(`/blocks?${sp}`);
     },
     enabled: regionId != null,
