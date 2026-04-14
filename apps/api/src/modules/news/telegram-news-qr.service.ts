@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -39,7 +38,7 @@ export class TelegramNewsQrAuthService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  startQrLogin(): { flowId: string } {
+  startQrLogin(): { flowId: string; reused?: boolean } {
     const apiIdRaw = (process.env.TG_API_ID ?? '').trim();
     const apiHash = (process.env.TG_API_HASH ?? '').trim();
     const apiId = Number(apiIdRaw);
@@ -53,9 +52,8 @@ export class TelegramNewsQrAuthService {
       const age = Date.now() - this.active.startedAt;
       const terminal = ['success', 'error', 'cancelled'].includes(this.active.phase);
       if (!terminal || age < 15_000) {
-        throw new ConflictException(
-          'Уже запущено подключение по QR. Дождитесь завершения или отмените его.',
-        );
+        // Reuse current flow so UI can resume polling/cancel even after page reload.
+        return { flowId: this.active.flowId, reused: true };
       }
     }
 

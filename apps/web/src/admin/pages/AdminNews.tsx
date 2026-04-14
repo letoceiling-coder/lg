@@ -360,11 +360,15 @@ export default function AdminNews() {
   }, [tgQrFlowId, tgQrPoll, qc]);
 
   const tgQrStartMut = useMutation({
-    mutationFn: () => apiPost<{ flowId: string }>('/admin/news/telegram-qr/start'),
+    mutationFn: () => apiPost<{ flowId: string; reused?: boolean }>('/admin/news/telegram-qr/start'),
     onSuccess: (d) => {
       tgQrHandled.current = null;
       setTgQrFlowId(d.flowId);
-      toast.message('Откройте Telegram на телефоне → Настройки → Устройства → Подключить устройство → Сканировать QR.');
+      toast.message(
+        d.reused
+          ? 'Подхватили уже запущенное подключение по QR. Можно дождаться завершения или отменить.'
+          : 'Откройте Telegram на телефоне → Настройки → Устройства → Подключить устройство → Сканировать QR.',
+      );
     },
     onError: (e: unknown) => toast.error(formatApiError(e)),
   });
