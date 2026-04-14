@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
 import { Heart, Printer, FolderPlus } from 'lucide-react';
@@ -8,7 +8,7 @@ import { formatPrice } from '@/redesign/data/mock-data';
 import { Button } from '@/components/ui/button';
 import { useFavorites } from '@/shared/hooks/useFavorites';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { apiPost } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/api';
 import { toast } from '@/components/ui/sonner';
 
 function listingPrice(p: unknown): number {
@@ -23,7 +23,21 @@ const Favorites = () => {
   const { isAuthenticated } = useAuth();
   const qc = useQueryClient();
   const [savingCollection, setSavingCollection] = useState(false);
+  const [addingItemId, setAddingItemId] = useState<number | null>(null);
   const rows = favorites ?? [];
+
+  const collectionsQuery = useQuery({
+    queryKey: ['collections'],
+    queryFn: () => apiGet<Array<{ id: string; name: string }>>('/collections'),
+    enabled: isAuthenticated,
+  });
+
+  const ensureCollectionByName = async (rawName: string): Promise<{ id: string; name: string }> => {
+    const name = rawName.trim();
+    const existing = collectionsQuery.data?.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (existing) return existing;
+    return apiPost<{ id: string; name: string }>('/collections', { name });
+  };
 
   const saveFavoritesAsCollection = async () => {
     if (!isAuthenticated || rows.length === 0) return;
@@ -57,6 +71,40 @@ const Favorites = () => {
       toast.error(e instanceof Error ? e.message : 'Не удалось создать подборку');
     } finally {
       setSavingCollection(false);
+    }
+  };
+
+  const saveSingleFavoriteToCollection = async (row: (typeof rows)[number]) => {
+    if (!isAuthenticated) return;
+    const suggested = collectionsQuery.data?.[0]?.name ?? '';
+    const name = window.prompt('В какую подборку сохранить объект? (введите название существующей или новой)', suggested);
+    if (!name?.trim()) return;
+    setAddingItemId(row.id);
+    try {
+      const col = await ensureCollectionByName(name);
+      let added = 0;
+      if (row.blockId != null) {
+        try {
+          await apiPost(`/collections/${col.id}/items`, { kind: 'BLOCK', entityId: row.blockId });
+          added += 1;
+        } catch {
+          /* duplicate */
+        }
+      } else if (row.listingId != null) {
+        try {
+          await apiPost(`/collections/${col.id}/items`, { kind: 'LISTING', entityId: row.listingId });
+          added += 1;
+        } catch {
+          /* duplicate */
+        }
+      }
+      void qc.invalidateQueries({ queryKey: ['collections'] });
+      if (added > 0) toast.success(`Добавлено в подборку «${col.name}»`);
+      else toast.message(`Объект уже есть в подборке «${col.name}»`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось добавить в подборку');
+    } finally {
+      setAddingItemId(null);
     }
   };
 
@@ -123,6 +171,17 @@ const Favorites = () => {
                   </Link>
                   {sub ? <p className="text-xs text-muted-foreground mb-3">{sub}</p> : null}
                   <div className="mt-auto pt-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="print:hidden text-xs h-8 px-0 mr-3"
+                      disabled={!isAuthenticated || addingItemId === row.id}
+                      title={!isAuthenticated ? 'Войдите в аккаунт' : undefined}
+                      onClick={() => void saveSingleFavoriteToCollection(row)}
+                    >
+                      {addingItemId === row.id ? 'Сохранение…' : 'В подборку'}
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"

@@ -56,6 +56,33 @@ runtime_checks() {
     echo "ERROR: catalog-counts invalid"
     exit 1
   }
+
+  echo "=== GET /api/v1/metrics ==="
+  local metrics
+  if [ -n "${METRICS_BEARER_TOKEN:-}" ]; then
+    metrics="$(curl -sf --max-time 15 -H "Authorization: Bearer ${METRICS_BEARER_TOKEN}" "http://127.0.0.1:3000/api/v1/metrics")"
+  else
+    metrics="$(curl -sf --max-time 15 "http://127.0.0.1:3000/api/v1/metrics")"
+  fi
+  echo "$metrics" | head -c 300
+  echo ""
+  echo "$metrics" | grep -q 'process_cpu_user_seconds_total' || {
+    echo "ERROR: metrics endpoint invalid"
+    exit 1
+  }
+
+  if command -v docker >/dev/null 2>&1; then
+    echo "=== Monitoring containers ==="
+    curl -sf --max-time 15 "http://127.0.0.1:9090/-/ready" >/dev/null || {
+      echo "ERROR: Prometheus not ready on :9090"
+      exit 1
+    }
+    curl -sf --max-time 15 "http://127.0.0.1:3001/api/health" >/dev/null || {
+      echo "ERROR: Grafana not ready on :3001"
+      exit 1
+    }
+    echo "Prometheus/Grafana ready"
+  fi
 }
 
 if [ "$MODE" = "runtime" ]; then

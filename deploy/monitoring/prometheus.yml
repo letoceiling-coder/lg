@@ -2,12 +2,18 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 scrape_configs:
   # API на хост-машине (Docker Desktop / Linux с host-gateway). При METRICS_BEARER_TOKEN
-  # добавьте в job: authorization: credentials_file: /etc/prometheus/metrics_bearer.txt
+  # deploy-full.sh создаёт /etc/prometheus/secrets/metrics_bearer.txt при наличии токена.
   - job_name: lg-api
     metrics_path: /api/v1/metrics
     scheme: http
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics_bearer.txt
     static_configs:
       - targets:
           - host.docker.internal:3000

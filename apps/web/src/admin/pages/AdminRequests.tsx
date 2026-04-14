@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardList, Loader2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
-import { apiGet, apiUrl, getAccessToken } from '@/lib/api';
+import { ApiError, apiGet, apiPut } from '@/lib/api';
 
 interface RequestRow {
   id: number;
@@ -14,6 +14,7 @@ interface RequestRow {
   sourceUrl: string | null;
   createdAt: string;
   assignedUser: { id: string; fullName: string | null; email: string } | null;
+  assignedTo: string | null;
 }
 
 interface PaginatedResult {
@@ -25,72 +26,114 @@ const STATUS_OPTIONS = [
   { value: '', label: 'Все' },
   { value: 'NEW', label: 'Новые' },
   { value: 'IN_PROGRESS', label: 'В работе' },
-  { value: 'DONE', label: 'Закрыты' },
+  { value: 'COMPLETED', label: 'Закрыты' },
   { value: 'CANCELLED', label: 'Отменены' },
 ] as const;
 
 const statusStyle: Record<string, string> = {
   NEW: 'bg-blue-100 text-blue-700',
   IN_PROGRESS: 'bg-amber-100 text-amber-700',
-  DONE: 'bg-green-100 text-green-700',
+  COMPLETED: 'bg-green-100 text-green-700',
   CANCELLED: 'bg-muted text-muted-foreground',
 };
 
 const statusLabel: Record<string, string> = {
-  NEW: 'Новая', IN_PROGRESS: 'В работе', DONE: 'Закрыта', CANCELLED: 'Отменена',
+  NEW: 'Новая', IN_PROGRESS: 'В работе', COMPLETED: 'Закрыта', CANCELLED: 'Отменена',
 };
 
 const typeLabel: Record<string, string> = {
   CONSULTATION: 'Консультация',
-  VIEWING: 'Просмотр',
   CALLBACK: 'Обратный звонок',
   MORTGAGE: 'Ипотека',
-  OTHER: 'Другое',
+  SELECTION: 'Подбор',
+  CONTACT: 'Контакты',
 };
 
-async function updateRequestStatus(id: number, status: string) {
-  const token = getAccessToken();
-  const res = await fetch(apiUrl(`/admin/requests/${id}`), {
-    method: 'PUT',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ status }),
-  });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
+type AssigneeRow = { id: string; role: string; fullName: string | null; email: string | null };
+
+function parseApiMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    try {
+      const j = JSON.parse(e.message) as { message?: string | string[] };
+      if (Array.isArray(j.message)) return j.message.join(', ');
+      if (typeof j.message === 'string') return j.message;
+    } catch {
+      return e.message || String(e.status);
+    }
+  }
+  return e instanceof Error ? e.message : 'Ошибка';
 }
 
 export default function AdminRequests() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
+  const [assigneeFilter, setAssigneeFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [mode, setMode] = useState<'table' | 'kanban'>('table');
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('IN_PROGRESS');
+  const [bulkAssignee, setBulkAssignee] = useState('');
+  const [draggedId, setDraggedId] = useState<number | null>(null);
   const perPage = 20;
 
+  const assigneesQuery = useQuery({
+    queryKey: ['admin', 'requests', 'assignees'],
+    queryFn: () => apiGet<AssigneeRow[]>('/admin/requests/assignees'),
+    staleTime: 60_000,
+  });
+
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['admin', 'requests', statusFilter, page],
+    queryKey: ['admin', 'requests', statusFilter, assigneeFilter, page],
     queryFn: () => {
       const sp = new URLSearchParams();
       sp.set('page', String(page));
       sp.set('per_page', String(perPage));
       if (statusFilter) sp.set('status', statusFilter);
+      if (assigneeFilter) sp.set('assigned_to', assigneeFilter);
       return apiGet<PaginatedResult>(`/admin/requests?${sp}`);
     },
     staleTime: 15_000,
   });
 
   const mutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) => updateRequestStatus(id, status),
+    mutationFn: ({ id, status, assignedTo }: { id: number; status: string; assignedTo?: string | null }) =>
+      apiPut(`/admin/requests/${id}`, { status, ...(assignedTo !== undefined ? { assignedTo } : {}) }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'requests'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'requests'] });
     },
   });
 
   const meta = data?.meta;
   const rows = data?.data ?? [];
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const kanbanColumns: Array<{ status: 'NEW' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'; title: string }> = [
+    { status: 'NEW', title: 'Новые' },
+    { status: 'IN_PROGRESS', title: 'В работе' },
+    { status: 'COMPLETED', title: 'Завершены' },
+    { status: 'CANCELLED', title: 'Отменены' },
+  ];
+  const byStatus = useMemo(() => {
+    const m: Record<string, RequestRow[]> = { NEW: [], IN_PROGRESS: [], COMPLETED: [], CANCELLED: [] };
+    for (const r of rows) {
+      if (!m[r.status]) m[r.status] = [];
+      m[r.status].push(r);
+    }
+    return m;
+  }, [rows]);
+
+  const applyBulk = async () => {
+    if (selectedIds.length === 0 || mutation.isPending) return;
+    await Promise.all(
+      selectedIds.map((id) =>
+        mutation.mutateAsync({
+          id,
+          status: bulkStatus,
+          assignedTo: bulkAssignee === '' ? undefined : bulkAssignee === 'none' ? null : bulkAssignee,
+        }),
+      ),
+    );
+    setSelectedIds([]);
+  };
 
   return (
     <div className="p-6 max-w-6xl">
@@ -108,8 +151,8 @@ export default function AdminRequests() {
         </button>
       </div>
 
-      {/* Status filter tabs */}
-      <div className="flex items-center gap-2 mb-5 flex-wrap">
+      {/* Filters + mode */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         {STATUS_OPTIONS.map(opt => (
           <button
             key={opt.value}
@@ -123,6 +166,67 @@ export default function AdminRequests() {
             {opt.label}
           </button>
         ))}
+        <select
+          value={assigneeFilter}
+          onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }}
+          className="h-8 rounded-lg border px-2 text-xs bg-background"
+        >
+          <option value="">Все исполнители</option>
+          <option value="none">Не назначены</option>
+          {(assigneesQuery.data ?? []).map((a) => (
+            <option key={a.id} value={a.id}>
+              {(a.fullName ?? a.email ?? a.id).trim()} ({a.role})
+            </option>
+          ))}
+        </select>
+        <div className="ml-auto flex items-center gap-1 rounded-lg border p-1">
+          <button
+            type="button"
+            onClick={() => setMode('table')}
+            className={`text-xs px-2 py-1 rounded ${mode === 'table' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+          >
+            Таблица
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('kanban')}
+            className={`text-xs px-2 py-1 rounded ${mode === 'kanban' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+          >
+            Kanban
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-background border rounded-xl p-3 mb-4 flex flex-wrap items-end gap-2">
+        <div className="text-xs text-muted-foreground">Выбрано: {selectedIds.length}</div>
+        <select
+          value={bulkStatus}
+          onChange={(e) => setBulkStatus(e.target.value as typeof bulkStatus)}
+          className="h-8 rounded-lg border px-2 text-xs bg-background"
+        >
+          {STATUS_OPTIONS.filter((o) => o.value).map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <select
+          value={bulkAssignee}
+          onChange={(e) => setBulkAssignee(e.target.value)}
+          className="h-8 rounded-lg border px-2 text-xs bg-background"
+        >
+          <option value="">Не менять исполнителя</option>
+          <option value="none">Снять назначение</option>
+          {(assigneesQuery.data ?? []).map((a) => (
+            <option key={a.id} value={a.id}>{(a.fullName ?? a.email ?? a.id).trim()}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={selectedIds.length === 0 || mutation.isPending}
+          onClick={() => void applyBulk()}
+          className="h-8 px-3 rounded-lg text-xs bg-primary text-primary-foreground disabled:opacity-50"
+        >
+          Применить к выбранным
+        </button>
       </div>
 
       {isLoading && (
@@ -137,13 +241,23 @@ export default function AdminRequests() {
         </div>
       )}
 
-      {rows.length > 0 && (
+      {rows.length > 0 && mode === 'table' && (
         <div className="bg-background border rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="px-4 py-3 font-medium">#</th>
+                  <th className="px-4 py-3 font-medium w-8">
+                    <input
+                      type="checkbox"
+                      checked={rows.length > 0 && rows.every((r) => selectedSet.has(r.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedIds(rows.map((r) => r.id));
+                        else setSelectedIds([]);
+                      }}
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">Имя</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
                   <th className="px-4 py-3 font-medium">Тип</th>
@@ -157,6 +271,15 @@ export default function AdminRequests() {
                 {rows.map(r => (
                   <tr key={r.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-4 py-3 text-muted-foreground">{r.id}</td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedSet.has(r.id)}
+                        onChange={(e) =>
+                          setSelectedIds((prev) => e.target.checked ? [...new Set([...prev, r.id])] : prev.filter((x) => x !== r.id))
+                        }
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <span className="font-medium">{r.name || '—'}</span>
                       {r.comment && (
@@ -185,6 +308,23 @@ export default function AdminRequests() {
                       >
                         {STATUS_OPTIONS.filter(o => o.value !== '').map(o => (
                           <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={r.assignedTo ?? 'none'}
+                        onChange={(e) =>
+                          mutation.mutate({
+                            id: r.id,
+                            status: r.status,
+                            assignedTo: e.target.value === 'none' ? null : e.target.value,
+                          })
+                        }
+                        disabled={mutation.isPending}
+                        className="text-xs border rounded-lg px-2 py-1 bg-background ml-2"
+                      >
+                        <option value="none">Без назначения</option>
+                        {(assigneesQuery.data ?? []).map((a) => (
+                          <option key={a.id} value={a.id}>{(a.fullName ?? a.email ?? a.id).trim()}</option>
                         ))}
                       </select>
                     </td>
@@ -220,6 +360,48 @@ export default function AdminRequests() {
           )}
         </div>
       )}
+
+      {rows.length > 0 && mode === 'kanban' && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+          {kanbanColumns.map((col) => (
+            <div
+              key={col.status}
+              className="bg-background border rounded-xl p-2 min-h-[320px]"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => {
+                if (!draggedId) return;
+                mutation.mutate({ id: draggedId, status: col.status });
+                setDraggedId(null);
+              }}
+            >
+              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
+                {col.title} ({byStatus[col.status]?.length ?? 0})
+              </div>
+              <div className="space-y-2 mt-2">
+                {(byStatus[col.status] ?? []).map((r) => (
+                  <div
+                    key={r.id}
+                    draggable
+                    onDragStart={() => setDraggedId(r.id)}
+                    className="rounded-lg border p-2 text-xs bg-background cursor-grab active:cursor-grabbing"
+                  >
+                    <div className="font-semibold mb-1">#{r.id} {r.name || 'Без имени'}</div>
+                    <div className="text-muted-foreground">{typeLabel[r.type] ?? r.type}</div>
+                    <div className="mt-1">{r.phone}</div>
+                    <div className="mt-1">
+                      {r.assignedUser?.fullName ?? r.assignedUser?.email ?? 'Без исполнителя'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mutation.isError ? (
+        <p className="text-sm text-destructive mt-3">{parseApiMessage(mutation.error)}</p>
+      ) : null}
     </div>
   );
 }

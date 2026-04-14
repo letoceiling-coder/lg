@@ -11,7 +11,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { useFavorites } from '@/shared/hooks/useFavorites';
 import { useCompare } from '@/shared/hooks/useCompare';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
-import { ApiError, apiDelete, apiGet, apiPost } from '@/lib/api';
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUrl } from '@/lib/api';
 
 function parseApiMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -129,11 +129,25 @@ const Profile = () => {
     },
   });
 
+  const renameCollectionMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      apiPut<CollectionListRow>(`/collections/${id}`, { name }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['collections'] });
+      if (expandedCollectionId) {
+        void qc.invalidateQueries({ queryKey: ['collections', 'detail', expandedCollectionId] });
+      }
+    },
+  });
+
   const deleteCollectionItemMutation = useMutation({
     mutationFn: ({ collectionId, itemId }: { collectionId: string; itemId: string }) =>
       apiDelete(`/collections/${collectionId}/items/${itemId}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['collections'] });
+      if (expandedCollectionId) {
+        void qc.invalidateQueries({ queryKey: ['collections', 'detail', expandedCollectionId] });
+      }
     },
   });
 
@@ -356,6 +370,33 @@ const Profile = () => {
                             <span className="truncate">{c.name}</span>
                             <span className="text-xs text-muted-foreground font-normal shrink-0">({c._count.items})</span>
                           </button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            title="Переименовать"
+                            disabled={renameCollectionMutation.isPending}
+                            onClick={() => {
+                              const next = prompt('Новое название подборки:', c.name);
+                              if (!next?.trim()) return;
+                              renameCollectionMutation.mutate({ id: c.id, name: next.trim() });
+                            }}
+                          >
+                            Имя
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            asChild
+                            title="Скачать подборку в PDF"
+                          >
+                            <a href={apiUrl(`/collections/${c.id}/pdf`)} target="_blank" rel="noreferrer">
+                              PDF
+                            </a>
+                          </Button>
                           <Button
                             type="button"
                             variant="ghost"

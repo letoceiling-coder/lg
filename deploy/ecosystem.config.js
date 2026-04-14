@@ -24,6 +24,11 @@ module.exports = {
         TRENDAGENT_REGIONS: 'msk',
         TELEGRAM_WEBHOOK_URL:
           process.env.TELEGRAM_WEBHOOK_URL || `${publicSiteUrl}/api/v1/telegram-bot/webhook`,
+        SENTRY_DSN_API: process.env.SENTRY_DSN_API || process.env.SENTRY_DSN || '',
+        SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT || 'production',
+        SENTRY_TRACES_SAMPLE_RATE: process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1',
+        SENTRY_RELEASE: process.env.SENTRY_RELEASE || '',
+        METRICS_BEARER_TOKEN: process.env.METRICS_BEARER_TOKEN || '',
         /** Локальные JSON вместо HTTP (путь к корню data: .../TrendAgent/data) */
         FEED_LOCAL_DIR: '',
         /** true — не регистрировать BullMQ cron (если импорт только shell-cron) */

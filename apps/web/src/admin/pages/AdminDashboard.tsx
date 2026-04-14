@@ -5,9 +5,17 @@ import { FileText, Image, Users, Building2, Home, Layers, Plus, ClipboardList, H
 import { Link } from 'react-router-dom';
 import { apiGet } from '@/lib/api';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { CartesianGrid, Line, LineChart, XAxis, YAxis, Bar, BarChart } from 'recharts';
 
 type Counters = { blocks: number; apartments: number; builders: number; regions: number };
 type RequestRow = { id: number; name: string | null; phone: string | null; status: string; createdAt: string };
+type DashboardStats = {
+  periodDays: number;
+  trend: Array<{ date: string; created: number; completed: number; cancelled: number }>;
+  statusTotals: { NEW: number; IN_PROGRESS: number; COMPLETED: number; CANCELLED: number };
+  workload: Array<{ assigneeId: string | null; assigneeName: string; role: string | null; openRequests: number }>;
+};
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -24,6 +32,12 @@ export default function AdminDashboard() {
   const { data: recentRequests } = useQuery({
     queryKey: ['admin', 'requests', 'recent'],
     queryFn: () => apiGet<{ data: RequestRow[] }>('/admin/requests?per_page=5&page=1'),
+    staleTime: 30_000,
+  });
+
+  const { data: dashboardStats } = useQuery({
+    queryKey: ['admin', 'stats', 'dashboard'],
+    queryFn: () => apiGet<DashboardStats>('/admin/stats/dashboard?days=14'),
     staleTime: 30_000,
   });
 
@@ -76,6 +90,53 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {dashboardStats ? (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+          <div className="bg-background border rounded-2xl p-4">
+            <h2 className="font-semibold mb-3">Динамика заявок ({dashboardStats.periodDays} дн.)</h2>
+            <ChartContainer
+              className="h-[240px] w-full"
+              config={{
+                created: { label: 'Создано', color: '#2563eb' },
+                completed: { label: 'Закрыто', color: '#16a34a' },
+                cancelled: { label: 'Отменено', color: '#9ca3af' },
+              }}
+            >
+              <LineChart data={dashboardStats.trend}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="date" tickFormatter={(v) => String(v).slice(5)} />
+                <YAxis allowDecimals={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Line type="monotone" dataKey="created" stroke="var(--color-created)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="completed" stroke="var(--color-completed)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="cancelled" stroke="var(--color-cancelled)" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ChartContainer>
+          </div>
+          <div className="bg-background border rounded-2xl p-4">
+            <h2 className="font-semibold mb-3">Нагрузка по исполнителям</h2>
+            <ChartContainer
+              className="h-[240px] w-full"
+              config={{ openRequests: { label: 'Открытых', color: '#f59e0b' } }}
+            >
+              <BarChart data={dashboardStats.workload.slice(0, 8)}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="assigneeName" tickFormatter={(v) => String(v).slice(0, 10)} />
+                <YAxis allowDecimals={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="openRequests" fill="var(--color-openRequests)" radius={4} />
+              </BarChart>
+            </ChartContainer>
+            <div className="grid grid-cols-2 gap-2 text-xs mt-3">
+              <div className="rounded-lg border p-2">Новые: <b>{dashboardStats.statusTotals.NEW}</b></div>
+              <div className="rounded-lg border p-2">В работе: <b>{dashboardStats.statusTotals.IN_PROGRESS}</b></div>
+              <div className="rounded-lg border p-2">Закрыто: <b>{dashboardStats.statusTotals.COMPLETED}</b></div>
+              <div className="rounded-lg border p-2">Отменено: <b>{dashboardStats.statusTotals.CANCELLED}</b></div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Recent requests */}
       {recentRequests?.data && recentRequests.data.length > 0 && (

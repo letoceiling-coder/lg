@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CollectionItemKind, Prisma } from '@prisma/client';
+import PDFDocument from 'pdfkit';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -73,6 +74,20 @@ export class CollectionsService {
     if (res.count === 0) throw new NotFoundException('Подборка не найдена');
   }
 
+  async update(userId: string, id: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) throw new BadRequestException('Укажите название');
+    const updated = await this.prisma.userCollection.updateMany({
+      where: { id, userId },
+      data: { name: trimmed },
+    });
+    if (updated.count === 0) throw new NotFoundException('Подборка не найдена');
+    return this.prisma.userCollection.findFirst({
+      where: { id, userId },
+      include: { _count: { select: { items: true } } },
+    });
+  }
+
   async addItem(userId: string, collectionId: string, kind: CollectionItemKind, entityId: number) {
     const col = await this.prisma.userCollection.findFirst({
       where: { id: collectionId, userId },
@@ -110,5 +125,43 @@ export class CollectionsService {
       where: { id: itemId, collectionId },
     });
     if (res.count === 0) throw new NotFoundException('Элемент не найден');
+  }
+
+  async exportPdf(userId: string, id: string): Promise<Buffer> {
+    const col = await this.getOne(userId, id);
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ size: 'A4', margin: 48 });
+    doc.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+
+    doc.fontSize(21).text(`Подборка: ${col.name}`);
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#666666').text(`Позиций: ${col.items.length}`);
+    doc.fillColor('#000000');
+    doc.moveDown();
+
+    if (col.items.length === 0) {
+      doc.fontSize(12).text('Подборка пустая.');
+    } else {
+      for (const [idx, item] of col.items.entries()) {
+        doc.fontSize(12).text(`${idx + 1}. ${item.title}`);
+        doc.fontSize(10).fillColor('#555555').text(item.kind === CollectionItemKind.BLOCK ? 'ЖК' : 'Объявление');
+        if (item.kind === CollectionItemKind.BLOCK && item.slug) {
+          doc.text(`URL: https://lg.livegrid.ru/complex/${item.slug}`);
+        } else if (item.kind === CollectionItemKind.LISTING) {
+          doc.text(`URL: https://lg.livegrid.ru/apartment/${item.entityId}`);
+        }
+        doc.fillColor('#000000');
+        doc.moveDown(0.5);
+      }
+    }
+
+    doc.moveDown();
+    doc.fontSize(9).fillColor('#888888').text(`Сформировано: ${new Date().toLocaleString('ru-RU')}`);
+    doc.end();
+
+    return await new Promise<Buffer>((resolve, reject) => {
+      doc.once('end', () => resolve(Buffer.concat(chunks)));
+      doc.once('error', reject);
+    });
   }
 }

@@ -1,6 +1,6 @@
 import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Public } from '../../auth/decorators';
+import { Public, Roles } from '../../auth/decorators';
 import { StatsService } from './stats.service';
 
 @ApiTags('Stats')
@@ -24,5 +24,19 @@ export class StatsController {
       throw new BadRequestException('region_id is required');
     }
     return this.service.listingKindCounts(regionId);
+  }
+}
+
+@ApiTags('Admin / Stats')
+@Controller('admin/stats')
+export class StatsAdminController {
+  constructor(private readonly service: StatsService) {}
+
+  @Get('dashboard')
+  @Roles('manager')
+  @ApiOperation({ summary: 'Admin dashboard KPI and trend data' })
+  dashboard(@Query('days') daysRaw?: string) {
+    const days = daysRaw ? Number(daysRaw) : 14;
+    return this.service.getAdminDashboardStats(days);
   }
 }

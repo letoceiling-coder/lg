@@ -75,7 +75,8 @@ export default function AdminListings() {
   const [sourceTab, setSourceTab] = useState<'feed' | 'manual'>('feed');
   const [kindTab, setKindTab] = useState<'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING'>('APARTMENT');
   const perPage = 30;
-  const canManage = user?.role === 'admin' || user?.role === 'editor';
+  const canManageManual = user?.role === 'admin' || user?.role === 'editor' || user?.role === 'agent';
+  const canPublish = user?.role === 'admin' || user?.role === 'editor';
 
   const { data: regions } = useQuery({
     queryKey: ['regions'],
@@ -154,7 +155,7 @@ export default function AdminListings() {
           </div>
         </div>
         {sourceTab === 'manual' ? (
-          canManage ? (
+          canManageManual ? (
             <Button type="button" className="shrink-0" asChild>
               <Link
                 to={
@@ -397,7 +398,7 @@ export default function AdminListings() {
                         <select
                           className="h-8 rounded-md border bg-background px-2 text-xs"
                           value={(r.status ?? 'DRAFT') as ListingStatus}
-                          disabled={updateMutation.isPending || !canManage}
+                          disabled={updateMutation.isPending || !canManageManual}
                           onChange={(e) =>
                             updateMutation.mutate({
                               id: r.id,
@@ -415,7 +416,7 @@ export default function AdminListings() {
                         <input
                           type="checkbox"
                           checked={Boolean(r.isPublished)}
-                          disabled={updateMutation.isPending || !canManage}
+                          disabled={updateMutation.isPending || !canPublish}
                           onChange={(e) =>
                             updateMutation.mutate({
                               id: r.id,
@@ -441,7 +442,7 @@ export default function AdminListings() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      {sourceTab === 'manual' && isManual && canManage ? (
+                      {sourceTab === 'manual' && isManual && canManageManual ? (
                         <td className="px-4 py-2 text-right whitespace-nowrap">
                           <Link
                             to={

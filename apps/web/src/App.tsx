@@ -116,11 +116,11 @@ const AppRoutes = () => (
     <Route path="/news/:slug" element={<NewsDetail />} />
 
     {/* Admin — protected, requires editor+ role */}
-    <Route path="/admin" element={<RequireAuth roles={['admin', 'editor', 'manager']}><AdminLayout /></RequireAuth>}>
-      <Route index element={<AdminDashboard />} />
+    <Route path="/admin" element={<RequireAuth roles={['admin', 'editor', 'manager', 'agent']}><AdminLayout /></RequireAuth>}>
+      <Route index element={<RequireAuth roles={['admin', 'editor', 'manager']}><AdminDashboard /></RequireAuth>} />
       <Route path="pages" element={<RequireAuth roles={['admin', 'editor']}><AdminPages /></RequireAuth>} />
       <Route path="page-editor/:slug" element={<RequireAuth roles={['admin', 'editor']}><AdminPageEditor /></RequireAuth>} />
-      <Route path="requests" element={<AdminRequests />} />
+      <Route path="requests" element={<RequireAuth roles={['admin', 'editor', 'manager']}><AdminRequests /></RequireAuth>} />
       <Route path="telegram-notify" element={<RequireAuth roles={['admin']}><AdminTelegramNotify /></RequireAuth>} />
       <Route path="audit" element={<RequireAuth roles={['admin']}><AdminAudit /></RequireAuth>} />
       <Route path="blocks" element={<RequireAuth roles={['admin', 'editor']}><AdminBlocks /></RequireAuth>} />
@@ -128,16 +128,16 @@ const AppRoutes = () => (
       <Route path="builders" element={<RequireAuth roles={['admin', 'editor']}><AdminBuilders /></RequireAuth>} />
       <Route path="buildings" element={<RequireAuth roles={['admin', 'editor']}><AdminBuildings /></RequireAuth>} />
       <Route path="listings" element={<AdminListings />} />
-      <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualListing /></RequireAuth>} />
-      <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualListing /></RequireAuth>} />
-      <Route path="listings/manual-house/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualHouse /></RequireAuth>} />
-      <Route path="listings/manual-house/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualHouse /></RequireAuth>} />
-      <Route path="listings/manual-land/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualLand /></RequireAuth>} />
-      <Route path="listings/manual-land/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualLand /></RequireAuth>} />
-      <Route path="listings/manual-commercial/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualCommercial /></RequireAuth>} />
-      <Route path="listings/manual-commercial/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualCommercial /></RequireAuth>} />
-      <Route path="listings/manual-parking/new" element={<RequireAuth roles={['admin', 'editor']}><AdminManualParking /></RequireAuth>} />
-      <Route path="listings/manual-parking/:listingId/edit" element={<RequireAuth roles={['admin', 'editor']}><AdminManualParking /></RequireAuth>} />
+      <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
+      <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
+      <Route path="listings/manual-house/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualHouse /></RequireAuth>} />
+      <Route path="listings/manual-house/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualHouse /></RequireAuth>} />
+      <Route path="listings/manual-land/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualLand /></RequireAuth>} />
+      <Route path="listings/manual-land/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualLand /></RequireAuth>} />
+      <Route path="listings/manual-commercial/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualCommercial /></RequireAuth>} />
+      <Route path="listings/manual-commercial/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualCommercial /></RequireAuth>} />
+      <Route path="listings/manual-parking/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualParking /></RequireAuth>} />
+      <Route path="listings/manual-parking/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualParking /></RequireAuth>} />
       <Route path="feed-import" element={<RequireAuth roles={['admin', 'editor']}><AdminFeedImport /></RequireAuth>} />
       <Route path="news" element={<RequireAuth roles={['admin', 'editor']}><AdminNews /></RequireAuth>} />
       <Route path="regions" element={<RequireAuth roles={['admin', 'editor']}><AdminRegions /></RequireAuth>} />

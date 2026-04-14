@@ -9,15 +9,15 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
 
 const navItems = [
-  { to: '/admin', icon: LayoutDashboard, label: 'Дашборд', end: true },
+  { to: '/admin', icon: LayoutDashboard, label: 'Дашборд', end: true, roles: ['admin', 'editor', 'manager'] },
   { to: '/admin/pages', icon: FileText, label: 'Страницы', roles: ['admin', 'editor'] },
-  { to: '/admin/requests', icon: ClipboardList, label: 'Заявки' },
+  { to: '/admin/requests', icon: ClipboardList, label: 'Заявки', roles: ['admin', 'editor', 'manager'] },
   { to: '/admin/telegram-notify', icon: BellRing, label: 'Telegram уведомления команды', roles: ['admin'] },
   { to: '/admin/audit', icon: History, label: 'Журнал действий', roles: ['admin'] },
   { to: '/admin/blocks', icon: Building2, label: 'ЖК', roles: ['admin', 'editor'] },
   { to: '/admin/builders', icon: HardHat, label: 'Застройщики', roles: ['admin', 'editor'] },
   { to: '/admin/buildings', icon: Building, label: 'Корпуса', roles: ['admin', 'editor'] },
-  { to: '/admin/listings', icon: Home, label: 'Квартиры' },
+  { to: '/admin/listings', icon: Home, label: 'Квартиры', roles: ['admin', 'editor', 'manager', 'agent'] },
   { to: '/admin/feed-import', icon: Download, label: 'Импорт фидов', roles: ['admin', 'editor'] },
   { to: '/admin/reference', icon: BookOpen, label: 'Справочники', roles: ['admin', 'editor'] },
   { to: '/admin/regions', icon: Globe, label: 'Регионы', roles: ['admin', 'editor'] },

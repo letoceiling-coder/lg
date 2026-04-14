@@ -1,0 +1,22 @@
+groups:
+  - name: lg-api-alerts
+    interval: 30s
+    rules:
+      - alert: LgApiDown
+        expr: up{job="lg-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LiveGrid API is down"
+          description: "Prometheus cannot scrape lg-api for more than 2 minutes."
+
+      - alert: LgApiHigh5xxRate
+        expr: rate(http_requests_total{job="lg-api",status=~"5.."}[5m]) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate"
+          description: "lg-api returns >0.2 req/s 5xx during 10 minutes."
+

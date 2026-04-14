@@ -72,7 +72,20 @@ fi
 nginx -t && nginx -s reload
 echo "  nginx reloaded OK"
 
-# ── 8. Verify ──
+# ── 8. Monitoring stack ──
+echo "→ Starting monitoring stack (Prometheus + Grafana)..."
+mkdir -p deploy/monitoring/secrets
+printf '%s' "${METRICS_BEARER_TOKEN:-}" > deploy/monitoring/secrets/metrics_bearer.txt
+chmod 600 deploy/monitoring/secrets/metrics_bearer.txt || true
+if command -v docker >/dev/null 2>&1; then
+  docker compose --profile monitoring up -d prometheus grafana || {
+    echo "WARN: monitoring containers failed to start"
+  }
+else
+  echo "WARN: docker is not installed; monitoring profile skipped"
+fi
+
+# ── 9. Verify ──
 echo ""
 echo "=== Deploy complete ==="
 pm2 status

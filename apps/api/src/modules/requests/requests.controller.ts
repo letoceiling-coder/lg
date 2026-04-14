@@ -74,15 +74,24 @@ export class RequestsAdminController {
   @Roles('manager')
   @ApiOperation({ summary: 'Admin: list requests (paginated)' })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'assigned_to', required: false, description: 'UUID assignee id or "none"' })
   @ApiQuery({ name: 'page', required: false, schema: { default: 1 } })
   @ApiQuery({ name: 'per_page', required: false, schema: { default: 20 } })
   findAll(
     @CurrentUser('sub') _operatorId: string,
     @Query('status') status?: string,
+    @Query('assigned_to') assignedTo?: string,
     @Query('page') page?: number,
     @Query('per_page') perPage?: number,
   ) {
-    return this.service.findAll(status, page, perPage);
+    return this.service.findAll(status, assignedTo, page, perPage);
+  }
+
+  @Get('assignees')
+  @Roles('manager')
+  @ApiOperation({ summary: 'Admin: list assignees for requests (manager/agent/editor)' })
+  listAssignees() {
+    return this.service.listAssignees();
   }
 
   @Get(':id')

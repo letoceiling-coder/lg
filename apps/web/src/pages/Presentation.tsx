@@ -1,29 +1,38 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Printer, MapPin, Building2, ExternalLink } from 'lucide-react';
+import { Printer, MapPin, Building2, ExternalLink, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
-import { apiGetOrNull } from '@/lib/api';
-import type { ApiBlockDetail } from '@/redesign/lib/blocks-from-api';
+import { apiGetOrNull, apiUrl } from '@/lib/api';
 
 const PLACEHOLDER = '/placeholder.svg';
+
+type ApiPresentation = {
+  slug: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  address: string | null;
+  metro: string | null;
+  builder: string | null;
+  generatedAt: string;
+};
 
 const Presentation = () => {
   const { slug } = useParams<{ slug: string }>();
 
   const blockQuery = useQuery({
-    queryKey: ['block', 'presentation', slug],
-    queryFn: () => apiGetOrNull<ApiBlockDetail>(`/blocks/${encodeURIComponent(slug || '')}`),
+    queryKey: ['presentation', slug],
+    queryFn: () => apiGetOrNull<ApiPresentation>(`/presentations/${encodeURIComponent(slug || '')}`),
     enabled: Boolean(slug),
   });
 
-  const b = blockQuery.data;
-  const image = b?.images?.[0]?.url ?? PLACEHOLDER;
-  const address = b?.addresses?.[0]?.address ?? '—';
-  const metro = b?.subways?.[0];
-  const metroLine = metro ? `${metro.subway.name}${metro.distanceTime != null ? ` · ${metro.distanceTime} мин` : ''}` : '—';
-  const builder = b?.builder?.name ?? '—';
+  const p = blockQuery.data;
+  const image = p?.imageUrl ?? PLACEHOLDER;
+  const address = p?.address ?? '—';
+  const metroLine = p?.metro ?? '—';
+  const builder = p?.builder ?? '—';
 
   if (!slug) {
     return (
@@ -45,7 +54,7 @@ const Presentation = () => {
     );
   }
 
-  if (!b) {
+  if (!p) {
     return (
       <div className="min-h-screen bg-background">
         <RedesignHeader />
@@ -66,19 +75,27 @@ const Presentation = () => {
       <article className="max-w-[800px] mx-auto px-4 py-8 print:py-4 print:max-w-none">
         <div className="print:hidden flex flex-wrap items-center justify-between gap-3 mb-6">
           <Button variant="outline" size="sm" asChild>
-            <Link to={`/complex/${b.slug}`}>
+            <Link to={`/complex/${p.slug}`}>
               <ExternalLink className="w-4 h-4 mr-2" />
               Страница ЖК
             </Link>
           </Button>
-          <Button type="button" size="sm" onClick={() => window.print()}>
-            <Printer className="w-4 h-4 mr-2" />
-            Печать / PDF
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" asChild>
+              <a href={apiUrl(`/presentations/${encodeURIComponent(p.slug)}/pdf`)}>
+                <Download className="w-4 h-4 mr-2" />
+                Скачать PDF
+              </a>
+            </Button>
+            <Button type="button" size="sm" onClick={() => window.print()}>
+              <Printer className="w-4 h-4 mr-2" />
+              Печать
+            </Button>
+          </div>
         </div>
 
         <header className="mb-6 print:mb-4">
-          <h1 className="text-2xl sm:text-3xl font-bold print:text-2xl">{b.name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold print:text-2xl">{p.name}</h1>
           <p className="text-sm text-muted-foreground mt-1 print:text-foreground">Краткая презентация для клиента</p>
         </header>
 
@@ -86,9 +103,9 @@ const Presentation = () => {
           <img src={image} alt="" className="w-full max-h-[320px] object-cover print:max-h-[240px]" />
         </div>
 
-        {b.description?.trim() ? (
+        {p.description?.trim() ? (
           <div className="prose prose-sm dark:prose-invert max-w-none mb-8 print:mb-6 text-foreground/90 whitespace-pre-wrap">
-            {b.description.trim()}
+            {p.description.trim()}
           </div>
         ) : null}
 

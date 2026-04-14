@@ -27,138 +27,152 @@ export class ListingsAdminController {
   ) {}
 
   @Get()
-  @Roles('manager')
+  @Roles('agent')
   @ApiOperation({ summary: 'Админ-список объявлений с фильтрами/пагинацией' })
-  findAll(@Query() query: QueryListingsDto) {
-    return this.service.findAll(query);
+  findAll(
+    @Query() query: QueryListingsDto,
+    @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.service.findAll(query, { userId, role });
   }
 
   @Post('manual-apartment')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Создать ручное объявление квартиры (data_source=MANUAL)' })
   async createManualApartment(
     @Body() dto: CreateManualApartmentDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    const created = await this.service.createManualApartment(dto);
+    const created = await this.service.createManualApartment(dto, userId, role);
     await this.audit.log(userId, 'listing', created.id, 'CREATE', undefined, created);
     return created;
   }
 
   @Post('manual-house')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Создать ручное объявление дома (data_source=MANUAL)' })
   async createManualHouse(
     @Body() dto: CreateManualHouseDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    const created = await this.service.createManualHouse(dto);
+    const created = await this.service.createManualHouse(dto, userId, role);
     await this.audit.log(userId, 'listing', created.id, 'CREATE', undefined, created);
     return created;
   }
 
   @Post('manual-land')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Создать ручное объявление участка (data_source=MANUAL)' })
   async createManualLand(
     @Body() dto: CreateManualLandDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    const created = await this.service.createManualLand(dto);
+    const created = await this.service.createManualLand(dto, userId, role);
     await this.audit.log(userId, 'listing', created.id, 'CREATE', undefined, created);
     return created;
   }
 
   @Post('manual-commercial')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Создать ручное коммерческое объявление (data_source=MANUAL)' })
   async createManualCommercial(
     @Body() dto: CreateManualCommercialDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    const created = await this.service.createManualCommercial(dto);
+    const created = await this.service.createManualCommercial(dto, userId, role);
     await this.audit.log(userId, 'listing', created.id, 'CREATE', undefined, created);
     return created;
   }
 
   @Post('manual-parking')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Создать ручное парковочное объявление (data_source=MANUAL)' })
   async createManualParking(
     @Body() dto: CreateManualParkingDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    const created = await this.service.createManualParking(dto);
+    const created = await this.service.createManualParking(dto, userId, role);
     await this.audit.log(userId, 'listing', created.id, 'CREATE', undefined, created);
     return created;
   }
 
   @Patch(':id/manual-apartment')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Обновить ручное объявление квартиры (только MANUAL)' })
   async updateManualApartment(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateManualApartmentDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
     const oldData = await this.service.findOne(id);
-    const updated = await this.service.updateManualApartment(id, dto);
+    const updated = await this.service.updateManualApartment(id, dto, userId, role);
     await this.audit.log(userId, 'listing', id, 'UPDATE', oldData, updated);
     return updated;
   }
 
   @Patch(':id/manual-house')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Обновить ручное объявление дома (только MANUAL + HOUSE)' })
   async updateManualHouse(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateManualHouseDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
     const oldData = await this.service.findOne(id);
-    const updated = await this.service.updateManualHouse(id, dto);
+    const updated = await this.service.updateManualHouse(id, dto, userId, role);
     await this.audit.log(userId, 'listing', id, 'UPDATE', oldData, updated);
     return updated;
   }
 
   @Patch(':id/manual-land')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Обновить ручное объявление участка (только MANUAL + LAND)' })
   async updateManualLand(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateManualLandDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
     const oldData = await this.service.findOne(id);
-    const updated = await this.service.updateManualLand(id, dto);
+    const updated = await this.service.updateManualLand(id, dto, userId, role);
     await this.audit.log(userId, 'listing', id, 'UPDATE', oldData, updated);
     return updated;
   }
 
   @Patch(':id/manual-commercial')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Обновить ручное коммерческое объявление (только MANUAL + COMMERCIAL)' })
   async updateManualCommercial(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateManualCommercialDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
     const oldData = await this.service.findOne(id);
-    const updated = await this.service.updateManualCommercial(id, dto);
+    const updated = await this.service.updateManualCommercial(id, dto, userId, role);
     await this.audit.log(userId, 'listing', id, 'UPDATE', oldData, updated);
     return updated;
   }
 
   @Patch(':id/manual-parking')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Обновить ручное парковочное объявление (только MANUAL + PARKING)' })
   async updateManualParking(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateManualParkingDto,
     @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
   ) {
     const oldData = await this.service.findOne(id);
-    const updated = await this.service.updateManualParking(id, dto);
+    const updated = await this.service.updateManualParking(id, dto, userId, role);
     await this.audit.log(userId, 'listing', id, 'UPDATE', oldData, updated);
     return updated;
   }
@@ -178,11 +192,15 @@ export class ListingsAdminController {
   }
 
   @Delete(':id')
-  @Roles('editor')
+  @Roles('agent')
   @ApiOperation({ summary: 'Удалить объявление (только MANUAL)' })
-  async deleteManual(@Param('id', ParseIntPipe) id: number, @CurrentUser('sub') userId: string) {
+  async deleteManual(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
     const oldData = await this.service.findOne(id);
-    const result = await this.service.deleteManualListing(id);
+    const result = await this.service.deleteManualListing(id, userId, role);
     await this.audit.log(userId, 'listing', id, 'DELETE', oldData, null);
     return result;
   }

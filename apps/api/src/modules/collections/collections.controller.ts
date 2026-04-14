@@ -6,11 +6,16 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 import { CurrentUser } from '../../auth/decorators';
 import { AddCollectionItemDto } from './dto/add-collection-item.dto';
 import { CreateCollectionDto } from './dto/create-collection.dto';
+import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { CollectionsService } from './collections.service';
 
 @ApiTags('Collections')
@@ -43,6 +48,16 @@ export class CollectionsController {
     return this.service.remove(userId, id);
   }
 
+  @Put(':id')
+  @ApiOperation({ summary: 'Переименовать подборку' })
+  update(
+    @CurrentUser('sub') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCollectionDto,
+  ) {
+    return this.service.update(userId, id, dto.name);
+  }
+
   @Post(':collectionId/items')
   @ApiOperation({ summary: 'Добавить ЖК или объявление в подборку' })
   addItem(
@@ -61,5 +76,19 @@ export class CollectionsController {
     @Param('itemId', ParseUUIDPipe) itemId: string,
   ) {
     return this.service.removeItem(userId, collectionId, itemId);
+  }
+
+  @Get(':id/pdf')
+  @ApiOperation({ summary: 'Скачать подборку в PDF' })
+  async downloadPdf(
+    @CurrentUser('sub') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const data = await this.service.exportPdf(userId, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=\"collection-${id}.pdf\"`);
+    res.setHeader('Content-Length', String(data.length));
+    return new StreamableFile(data);
   }
 }

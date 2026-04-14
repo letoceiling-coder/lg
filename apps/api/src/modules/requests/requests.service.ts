@@ -85,11 +85,16 @@ export class RequestsService {
     });
   }
 
-  async findAll(status?: string, page = 1, perPage = 20) {
-    const where =
-      status !== undefined && status !== ''
-        ? { status: this.parseStatus(status) }
-        : {};
+  async findAll(status?: string, assignedTo?: string, page = 1, perPage = 20) {
+    const where: Prisma.RequestWhereInput = {};
+    if (status !== undefined && status !== '') {
+      where.status = this.parseStatus(status);
+    }
+    if (assignedTo === 'none') {
+      where.assignedTo = null;
+    } else if (assignedTo) {
+      where.assignedTo = assignedTo;
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.request.findMany({
@@ -126,6 +131,22 @@ export class RequestsService {
       throw new NotFoundException(`Request ${id} not found`);
     }
     return row;
+  }
+
+  async listAssignees() {
+    return this.prisma.user.findMany({
+      where: {
+        role: { in: ['manager', 'agent', 'editor', 'admin'] },
+        isActive: true,
+      },
+      orderBy: [{ role: 'asc' }, { fullName: 'asc' }, { email: 'asc' }],
+      select: {
+        id: true,
+        role: true,
+        fullName: true,
+        email: true,
+      },
+    });
   }
 
   async updateStatus(

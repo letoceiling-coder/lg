@@ -20,6 +20,7 @@ import type {
 } from './dto/manual-parking.dto';
 
 const MEDIA_LIB_PREFIX = '/uploads/media/';
+type ActorContext = { userId: string; role: string };
 
 function assertMediaLibraryUrl(u: string | undefined | null, label: string) {
   if (u == null || u === '') return;
@@ -61,10 +62,14 @@ export class ListingsService {
     private readonly geo: GeoSpatialService,
   ) {}
 
-  async findAll(query: QueryListingsDto) {
+  async findAll(query: QueryListingsDto, actor?: ActorContext) {
     const page = query.page ?? 1;
     const per_page = query.per_page ?? 20;
     const where = await this.buildWhere(query);
+    if (actor?.role === 'agent') {
+      where.dataSource = 'MANUAL';
+      where.externalId = { startsWith: this.agentExternalIdPrefix(actor.userId) };
+    }
     const orderBy = this.parseSort(query.sort);
 
     const include = {
@@ -281,7 +286,7 @@ export class ListingsService {
     }
   }
 
-  async createManualApartment(dto: CreateManualApartmentDto) {
+  async createManualApartment(dto: CreateManualApartmentDto, actorUserId?: string, actorRole?: string) {
     const region = await this.prisma.feedRegion.findUnique({
       where: { id: dto.regionId },
       select: { id: true },
@@ -299,7 +304,9 @@ export class ListingsService {
       }
     }
 
-    const externalId = `manual-${randomUUID()}`;
+    const externalId = actorRole === 'agent' && actorUserId
+      ? `${this.agentExternalIdPrefix(actorUserId)}${randomUUID()}`
+      : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const a = dto.apartment;
     validateManualApartmentMedia(a);
@@ -343,7 +350,7 @@ export class ListingsService {
     });
   }
 
-  async createManualHouse(dto: CreateManualHouseDto) {
+  async createManualHouse(dto: CreateManualHouseDto, actorUserId?: string, actorRole?: string) {
     const region = await this.prisma.feedRegion.findUnique({
       where: { id: dto.regionId },
       select: { id: true },
@@ -361,7 +368,9 @@ export class ListingsService {
       }
     }
 
-    const externalId = `manual-${randomUUID()}`;
+    const externalId = actorRole === 'agent' && actorUserId
+      ? `${this.agentExternalIdPrefix(actorUserId)}${randomUUID()}`
+      : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const h = dto.house;
 
@@ -397,7 +406,7 @@ export class ListingsService {
     });
   }
 
-  async createManualLand(dto: CreateManualLandDto) {
+  async createManualLand(dto: CreateManualLandDto, actorUserId?: string, actorRole?: string) {
     const region = await this.prisma.feedRegion.findUnique({
       where: { id: dto.regionId },
       select: { id: true },
@@ -415,7 +424,9 @@ export class ListingsService {
       }
     }
 
-    const externalId = `manual-${randomUUID()}`;
+    const externalId = actorRole === 'agent' && actorUserId
+      ? `${this.agentExternalIdPrefix(actorUserId)}${randomUUID()}`
+      : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const l = dto.land;
 
@@ -447,7 +458,7 @@ export class ListingsService {
     });
   }
 
-  async createManualCommercial(dto: CreateManualCommercialDto) {
+  async createManualCommercial(dto: CreateManualCommercialDto, actorUserId?: string, actorRole?: string) {
     const region = await this.prisma.feedRegion.findUnique({
       where: { id: dto.regionId },
       select: { id: true },
@@ -465,7 +476,9 @@ export class ListingsService {
       }
     }
 
-    const externalId = `manual-${randomUUID()}`;
+    const externalId = actorRole === 'agent' && actorUserId
+      ? `${this.agentExternalIdPrefix(actorUserId)}${randomUUID()}`
+      : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const c = dto.commercial;
 
@@ -497,7 +510,7 @@ export class ListingsService {
     });
   }
 
-  async createManualParking(dto: CreateManualParkingDto) {
+  async createManualParking(dto: CreateManualParkingDto, actorUserId?: string, actorRole?: string) {
     const region = await this.prisma.feedRegion.findUnique({
       where: { id: dto.regionId },
       select: { id: true },
@@ -515,7 +528,9 @@ export class ListingsService {
       }
     }
 
-    const externalId = `manual-${randomUUID()}`;
+    const externalId = actorRole === 'agent' && actorUserId
+      ? `${this.agentExternalIdPrefix(actorUserId)}${randomUUID()}`
+      : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const p = dto.parking;
 
@@ -547,8 +562,8 @@ export class ListingsService {
     });
   }
 
-  async updateManualApartment(id: number, dto: UpdateManualApartmentDto) {
-    const row = await this.requireManualListing(id);
+  async updateManualApartment(id: number, dto: UpdateManualApartmentDto, actorUserId?: string, actorRole?: string) {
+    const row = await this.requireManualListing(id, actorUserId, actorRole);
 
     if (dto.apartment) {
       validateManualApartmentMedia(dto.apartment);
@@ -629,8 +644,8 @@ export class ListingsService {
     });
   }
 
-  async updateManualHouse(id: number, dto: UpdateManualHouseDto) {
-    const row = await this.requireManualListing(id);
+  async updateManualHouse(id: number, dto: UpdateManualHouseDto, actorUserId?: string, actorRole?: string) {
+    const row = await this.requireManualListing(id, actorUserId, actorRole);
     const current = await this.prisma.listing.findUnique({
       where: { id },
       select: { id: true, kind: true },
@@ -701,8 +716,8 @@ export class ListingsService {
     });
   }
 
-  async updateManualLand(id: number, dto: UpdateManualLandDto) {
-    const row = await this.requireManualListing(id);
+  async updateManualLand(id: number, dto: UpdateManualLandDto, actorUserId?: string, actorRole?: string) {
+    const row = await this.requireManualListing(id, actorUserId, actorRole);
     const current = await this.prisma.listing.findUnique({
       where: { id },
       select: { id: true, kind: true },
@@ -767,8 +782,8 @@ export class ListingsService {
     });
   }
 
-  async updateManualCommercial(id: number, dto: UpdateManualCommercialDto) {
-    const row = await this.requireManualListing(id);
+  async updateManualCommercial(id: number, dto: UpdateManualCommercialDto, actorUserId?: string, actorRole?: string) {
+    const row = await this.requireManualListing(id, actorUserId, actorRole);
     const current = await this.prisma.listing.findUnique({
       where: { id },
       select: { id: true, kind: true },
@@ -835,8 +850,8 @@ export class ListingsService {
     });
   }
 
-  async updateManualParking(id: number, dto: UpdateManualParkingDto) {
-    const row = await this.requireManualListing(id);
+  async updateManualParking(id: number, dto: UpdateManualParkingDto, actorUserId?: string, actorRole?: string) {
+    const row = await this.requireManualListing(id, actorUserId, actorRole);
     const current = await this.prisma.listing.findUnique({
       where: { id },
       select: { id: true, kind: true },
@@ -901,8 +916,8 @@ export class ListingsService {
     });
   }
 
-  async deleteManualListing(id: number) {
-    await this.requireManualListing(id);
+  async deleteManualListing(id: number, actorUserId?: string, actorRole?: string) {
+    await this.requireManualListing(id, actorUserId, actorRole);
     await this.prisma.listing.delete({ where: { id } });
     return { deleted: true, id };
   }
@@ -938,15 +953,29 @@ export class ListingsService {
     });
   }
 
-  private async requireManualListing(id: number) {
+  private agentExternalIdPrefix(userId: string) {
+    return `manual-${userId}-`;
+  }
+
+  private assertAgentCanManage(rowExternalId: string | null, actorUserId?: string, actorRole?: string) {
+    if (actorRole !== 'agent') return;
+    if (!actorUserId) throw new BadRequestException('Требуется пользователь агента');
+    const pref = this.agentExternalIdPrefix(actorUserId);
+    if (!rowExternalId?.startsWith(pref)) {
+      throw new BadRequestException('Агент может изменять только свои ручные объявления');
+    }
+  }
+
+  private async requireManualListing(id: number, actorUserId?: string, actorRole?: string) {
     const row = await this.prisma.listing.findUnique({
       where: { id },
-      select: { id: true, dataSource: true, regionId: true },
+      select: { id: true, dataSource: true, regionId: true, externalId: true },
     });
     if (!row) throw new NotFoundException('Объявление не найдено');
     if (row.dataSource !== 'MANUAL') {
       throw new BadRequestException('Доступно только для ручных объявлений (MANUAL)');
     }
+    this.assertAgentCanManage(row.externalId, actorUserId, actorRole);
     return row;
   }
 }
