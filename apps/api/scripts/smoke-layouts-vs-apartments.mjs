@@ -36,7 +36,6 @@ async function main() {
         },
       },
     },
-    where: { status: { not: 'HIDDEN' } },
   });
 
   const mvRows = await prisma.$queryRaw`
