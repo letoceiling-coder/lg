@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "./components/ScrollToTop";
 import { lazy, Suspense } from "react";
 import { AuthProvider, useAuthState } from "@/shared/hooks/useAuth";
@@ -19,9 +19,6 @@ const RedesignLayouts = lazy(() => import("./redesign/pages/RedesignLayouts"));
 
 // Catalog sub-pages
 const CatalogApartments = lazy(() => import("./pages/CatalogApartments"));
-const CatalogHouses = lazy(() => import("./pages/CatalogHouses"));
-const CatalogLand = lazy(() => import("./pages/CatalogLand"));
-const CatalogCommercial = lazy(() => import("./pages/CatalogCommercial"));
 const Belgorod = lazy(() => import("./pages/Belgorod"));
 
 // Detail / utility pages
@@ -62,6 +59,7 @@ const AdminBuilders = lazy(() => import("./admin/pages/AdminBuilders"));
 const AdminBuildings = lazy(() => import("./admin/pages/AdminBuildings"));
 const AdminListings = lazy(() => import("./admin/pages/AdminListings"));
 const AdminManualListing = lazy(() => import("./admin/pages/AdminManualListing"));
+const AdminListingWizard = lazy(() => import("./admin/pages/AdminListingWizard"));
 const AdminManualHouse = lazy(() => import("./admin/pages/AdminManualHouse"));
 const AdminManualLand = lazy(() => import("./admin/pages/AdminManualLand"));
 const AdminManualCommercial = lazy(() => import("./admin/pages/AdminManualCommercial"));
@@ -89,9 +87,9 @@ const AppRoutes = () => (
     <Route path="/" element={<RedesignIndex />} />
     <Route path="/catalog" element={<RedesignCatalog />} />
     <Route path="/catalog/apartments" element={<CatalogApartments />} />
-    <Route path="/catalog/houses" element={<CatalogHouses />} />
-    <Route path="/catalog/land" element={<CatalogLand />} />
-    <Route path="/catalog/commercial" element={<CatalogCommercial />} />
+    <Route path="/catalog/houses" element={<Navigate to="/catalog?type=houses" replace />} />
+    <Route path="/catalog/land" element={<Navigate to="/catalog?type=land" replace />} />
+    <Route path="/catalog/commercial" element={<Navigate to="/catalog?type=commercial" replace />} />
     <Route path="/belgorod" element={<Belgorod />} />
     <Route path="/complex/:slug" element={<RedesignComplex />} />
     <Route path="/apartment/:id" element={<RedesignApartment />} />
@@ -128,6 +126,7 @@ const AppRoutes = () => (
       <Route path="builders" element={<RequireAuth roles={['admin', 'editor']}><AdminBuilders /></RequireAuth>} />
       <Route path="buildings" element={<RequireAuth roles={['admin', 'editor']}><AdminBuildings /></RequireAuth>} />
       <Route path="listings" element={<AdminListings />} />
+      <Route path="listings/wizard/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminListingWizard /></RequireAuth>} />
       <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual-house/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualHouse /></RequireAuth>} />

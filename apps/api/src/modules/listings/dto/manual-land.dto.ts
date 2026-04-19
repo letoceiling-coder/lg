@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -35,6 +36,19 @@ export class ManualLandFieldsDto {
   @IsOptional()
   @IsBoolean()
   hasCommunications?: boolean;
+
+  @ApiPropertyOptional({ example: '/uploads/media/land/main.jpg' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  photoUrl?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Дополнительные фото из медиатеки' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[];
 }
 
 export class CreateManualLandDto {
@@ -92,6 +106,19 @@ export class ManualLandPatchDto {
   @IsOptional()
   @IsBoolean()
   hasCommunications?: boolean | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  photoUrl?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[] | null;
 }
 
 export class UpdateManualLandDto {

@@ -40,4 +40,4 @@ Write-Host "==> Remote: extract (keep .env) + deploy-full.sh"
 ssh $Server $remoteCmd
 Write-Host "==> Done. deploy-full уже вызывает verify-on-server.sh runtime (PM2 + curl к API)."
 Write-Host "    Полная проверка только на сервере: ssh $Server 'cd /var/www/lg && bash deploy/verify-on-server.sh full'"
-Write-Host "    Снаружи: curl.exe -sS https://lg.livegrid.ru/api/v1/health"
+Write-Host "    Снаружи: curl.exe -sS https://livegrid.ru/api/v1/health"

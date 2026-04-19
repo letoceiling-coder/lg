@@ -9,12 +9,12 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "[fix] Upload public/index.html -> /var/www/lg/public/"
 scp "$DIR/public/index.html" "$REMOTE:/var/www/lg/public/index.html"
 
-echo "[fix] Upload nginx lg.livegrid.ru.ssl.conf -> sites-available (adjust path if needed)"
-scp "$DIR/lg.livegrid.ru.ssl.conf" "$REMOTE:/tmp/lg.livegrid.ru.ssl.conf"
+echo "[fix] Upload nginx livegrid.ru.ssl.conf -> sites-available (adjust path if needed)"
+scp "$DIR/livegrid.ru.ssl.conf" "$REMOTE:/tmp/livegrid.ru.ssl.conf"
 
-ssh "$REMOTE" 'sudo cp /tmp/lg.livegrid.ru.ssl.conf /etc/nginx/sites-available/lg.livegrid.ru.ssl.conf && sudo nginx -t && sudo systemctl reload nginx && echo OK'
+ssh "$REMOTE" 'sudo cp /tmp/livegrid.ru.ssl.conf /etc/nginx/sites-available/livegrid.ru.ssl.conf && sudo nginx -t && sudo systemctl reload nginx && echo OK'
 
 echo "[fix] Redis ping:"
 ssh "$REMOTE" 'redis-cli ping || sudo systemctl start redis-server && redis-cli ping'
 
-echo "[fix] Done. Open https://lg.livegrid.ru/"
+echo "[fix] Done. Open https://livegrid.ru/"

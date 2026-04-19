@@ -146,9 +146,9 @@ export class CollectionsService {
         doc.fontSize(12).text(`${idx + 1}. ${item.title}`);
         doc.fontSize(10).fillColor('#555555').text(item.kind === CollectionItemKind.BLOCK ? 'ЖК' : 'Объявление');
         if (item.kind === CollectionItemKind.BLOCK && item.slug) {
-          doc.text(`URL: https://lg.livegrid.ru/complex/${item.slug}`);
+          doc.text(`URL: https://livegrid.ru/complex/${item.slug}`);
         } else if (item.kind === CollectionItemKind.LISTING) {
-          doc.text(`URL: https://lg.livegrid.ru/apartment/${item.entityId}`);
+          doc.text(`URL: https://livegrid.ru/apartment/${item.entityId}`);
         }
         doc.fillColor('#000000');
         doc.moveDown(0.5);

@@ -21,7 +21,7 @@
 
 ### Nginx (прод)
 
-- В **`deploy/lg.livegrid.ru.ssl.conf`** добавлен **`location ^~ /uploads/`** → прокси на Node (порт 3000), иначе SPA `try_files` перехватывал бы URL и картинки не открывались.
+- В **`deploy/livegrid.ru.ssl.conf`** добавлен **`location ^~ /uploads/`** → прокси на Node (порт 3000), иначе SPA `try_files` перехватывал бы URL и картинки не открывались.
 
 ### PM2
 
@@ -77,7 +77,7 @@ sudo chown -R <пользователь_pm2>:<группа> /var/www/lg/uploads
 2. На сервере: **`bash /var/www/lg/deploy/deploy-from-git.sh`**  
    (или `deploy-from-git.sh` с нужными `DEPLOY_ROOT` / `DEPLOY_BRANCH`).
 3. Скрипт выполнит: `pnpm install` → `prisma generate` → **`prisma migrate deploy`** → сборка API/web → PM2 → копирование nginx-конфига → `nginx -t && reload`.
-4. Проверить **`https://lg.livegrid.ru/uploads/`** (404 от Nest без файла — нормально) и загрузку в админке.
+4. Проверить **`https://livegrid.ru/uploads/`** (404 от Nest без файла — нормально) и загрузку в админке.
 
 ---
 
@@ -85,7 +85,7 @@ sudo chown -R <пользователь_pm2>:<группа> /var/www/lg/uploads
 
 - Старые ручные квартиры с **внешними** URL планов при сохранении через новую форму потребуют замены на URL из `/uploads/media/...`.
 - Размер загрузки: лимит **15 MB** на файл (API) и **20M** `client_max_body_size` в nginx.
-- `CORS_ORIGINS` в ecosystem может потребовать добавления **`https://lg.livegrid.ru`**, если запросы с фронта идут с другого origin.
+- `CORS_ORIGINS` в ecosystem может потребовать добавления **`https://livegrid.ru`**, если запросы с фронта идут с другого origin.
 
 ---
 

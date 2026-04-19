@@ -55,6 +55,28 @@ function validateManualApartmentMedia(apt: {
   }
 }
 
+function validateManualGalleryMedia(data: {
+  photoUrl?: string | null;
+  extraPhotoUrls?: unknown;
+}, label: string) {
+  assertMediaLibraryUrl(data.photoUrl ?? undefined, `${label}: основное фото`);
+  if (data.extraPhotoUrls == null) return;
+  if (!Array.isArray(data.extraPhotoUrls)) {
+    throw new BadRequestException(`${label}: extraPhotoUrls ожидается массив строк`);
+  }
+  if (data.extraPhotoUrls.length > 24) {
+    throw new BadRequestException(`${label}: не более 24 дополнительных фото`);
+  }
+  let i = 0;
+  for (const u of data.extraPhotoUrls) {
+    i += 1;
+    if (typeof u !== 'string') {
+      throw new BadRequestException(`${label}: дополнительное фото #${i} имеет неверный формат`);
+    }
+    assertMediaLibraryUrl(u, `${label}: дополнительное фото #${i}`);
+  }
+}
+
 @Injectable()
 export class ListingsService {
   constructor(
@@ -168,7 +190,22 @@ export class ListingsService {
       return where;
     }
     if (query.kind) where.kind = query.kind as $Enums.ListingKind;
-    if (query.status) where.status = query.status as $Enums.ListingStatus;
+    if (query.statuses?.trim()) {
+      const statusList = query.statuses
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0) as $Enums.ListingStatus[];
+      if (statusList.length === 1) {
+        where.status = statusList[0];
+      } else if (statusList.length > 1) {
+        where.status = { in: statusList };
+      }
+    } else if (query.status) {
+      where.status = query.status as $Enums.ListingStatus;
+    }
+    if (query.is_published !== undefined) {
+      where.isPublished = query.is_published;
+    }
     if (query.data_source) where.dataSource = query.data_source as $Enums.DataSource;
     if (query.builder_id != null) where.builderId = query.builder_id;
     if (query.district_id != null) where.districtId = query.district_id;
@@ -373,6 +410,7 @@ export class ListingsService {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const h = dto.house;
+    validateManualGalleryMedia(h, 'Дом');
 
     return this.prisma.listing.create({
       data: {
@@ -395,6 +433,11 @@ export class ListingsService {
             bathrooms: h.bathrooms ?? null,
             hasGarage: h.hasGarage ?? null,
             yearBuilt: h.yearBuilt ?? null,
+            photoUrl: h.photoUrl ?? null,
+            extraPhotoUrls:
+              h.extraPhotoUrls != null && h.extraPhotoUrls.length > 0
+                ? (h.extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
           },
         },
       },
@@ -429,6 +472,7 @@ export class ListingsService {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const l = dto.land;
+    validateManualGalleryMedia(l, 'Участок');
 
     return this.prisma.listing.create({
       data: {
@@ -447,6 +491,11 @@ export class ListingsService {
             landCategory: l.landCategory ?? null,
             cadastralNumber: l.cadastralNumber ?? null,
             hasCommunications: l.hasCommunications ?? null,
+            photoUrl: l.photoUrl ?? null,
+            extraPhotoUrls:
+              l.extraPhotoUrls != null && l.extraPhotoUrls.length > 0
+                ? (l.extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
           },
         },
       },
@@ -653,6 +702,9 @@ export class ListingsService {
     if (!current || current.kind !== 'HOUSE') {
       throw new BadRequestException('Операция доступна только для ручных домов (MANUAL + HOUSE)');
     }
+    if (dto.house) {
+      validateManualGalleryMedia(dto.house, 'Дом');
+    }
 
     if (dto.blockId !== undefined && dto.blockId != null) {
       const block = await this.prisma.block.findUnique({
@@ -694,6 +746,13 @@ export class ListingsService {
       if (h.bathrooms !== undefined) housePatch.bathrooms = h.bathrooms;
       if (h.hasGarage !== undefined) housePatch.hasGarage = h.hasGarage;
       if (h.yearBuilt !== undefined) housePatch.yearBuilt = h.yearBuilt;
+      if (h.photoUrl !== undefined) housePatch.photoUrl = h.photoUrl;
+      if (h.extraPhotoUrls !== undefined) {
+        housePatch.extraPhotoUrls =
+          h.extraPhotoUrls != null && h.extraPhotoUrls.length > 0
+            ? (h.extraPhotoUrls as Prisma.InputJsonValue)
+            : Prisma.DbNull;
+      }
     }
 
     const hasListing = Object.keys(listingPatch).length > 0;
@@ -724,6 +783,9 @@ export class ListingsService {
     });
     if (!current || current.kind !== 'LAND') {
       throw new BadRequestException('Операция доступна только для ручных участков (MANUAL + LAND)');
+    }
+    if (dto.land) {
+      validateManualGalleryMedia(dto.land, 'Участок');
     }
 
     if (dto.blockId !== undefined && dto.blockId != null) {
@@ -760,6 +822,13 @@ export class ListingsService {
       if (l.landCategory !== undefined) landPatch.landCategory = l.landCategory;
       if (l.cadastralNumber !== undefined) landPatch.cadastralNumber = l.cadastralNumber;
       if (l.hasCommunications !== undefined) landPatch.hasCommunications = l.hasCommunications;
+      if (l.photoUrl !== undefined) landPatch.photoUrl = l.photoUrl;
+      if (l.extraPhotoUrls !== undefined) {
+        landPatch.extraPhotoUrls =
+          l.extraPhotoUrls != null && l.extraPhotoUrls.length > 0
+            ? (l.extraPhotoUrls as Prisma.InputJsonValue)
+            : Prisma.DbNull;
+      }
     }
 
     const hasListing = Object.keys(listingPatch).length > 0;

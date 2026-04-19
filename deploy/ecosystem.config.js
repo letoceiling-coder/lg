@@ -1,6 +1,6 @@
 /** Совпадает с DEPLOY_ROOT в deploy-full.sh / deploy-from-git.sh */
 const deployRoot = process.env.DEPLOY_ROOT || '/var/www/lg';
-const publicSiteUrl = process.env.PUBLIC_SITE_URL || 'https://lg.livegrid.ru';
+const publicSiteUrl = process.env.PUBLIC_SITE_URL || 'https://livegrid.ru';
 
 module.exports = {
   apps: [

@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Printer, MapPin, Building2, ExternalLink, Download } from 'lucide-react';
+import { Printer, MapPin, Building2, ExternalLink, Download, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
@@ -16,6 +16,11 @@ type ApiPresentation = {
   address: string | null;
   metro: string | null;
   builder: string | null;
+  deadline: string | null;
+  availableApartments: number;
+  priceFrom: number | null;
+  priceTo: number | null;
+  roomMix: Array<{ label: string; count: number; priceFrom: number | null }>;
   generatedAt: string;
 };
 
@@ -33,6 +38,9 @@ const Presentation = () => {
   const address = p?.address ?? '—';
   const metroLine = p?.metro ?? '—';
   const builder = p?.builder ?? '—';
+  const deadline = p?.deadline ?? '—';
+  const formatMoney = (v: number) =>
+    new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v);
 
   if (!slug) {
     return (
@@ -103,11 +111,42 @@ const Presentation = () => {
           <img src={image} alt="" className="w-full max-h-[320px] object-cover print:max-h-[240px]" />
         </div>
 
-        {p.description?.trim() ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none mb-8 print:mb-6 text-foreground/90 whitespace-pre-wrap">
-            {p.description.trim()}
+        <section className="mb-8 print:mb-6">
+          <h2 className="text-base font-semibold mb-2">Описание</h2>
+          {p.description?.trim() ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/90 whitespace-pre-wrap">
+              {p.description.trim()}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Описание пока не добавлено.</p>
+          )}
+        </section>
+
+        <section className="mb-8 print:mb-6">
+          <h2 className="text-base font-semibold mb-2">Квартиры в наличии</h2>
+          <div className="text-sm text-muted-foreground mb-3">
+            {p.availableApartments > 0 ? `Всего: ${p.availableApartments} шт.` : 'Нет активных квартир в продаже.'}
+            {p.priceFrom != null ? (
+              <span className="ml-2">
+                · Цены: от {formatMoney(p.priceFrom)} ₽
+                {p.priceTo != null && p.priceTo !== p.priceFrom ? ` до ${formatMoney(p.priceTo)} ₽` : ''}
+              </span>
+            ) : null}
           </div>
-        ) : null}
+          {p.roomMix.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {p.roomMix.map((row) => (
+                <div key={row.label} className="rounded-lg border border-border px-3 py-2 text-sm">
+                  <div className="font-medium">{row.label}</div>
+                  <div className="text-muted-foreground">
+                    {row.count} шт.
+                    {row.priceFrom != null ? ` · от ${formatMoney(row.priceFrom)} ₽` : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
 
         <section className="space-y-3 text-sm border-t border-border pt-6 print:pt-4">
           <div className="flex gap-2">
@@ -122,6 +161,13 @@ const Presentation = () => {
             <div>
               <p className="font-medium">Застройщик</p>
               <p className="text-muted-foreground print:text-foreground">{builder}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <CalendarClock className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Срок сдачи</p>
+              <p className="text-muted-foreground print:text-foreground">{deadline}</p>
             </div>
           </div>
           <div className="flex gap-2">

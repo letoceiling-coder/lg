@@ -218,6 +218,8 @@ model FeedRegion {
   buildings     Building[]
   listings      Listing[]
   importBatches ImportBatch[]
+  news          News[]
+  telegramNewsChannels NewsTelegramChannel[]
 
   @@map("feed_regions")
 }
@@ -335,6 +337,8 @@ model Block {
   longitude      Decimal?    @db.Decimal(11, 8)
   isPromoted     Boolean     @default(false) @map("is_promoted")
   salesStartDate DateTime?   @map("sales_start_date") @db.Date
+  /** Список инфраструктуры (POI вокруг ЖК) — массив строк или объектов { name, distance, type }. */
+  infrastructure Json?       @map("infrastructure")
   dataSource     DataSource  @default(FEED) @map("data_source")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
@@ -591,6 +595,8 @@ model ListingLand {
   landCategory      String?  @map("land_category")
   cadastralNumber   String?  @map("cadastral_number")
   hasCommunications Boolean? @map("has_communications")
+  photoUrl          String?  @map("photo_url")
+  extraPhotoUrls    Json?    @map("extra_photo_urls")
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
@@ -627,6 +633,8 @@ model ListingHouse {
   bathrooms  Int?
   hasGarage  Boolean?   @map("has_garage")
   yearBuilt  Int?       @map("year_built")
+  photoUrl   String?    @map("photo_url")
+  extraPhotoUrls Json?  @map("extra_photo_urls")
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
@@ -846,6 +854,7 @@ model UserCollectionItem {
 model News {
   id          Int      @id @default(autoincrement())
   slug        String   @unique
+  regionId    Int?     @map("region_id")
   title       String
   body        String?  @db.Text
   imageUrl    String?  @map("image_url")
@@ -855,13 +864,16 @@ model News {
   isPublished Boolean  @default(false) @map("is_published")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  region      FeedRegion? @relation(fields: [regionId], references: [id], onDelete: SetNull)
 
+  @@index([regionId])
   @@map("news")
 }
 
 /// Каналы Telegram для импорта новостей (MTProto). Секреты — только в env сервера.
 model NewsTelegramChannel {
   id               Int      @id @default(autoincrement())
+  regionId         Int      @map("region_id")
   channelRef       String   @map("channel_ref") @db.VarChar(255)
   label            String?  @db.VarChar(255)
   isEnabled        Boolean  @default(true) @map("is_enabled")
@@ -870,8 +882,10 @@ model NewsTelegramChannel {
   sortOrder        Int      @default(0) @map("sort_order")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
+  region           FeedRegion @relation(fields: [regionId], references: [id], onDelete: Restrict)
 
-  @@unique([channelRef])
+  @@unique([regionId, channelRef])
+  @@index([regionId])
   @@map("news_telegram_channels")
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Home, Loader2, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Home, Loader2, ChevronLeft, ChevronRight, ExternalLink, Plus, Pencil, Trash2, Wand2 } from 'lucide-react';
 import { apiGet, apiDelete, apiPatch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
@@ -156,6 +156,13 @@ export default function AdminListings() {
         </div>
         {sourceTab === 'manual' ? (
           canManageManual ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <Button type="button" variant="outline" asChild>
+                <Link to="/admin/listings/wizard/new">
+                  <Wand2 className="w-4 h-4 mr-2" />
+                  Мастер
+                </Link>
+              </Button>
             <Button type="button" className="shrink-0" asChild>
               <Link
                 to={
@@ -182,6 +189,7 @@ export default function AdminListings() {
                         : 'Ручной паркинг'}
               </Link>
             </Button>
+            </div>
           ) : (
             <Button type="button" className="shrink-0" disabled>
               <Plus className="w-4 h-4 mr-2" />

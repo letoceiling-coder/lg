@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import type { LayoutGroup } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
 
@@ -17,7 +16,9 @@ const LayoutCard = ({ layout }: { layout: LayoutGroup }) => (
       <p className="text-xs text-muted-foreground">{layout.area} м²</p>
       <div className="flex items-center justify-between pt-1">
         <p className="text-sm font-bold">от {formatPrice(layout.priceFrom)}</p>
-        <span className="text-xs text-primary font-medium">{layout.availableCount} кв.</span>
+        <span className="text-xs text-primary font-medium whitespace-nowrap">
+          {layout.availableCount} шт.
+        </span>
       </div>
     </div>
   </div>

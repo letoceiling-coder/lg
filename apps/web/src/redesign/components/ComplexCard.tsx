@@ -161,7 +161,10 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
         <div className="flex justify-between items-start gap-2">
           <h3 className="font-semibold text-sm leading-tight truncate">{complex.name}</h3>
           <span className="font-bold text-sm shrink-0 text-primary">
-            {complex.priceFrom > 0 ? `от ${formatPrice(complex.priceFrom)}` : '—'}
+            {(() => {
+              const formatted = formatPrice(complex.priceFrom);
+              return formatted === '—' ? '—' : `от ${formatted}`;
+            })()}
           </span>
         </div>
         <div className="flex items-center gap-1 text-[11px] text-muted-foreground">

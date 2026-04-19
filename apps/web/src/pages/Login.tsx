@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Eye, EyeOff, UserCircle2 } from 'lucide-react';
 import Header from '@/redesign/components/RedesignHeader';
@@ -6,10 +6,27 @@ import FooterSection from '@/components/FooterSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/shared/hooks/useAuth';
+import type { UserRole } from '@/shared/types';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 
+const ADMIN_ROLES: UserRole[] = ['admin', 'editor', 'manager', 'agent'];
+
+function pickRedirectTarget(
+  search: string,
+  state: unknown,
+  role: UserRole | null,
+): string {
+  const params = new URLSearchParams(search);
+  const next = params.get('next');
+  if (next && next.startsWith('/')) return next;
+  const fromState = (state as { from?: { pathname?: string } } | null)?.from?.pathname;
+  if (fromState && fromState !== '/login') return fromState;
+  if (role && ADMIN_ROLES.includes(role)) return '/admin';
+  return '/';
+}
+
 const Login = () => {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
@@ -19,11 +36,22 @@ const Login = () => {
   const [tgError, setTgError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  const target = useMemo(
+    () => pickRedirectTarget(location.search, location.state, user?.role ?? null),
+    [location.search, location.state, user?.role],
+  );
 
-  if (isAuthenticated) {
-    navigate(from, { replace: true });
-  }
+  const roleErrorVisible = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('error') === 'role';
+  }, [location.search]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (isAuthenticated) {
+      navigate(target, { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate, target]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +59,6 @@ const Login = () => {
     setSubmitting(true);
     try {
       await login(loginId, password);
-      navigate(from, { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Ошибка входа';
       try {
@@ -54,6 +81,12 @@ const Login = () => {
             <h1 className="text-2xl font-bold">Вход в аккаунт</h1>
             <p className="text-sm text-muted-foreground">Войдите, чтобы продолжить</p>
           </div>
+
+          {roleErrorVisible && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive text-center">
+              Недостаточно прав для запрошенной страницы. Войдите под учётной записью с нужной ролью.
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -115,7 +148,6 @@ const Login = () => {
             className="w-full"
             onSuccess={() => {
               setTgError('');
-              navigate(from, { replace: true });
             }}
             onError={(msg) => setTgError(msg)}
           />

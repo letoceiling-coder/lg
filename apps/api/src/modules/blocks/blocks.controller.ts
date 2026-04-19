@@ -38,8 +38,10 @@ export class BlocksController {
   @Get(':id')
   @ApiOperation({ summary: 'Get block details by ID or slug' })
   findOne(@Param('id') id: string) {
-    const numId = parseInt(id, 10);
-    if (!isNaN(numId)) return this.service.findOne(numId);
+    if (/^\d+$/.test(id)) {
+      const numId = Number.parseInt(id, 10);
+      return this.service.findOne(numId);
+    }
     return this.service.findBySlug(id);
   }
 }

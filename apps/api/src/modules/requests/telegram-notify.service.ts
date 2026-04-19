@@ -3,6 +3,8 @@ import * as https from 'node:https';
 import {
   Block,
   Listing,
+  Prisma,
+  RequestStatus,
   RequestType,
   TelegramNotifyAccessStatus,
   type Request as DbRequest,
@@ -27,7 +29,10 @@ export class TelegramNotifyService implements OnModuleInit {
   private static readonly CACHE_MS = 20_000;
   private readonly webhookUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim() ?? '';
   private readonly publicSiteUrl =
-    (process.env.PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'https://lg.livegrid.ru');
+    (process.env.PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'https://livegrid.ru');
+  /** chatId → выбранный регион в текущем диалоге заявки (in-memory). */
+  private readonly consultPending = new Map<string, { regionId: number; at: number }>();
+  private static readonly CONSULT_TTL_MS = 15 * 60 * 1000;
 
   constructor(
     private readonly content: ContentService,
@@ -204,6 +209,12 @@ export class TelegramNotifyService implements OnModuleInit {
         return;
       }
 
+      const contactUpdate = this.extractContact(update);
+      if (contactUpdate) {
+        await this.handleContactShared(contactUpdate);
+        return;
+      }
+
       const message = this.extractMessage(update);
       if (!message?.text) return;
 
@@ -265,6 +276,7 @@ export class TelegramNotifyService implements OnModuleInit {
             '/search — поиск по фильтрам',
             '/catalog — список ЖК (по 5)',
             '/favorites — избранное',
+            '/consult — оставить заявку на консультацию',
             '/contacts — контакты агентства',
           ].join('\n'),
           undefined,
@@ -281,6 +293,11 @@ export class TelegramNotifyService implements OnModuleInit {
           undefined,
           this.quickMenu(),
         );
+        return;
+      }
+
+      if (command === '/consult') {
+        await this.sendConsultCityStep(token, message.chat.id);
         return;
       }
 
@@ -409,6 +426,44 @@ export class TelegramNotifyService implements OnModuleInit {
     };
   }
 
+  /** Извлекает контакт (поле message.contact из Telegram), если он есть. */
+  private extractContact(update: unknown): {
+    chat: { id: bigint };
+    from?: { id: bigint; first_name?: string; last_name?: string; username?: string };
+    contact: { phone_number: string; first_name?: string; last_name?: string };
+  } | null {
+    if (!update || typeof update !== 'object') return null;
+    const raw = update as Record<string, unknown>;
+    const message = raw.message ?? raw.edited_message;
+    if (!message || typeof message !== 'object') return null;
+    const msg = message as Record<string, unknown>;
+    const contact = msg.contact as Record<string, unknown> | undefined;
+    if (!contact || typeof contact.phone_number !== 'string') return null;
+
+    const chat = msg.chat as Record<string, unknown> | undefined;
+    const chatId = this.toBigInt(chat?.id);
+    if (!chatId) return null;
+
+    const fromRaw = msg.from as Record<string, unknown> | undefined;
+    const fromId = this.toBigInt(fromRaw?.id);
+    return {
+      chat: { id: chatId },
+      from: fromId
+        ? {
+            id: fromId,
+            first_name: typeof fromRaw?.first_name === 'string' ? fromRaw.first_name : undefined,
+            last_name: typeof fromRaw?.last_name === 'string' ? fromRaw.last_name : undefined,
+            username: typeof fromRaw?.username === 'string' ? fromRaw.username : undefined,
+          }
+        : undefined,
+      contact: {
+        phone_number: contact.phone_number,
+        first_name: typeof contact.first_name === 'string' ? contact.first_name : undefined,
+        last_name: typeof contact.last_name === 'string' ? contact.last_name : undefined,
+      },
+    };
+  }
+
   private extractCallbackQuery(update: unknown): {
     id: string;
     data: string;
@@ -440,6 +495,13 @@ export class TelegramNotifyService implements OnModuleInit {
     if (parts[0] === 'cat' && parts[1] === 'p') {
       const page = Math.max(1, parseInt(parts[2] ?? '1', 10) || 1);
       await this.sendCatalogPage(token, callback.chatId, page);
+      return;
+    }
+    if (parts[0] === 'cs') {
+      const regionId = parseInt(parts[1] ?? '', 10);
+      if (Number.isFinite(regionId) && regionId > 0) {
+        await this.startConsultContactStep(token, callback.chatId, regionId);
+      }
       return;
     }
     if (parts[0] === 'sr') {
@@ -732,6 +794,126 @@ export class TelegramNotifyService implements OnModuleInit {
       undefined,
       { inline_keyboard: rows },
     );
+  }
+
+  private async sendConsultCityStep(token: string, chatId: bigint) {
+    const regions = await this.prisma.feedRegion.findMany({
+      where: { isEnabled: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, code: true },
+    });
+    if (regions.length === 0) {
+      await this.sendMessage(
+        token,
+        chatId,
+        'Нет доступных городов. Попробуйте позже.',
+        undefined,
+        this.quickMenu(),
+      );
+      return;
+    }
+    const rows: Array<Array<{ text: string; callback_data: string }>> = [];
+    for (let i = 0; i < regions.length; i += 2) {
+      const chunk = regions.slice(i, i + 2).map((r) => ({
+        text: `${r.name} (${r.code.toUpperCase()})`,
+        callback_data: `cs|${r.id}`,
+      }));
+      rows.push(chunk);
+    }
+    await this.sendMessage(
+      token,
+      chatId,
+      'Заявка на консультацию: выберите ваш город.',
+      undefined,
+      { inline_keyboard: rows },
+    );
+  }
+
+  private async startConsultContactStep(token: string, chatId: bigint, regionId: number) {
+    const region = await this.prisma.feedRegion.findUnique({
+      where: { id: regionId },
+      select: { name: true },
+    });
+    if (!region) {
+      await this.sendMessage(token, chatId, 'Город не найден.', undefined, this.quickMenu());
+      return;
+    }
+    this.consultPending.set(chatId.toString(), { regionId, at: Date.now() });
+    await this.sendMessage(
+      token,
+      chatId,
+      `Город: ${region.name}.\n\nНажмите кнопку ниже, чтобы поделиться номером телефона. Менеджер свяжется с вами в течение рабочего дня.`,
+      undefined,
+      {
+        keyboard: [
+          [{ text: '📞 Поделиться номером', request_contact: true }],
+          [{ text: 'Отмена' }],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    );
+  }
+
+  private async handleContactShared(payload: {
+    chat: { id: bigint };
+    from?: { id: bigint; first_name?: string; last_name?: string; username?: string };
+    contact: { phone_number: string; first_name?: string; last_name?: string };
+  }) {
+    const token = await this.getCachedBotToken();
+    if (!token) return;
+    const key = payload.chat.id.toString();
+    const pending = this.consultPending.get(key);
+    if (!pending || Date.now() - pending.at > TelegramNotifyService.CONSULT_TTL_MS) {
+      this.consultPending.delete(key);
+      await this.sendMessage(
+        token,
+        payload.chat.id,
+        'Сессия заявки истекла. Начните заново: /consult',
+        undefined,
+        this.quickMenu(),
+      );
+      return;
+    }
+    const region = await this.prisma.feedRegion.findUnique({
+      where: { id: pending.regionId },
+      select: { name: true, code: true },
+    });
+    const fullName =
+      [payload.contact.first_name, payload.contact.last_name].filter(Boolean).join(' ').trim() ||
+      [payload.from?.first_name, payload.from?.last_name].filter(Boolean).join(' ').trim() ||
+      payload.from?.username ||
+      'Telegram пользователь';
+    const phone = payload.contact.phone_number.startsWith('+')
+      ? payload.contact.phone_number
+      : `+${payload.contact.phone_number}`;
+    const created = await this.prisma.request.create({
+      data: {
+        name: fullName.slice(0, 200),
+        phone: phone.slice(0, 32),
+        type: RequestType.CONSULTATION,
+        status: RequestStatus.NEW,
+        sourceUrl: 'telegram-bot:/consult',
+        comment: region
+          ? `Заявка через Telegram-бота. Город: ${region.name} (${region.code}).`
+          : 'Заявка через Telegram-бота.',
+      } as Prisma.RequestCreateInput,
+    });
+    this.consultPending.delete(key);
+    await this.sendMessage(
+      token,
+      payload.chat.id,
+      `Спасибо! Заявка #${created.id} принята.\nГород: ${region?.name ?? '—'}\nТелефон: ${phone}\n\nМенеджер свяжется с вами в ближайшее время.`,
+      undefined,
+      this.quickMenu(),
+    );
+    if (await this.isConfigured()) {
+      void this.notifyNewRequest(created).catch((e) =>
+        this.logger.warn(
+          `Telegram notify (bot consult) failed: ${e instanceof Error ? e.message : String(e)}`,
+        ),
+      );
+    }
   }
 
   private async sendSearchDistrictStep(token: string, chatId: bigint, regionId: number) {
@@ -1263,6 +1445,7 @@ export class TelegramNotifyService implements OnModuleInit {
         { command: 'search', description: 'Поиск по фильтрам' },
         { command: 'catalog', description: 'Каталог ЖК' },
         { command: 'favorites', description: 'Избранное' },
+        { command: 'consult', description: 'Оставить заявку на консультацию' },
         { command: 'contacts', description: 'Контакты агентства' },
       ],
     });
@@ -1348,7 +1531,8 @@ export class TelegramNotifyService implements OnModuleInit {
     return {
       keyboard: [
         [{ text: '/search' }, { text: '/catalog' }],
-        [{ text: '/favorites' }, { text: '/contacts' }],
+        [{ text: '/favorites' }, { text: '/consult' }],
+        [{ text: '/contacts' }],
       ],
       resize_keyboard: true,
       is_persistent: true,

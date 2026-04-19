@@ -1,14 +1,18 @@
 import type { PropertyData } from '@/components/PropertyCard';
 import type { StartSaleData } from '@/components/StartSaleCard';
 import type { ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
+import { MIN_REASONABLE_PRICE_RUB } from '@/redesign/data/mock-data';
 
 const PLACEHOLDER = '/placeholder.svg';
 
 export function formatListingPriceMinRub(rub: number | null | undefined): string {
-  if (rub == null || rub <= 0) return '—';
+  if (rub == null || !Number.isFinite(rub) || rub < MIN_REASONABLE_PRICE_RUB) return '—';
   const m = rub / 1_000_000;
-  const s = m >= 10 ? m.toFixed(0) : m.toFixed(1).replace(/\.0$/, '');
-  return `от ${s} млн`;
+  if (m >= 1) {
+    const s = m >= 10 ? m.toFixed(0) : m.toFixed(1).replace(/\.0$/, '');
+    return `от ${s} млн`;
+  }
+  return `от ${Math.round(rub / 1000)} тыс ₽`;
 }
 
 export function blockMainImage(b: ApiBlockListRow): string {

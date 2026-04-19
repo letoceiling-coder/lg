@@ -9,11 +9,25 @@ import { cn } from '@/lib/utils';
 import { apiGet } from '@/lib/api';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import ComplexCard from '@/redesign/components/ComplexCard';
+import ListingCard, { type ApiListingCardRow } from '@/redesign/components/ListingCard';
 import FilterSidebar from '@/redesign/components/FilterSidebar';
 import MapSearch from '@/redesign/components/MapSearch';
 import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
 import { defaultFilters, type CatalogFilters, type ObjectType, type MarketType } from '@/redesign/data/types';
+
+const OBJECT_TYPE_TITLE: Record<ObjectType, string> = {
+  apartments: 'Жилые комплексы',
+  houses: 'Дома',
+  land: 'Участки',
+  commercial: 'Коммерческая недвижимость',
+};
+
+const OBJECT_TYPE_KIND: Record<Exclude<ObjectType, 'apartments'>, 'HOUSE' | 'LAND' | 'COMMERCIAL'> = {
+  houses: 'HOUSE',
+  land: 'LAND',
+  commercial: 'COMMERCIAL',
+};
 
 type ViewMode = 'grid' | 'list' | 'map';
 
@@ -91,6 +105,45 @@ const RedesignCatalog = () => {
   const catalogSort = parseCatalogSort(searchParams.get('sort'));
 
   const statusMap: Record<string, string> = { building: 'BUILDING', completed: 'COMPLETED', planned: 'PROJECT' };
+  const isApartmentMode = filters.objectType === 'apartments';
+  const listingKind = !isApartmentMode ? OBJECT_TYPE_KIND[filters.objectType] : null;
+  const pageTitle = OBJECT_TYPE_TITLE[filters.objectType] ?? OBJECT_TYPE_TITLE.apartments;
+
+  const listingsInfinite = useInfiniteQuery({
+    queryKey: [
+      'listings',
+      'catalog',
+      'infinite',
+      regionId,
+      listingKind,
+      deferredSearch,
+      filters.priceMin,
+      filters.priceMax,
+    ],
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const sp = new URLSearchParams();
+      if (regionId != null) sp.set('region_id', String(regionId));
+      if (listingKind) sp.set('kind', listingKind);
+      sp.set('statuses', 'ACTIVE,RESERVED');
+      sp.set('is_published', 'true');
+      sp.set('page', String(pageParam));
+      sp.set('per_page', String(PER_PAGE));
+      if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
+      if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
+      if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
+      return apiGet<{
+        data: ApiListingCardRow[];
+        meta: { page: number; per_page: number; total: number; total_pages: number };
+      }>(`/listings?${sp}`);
+    },
+    getNextPageParam: (lastPage) => {
+      const { page, total_pages: totalPages } = lastPage.meta;
+      if (page >= totalPages) return undefined;
+      return page + 1;
+    },
+    enabled: !isApartmentMode && regionId != null,
+  });
 
   const blocksInfinite = useInfiniteQuery({
     queryKey: [
@@ -142,7 +195,7 @@ const RedesignCatalog = () => {
       if (page >= totalPages) return undefined;
       return page + 1;
     },
-    enabled: regionId != null,
+    enabled: isApartmentMode && regionId != null,
   });
 
   const districtsQuery = useQuery({
@@ -170,6 +223,11 @@ const RedesignCatalog = () => {
     () =>
       blocksInfinite.data?.pages.flatMap((p) => p.data).map(mapApiBlockListRowToResidentialComplex) ?? [],
     [blocksInfinite.data],
+  );
+
+  const listingRows = useMemo<ApiListingCardRow[]>(
+    () => listingsInfinite.data?.pages.flatMap((p) => p.data) ?? [],
+    [listingsInfinite.data],
   );
 
   const filtered = rows;
@@ -206,11 +264,20 @@ const RedesignCatalog = () => {
     [setSearchParams],
   );
 
-  const totalRemote = blocksInfinite.data?.pages[0]?.meta.total;
-  const loading = regionLoading || (regionId != null && blocksInfinite.isPending && !blocksInfinite.data);
-  const loadError = blocksInfinite.isError;
-  const hasMore = Boolean(blocksInfinite.hasNextPage);
-  const fetchingMore = blocksInfinite.isFetchingNextPage;
+  const totalRemote = isApartmentMode
+    ? blocksInfinite.data?.pages[0]?.meta.total
+    : listingsInfinite.data?.pages[0]?.meta.total;
+  const loading = regionLoading
+    || (isApartmentMode && regionId != null && blocksInfinite.isPending && !blocksInfinite.data)
+    || (!isApartmentMode && regionId != null && listingsInfinite.isPending && !listingsInfinite.data);
+  const loadError = isApartmentMode ? blocksInfinite.isError : listingsInfinite.isError;
+  const hasMore = isApartmentMode ? Boolean(blocksInfinite.hasNextPage) : Boolean(listingsInfinite.hasNextPage);
+  const fetchingMore = isApartmentMode ? blocksInfinite.isFetchingNextPage : listingsInfinite.isFetchingNextPage;
+  const totalShown = isApartmentMode ? filtered.length : listingRows.length;
+  const fetchNext = () => {
+    if (isApartmentMode) void blocksInfinite.fetchNextPage();
+    else void listingsInfinite.fetchNextPage();
+  };
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
@@ -242,9 +309,13 @@ const RedesignCatalog = () => {
       <div className="max-w-[1400px] mx-auto px-4 py-5">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h1 className="text-lg font-bold">Жилые комплексы</h1>
+            <h1 className="text-lg font-bold">{pageTitle}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {loading ? 'Загрузка…' : loadError ? 'Ошибка загрузки' : `${filtered.length} загружено${totalRemote != null ? ` · всего в каталоге ${totalRemote}` : ''}`}
+              {loading
+                ? 'Загрузка…'
+                : loadError
+                  ? 'Ошибка загрузки'
+                  : `${totalShown} загружено${totalRemote != null ? ` · всего в каталоге ${totalRemote}` : ''}`}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -313,24 +384,29 @@ const RedesignCatalog = () => {
             )}
             {view === 'grid' && (
               <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {filtered.map((c) => (
-                  <ComplexCard key={c.id} complex={c} />
-                ))}
+                {isApartmentMode
+                  ? filtered.map((c) => <ComplexCard key={c.id} complex={c} />)
+                  : listingRows.map((l) => <ListingCard key={l.id} listing={l} />)}
               </div>
             )}
             {view === 'list' && (
               <div className="space-y-3">
-                {filtered.map((c) => (
-                  <ComplexCard key={c.id} complex={c} variant="list" />
-                ))}
+                {isApartmentMode
+                  ? filtered.map((c) => <ComplexCard key={c.id} complex={c} variant="list" />)
+                  : listingRows.map((l) => <ListingCard key={l.id} listing={l} variant="list" />)}
               </div>
             )}
-            {view === 'map' && (
+            {view === 'map' && isApartmentMode && (
               <div className="h-[calc(100vh-220px)] min-h-[400px]">
                 <MapSearch complexes={filtered} activeSlug={mapActive} onSelect={setMapActive} compact />
               </div>
             )}
-            {view !== 'map' && filtered.length > 0 && (
+            {view === 'map' && !isApartmentMode && (
+              <div className="h-[calc(100vh-220px)] min-h-[400px] flex items-center justify-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
+                Карта пока доступна только для жилых комплексов
+              </div>
+            )}
+            {view !== 'map' && totalShown > 0 && (
               <div className="flex flex-col items-center gap-2 mt-8">
                 {hasMore ? (
                   <Button
@@ -338,18 +414,18 @@ const RedesignCatalog = () => {
                     size="sm"
                     className="min-w-[200px]"
                     disabled={fetchingMore}
-                    onClick={() => void blocksInfinite.fetchNextPage()}
+                    onClick={fetchNext}
                   >
                     {fetchingMore ? 'Загрузка…' : 'Показать ещё'}
                   </Button>
                 ) : null}
                 <p className="text-xs text-muted-foreground">
-                  Показано {filtered.length}
+                  Показано {totalShown}
                   {totalRemote != null ? ` из ${totalRemote}` : ''}
                 </p>
               </div>
             )}
-            {!loading && filtered.length === 0 && view !== 'map' && (
+            {!loading && totalShown === 0 && view !== 'map' && (
               <div className="text-center py-16">
                 <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
                   <SlidersHorizontal className="w-5 h-5 text-muted-foreground" />
@@ -382,7 +458,7 @@ const RedesignCatalog = () => {
           </div>
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-border">
             <Button className="w-full h-11" onClick={() => setShowMobileFilters(false)}>
-              Показать {filtered.length} объектов
+              Показать {totalShown} объектов
             </Button>
           </div>
         </div>

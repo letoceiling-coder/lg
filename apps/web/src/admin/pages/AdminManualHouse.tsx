@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, ImageIcon, Loader2, Plus, Save, X } from 'lucide-react';
 import { apiGet, apiPatch, apiPost, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
+import MediaPickerDialog from '@/admin/components/MediaPickerDialog';
 
 type RegionRow = { id: number; code: string; name: string };
 type BlockRow = { id: number; name: string };
@@ -18,6 +19,8 @@ type ListingHouse = {
   bathrooms: number | null;
   hasGarage: boolean | null;
   yearBuilt: number | null;
+  photoUrl: string | null;
+  extraPhotoUrls: unknown;
 };
 type ListingDetail = {
   id: number;
@@ -90,6 +93,9 @@ export default function AdminManualHouse() {
   const [bathrooms, setBathrooms] = useState('');
   const [hasGarage, setHasGarage] = useState(false);
   const [yearBuilt, setYearBuilt] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [extraPhotoUrls, setExtraPhotoUrls] = useState<string[]>([]);
+  const [picker, setPicker] = useState<null | 'main' | 'extra'>(null);
   const [didInitForm, setDidInitForm] = useState(false);
 
   const effectiveRegionId = regionId || initialRegionId;
@@ -124,6 +130,12 @@ export default function AdminManualHouse() {
     setBathrooms(current.house?.bathrooms != null ? String(current.house.bathrooms) : '');
     setHasGarage(Boolean(current.house?.hasGarage));
     setYearBuilt(current.house?.yearBuilt != null ? String(current.house.yearBuilt) : '');
+    setPhotoUrl(typeof current.house?.photoUrl === 'string' ? current.house.photoUrl : '');
+    setExtraPhotoUrls(
+      Array.isArray(current.house?.extraPhotoUrls)
+        ? current.house.extraPhotoUrls.filter((v): v is string => typeof v === 'string')
+        : [],
+    );
     setDidInitForm(true);
   }, [current, didInitForm, isEdit]);
 
@@ -148,6 +160,8 @@ export default function AdminManualHouse() {
           bathrooms: bathrooms ? Number(bathrooms) : undefined,
           hasGarage,
           yearBuilt: yearBuilt ? Number(yearBuilt) : undefined,
+          photoUrl: photoUrl.trim() || undefined,
+          extraPhotoUrls: extraPhotoUrls.length ? extraPhotoUrls : undefined,
         },
       };
       if (isEdit && editId != null) {
@@ -284,12 +298,74 @@ export default function AdminManualHouse() {
           <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
           Опубликовано
         </label>
+
+        <div className="md:col-span-2 space-y-2 border-t pt-4 mt-1">
+          <label className="text-xs text-muted-foreground mb-1 block">Основное фото (медиатека)</label>
+          <div className="flex flex-wrap items-center gap-2">
+            {photoUrl ? (
+              <img src={photoUrl} alt="" className="h-16 w-16 object-cover rounded-lg border" />
+            ) : (
+              <span className="text-xs text-muted-foreground">Не выбрано</span>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={() => setPicker('main')}>
+              <ImageIcon className="w-4 h-4 mr-1" />
+              Выбрать
+            </Button>
+            {photoUrl ? (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setPhotoUrl('')}>
+                Сброс
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="md:col-span-2 space-y-2">
+          <label className="text-xs text-muted-foreground mb-1 block">Дополнительные фото</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {extraPhotoUrls.map((u) => (
+              <div key={u} className="relative h-16 w-16 rounded-lg border overflow-hidden group">
+                <img src={u} alt="" className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white"
+                  onClick={() => setExtraPhotoUrls((prev) => prev.filter((x) => x !== u))}
+                  aria-label="Убрать"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setPicker('extra')}>
+            <Plus className="w-4 h-4 mr-1" />
+            Добавить из медиа
+          </Button>
+        </div>
       </div>
 
       <Button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
         {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
         Сохранить
       </Button>
+
+      <MediaPickerDialog
+        open={picker != null}
+        onOpenChange={(o) => !o && setPicker(null)}
+        title={picker === 'main' ? 'Основное фото дома' : 'Дополнительные фото дома'}
+        multiple={picker === 'extra'}
+        onPick={(items) => {
+          const urls = items.map((i) => i.url);
+          if (picker === 'main') setPhotoUrl(urls[0] ?? '');
+          else {
+            setExtraPhotoUrls((prev) => {
+              const set = new Set(prev);
+              for (const u of urls) set.add(u);
+              return Array.from(set);
+            });
+          }
+          setPicker(null);
+        }}
+      />
     </div>
   );
 }

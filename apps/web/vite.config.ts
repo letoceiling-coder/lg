@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   const publicSiteUrl = (
     env.VITE_PUBLIC_SITE_URL ||
     env.PUBLIC_SITE_URL ||
-    "https://lg.livegrid.ru"
+    "https://livegrid.ru"
   ).replace(/\/+$/, "");
 
   return {

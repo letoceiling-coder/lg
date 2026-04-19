@@ -1,12 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
   IsNumber,
   IsOptional,
+  IsString,
   Min,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -56,6 +59,19 @@ export class ManualHouseFieldsDto {
   @IsInt()
   @Min(1800)
   yearBuilt?: number;
+
+  @ApiPropertyOptional({ example: '/uploads/media/houses/main.jpg' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  photoUrl?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Дополнительные фото из медиатеки' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[];
 }
 
 export class CreateManualHouseDto {
@@ -136,6 +152,19 @@ export class ManualHousePatchDto {
   @IsInt()
   @Min(1800)
   yearBuilt?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  photoUrl?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[] | null;
 }
 
 export class UpdateManualHouseDto {

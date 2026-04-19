@@ -6,7 +6,19 @@ export class QueryListingsDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) region_id?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() kind?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+  @ApiPropertyOptional({ description: 'Comma-separated listing statuses (e.g. ACTIVE,RESERVED,SOLD)' })
+  @IsOptional()
+  @IsString()
+  statuses?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() data_source?: string;
+  @ApiPropertyOptional({ description: 'Filter by isPublished (true/false). Default: true for anonymous, no filter for admin.' })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+  })
+  is_published?: boolean;
 
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) price_min?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) price_max?: number;

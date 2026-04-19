@@ -20,11 +20,19 @@ export function RequireAuth({ children, roles }: Props) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const next = encodeURIComponent(`${location.pathname}${location.search}`);
+    return <Navigate to={`/login?next=${next}`} state={{ from: location }} replace />;
   }
 
   if (roles && user && !roles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+    const next = encodeURIComponent(`${location.pathname}${location.search}`);
+    return (
+      <Navigate
+        to={`/login?next=${next}&error=role`}
+        state={{ from: location }}
+        replace
+      />
+    );
   }
 
   return <>{children}</>;

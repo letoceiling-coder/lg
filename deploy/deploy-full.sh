@@ -9,8 +9,9 @@ set -euo pipefail
 PROJECT_DIR="${DEPLOY_ROOT:-/var/www/lg}"
 export DEPLOY_ROOT="$PROJECT_DIR"
 LOG_DIR="/var/log/lg"
-NGINX_CONF="/etc/nginx/sites-available/lg.livegrid.ru.conf"
-NGINX_LINK="/etc/nginx/sites-enabled/lg.livegrid.ru.conf"
+NGINX_CONF="/etc/nginx/sites-available/livegrid.ru.conf"
+NGINX_LINK="/etc/nginx/sites-enabled/livegrid.ru.conf"
+LEGACY_NGINX_LINK_1="/etc/nginx/sites-enabled/livegrid.ru"
 
 echo "=== LiveGrid Full Deploy ==="
 echo "Project: $PROJECT_DIR (DEPLOY_ROOT=$DEPLOY_ROOT)"
@@ -49,7 +50,7 @@ pnpm --filter @lg/api build
 # ── 5. Build frontend ──
 echo "→ Building frontend..."
 # Каноникал и prerender (sitemap, /complex/*/index.html) берут VITE_PUBLIC_SITE_URL или PUBLIC_SITE_URL
-SITE_FOR_WEB="${VITE_PUBLIC_SITE_URL:-${PUBLIC_SITE_URL:-https://lg.livegrid.ru}}"
+SITE_FOR_WEB="${VITE_PUBLIC_SITE_URL:-${PUBLIC_SITE_URL:-https://livegrid.ru}}"
 SITE_FOR_WEB="${SITE_FOR_WEB%/}"
 export VITE_PUBLIC_SITE_URL="$SITE_FOR_WEB"
 pnpm build:web
@@ -63,11 +64,20 @@ pm2 save
 
 # ── 7. Update nginx config ──
 echo "→ Updating nginx config..."
-cp deploy/lg.livegrid.ru.ssl.conf "$NGINX_CONF"
+cp deploy/livegrid.ru.ssl.conf "$NGINX_CONF"
 
 if [ ! -L "$NGINX_LINK" ]; then
   ln -s "$NGINX_CONF" "$NGINX_LINK"
 fi
+if [ -e "$LEGACY_NGINX_LINK_1" ] && [ "$LEGACY_NGINX_LINK_1" != "$NGINX_LINK" ]; then
+  rm -f "$LEGACY_NGINX_LINK_1"
+fi
+for legacy in /etc/nginx/sites-enabled/*.livegrid.ru.conf; do
+  [ -e "$legacy" ] || continue
+  if [ "$legacy" != "$NGINX_LINK" ]; then
+    rm -f "$legacy"
+  fi
+done
 
 nginx -t && nginx -s reload
 echo "  nginx reloaded OK"
@@ -102,4 +112,4 @@ if [ -f deploy/verify-on-server.sh ]; then
   VERIFY_MODE=runtime bash deploy/verify-on-server.sh runtime || exit 1
 fi
 
-echo "Frontend: https://lg.livegrid.ru/"
+echo "Frontend: https://livegrid.ru/"

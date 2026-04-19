@@ -14,8 +14,13 @@ export class NewsController {
   @ApiOperation({ summary: 'List published news (public)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'per_page', required: false })
-  findAllPublic(@Query('page') page?: number, @Query('per_page') perPage?: number) {
-    return this.service.findAll(page, perPage, true);
+  @ApiQuery({ name: 'region_id', required: false, description: 'ID города (feed_regions.id)' })
+  findAllPublic(
+    @Query('page') page?: number,
+    @Query('per_page') perPage?: number,
+    @Query('region_id') regionId?: number,
+  ) {
+    return this.service.findAll(page, perPage, true, regionId);
   }
 
   @Public()
@@ -54,6 +59,7 @@ export class NewsAdminController {
   createTelegramChannel(
     @Body()
     body: {
+      regionId: number;
       channelRef: string;
       label?: string | null;
       isEnabled?: boolean;
@@ -72,6 +78,7 @@ export class NewsAdminController {
     @Param('channelId', ParseIntPipe) channelId: number,
     @Body()
     body: {
+      regionId?: number;
       channelRef?: string;
       label?: string | null;
       isEnabled?: boolean;
@@ -119,6 +126,15 @@ export class NewsAdminController {
     });
   }
 
+  @Post('backfill-telegram-photos')
+  @Roles('editor')
+  @ApiOperation({
+    summary: 'Admin: дозагрузить фото для Telegram-новостей без imageUrl',
+  })
+  backfillTelegramPhotos(@Body() body?: { limit?: number | null }) {
+    return this.service.backfillTelegramNewsPhotos(body?.limit ?? null);
+  }
+
   @Post('telegram-qr/start')
   @Roles('editor')
   @ApiOperation({
@@ -151,26 +167,65 @@ export class NewsAdminController {
     return this.telegramQr.cancelQrLogin(body.flowId);
   }
 
+  @Post('telegram-qr/reset')
+  @Roles('editor')
+  @ApiOperation({ summary: 'Admin: MTProto — принудительно сбросить активный QR-flow' })
+  telegramQrReset() {
+    return this.telegramQr.resetActiveFlow();
+  }
+
   @Get()
   @Roles('editor')
   @ApiOperation({ summary: 'Admin: list all news (including drafts)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'per_page', required: false })
-  findAll(@Query('page') page?: number, @Query('per_page') perPage?: number) {
-    return this.service.findAll(page, perPage, false);
+  @ApiQuery({ name: 'region_id', required: false, description: 'ID города (feed_regions.id)' })
+  findAll(
+    @Query('page') page?: number,
+    @Query('per_page') perPage?: number,
+    @Query('region_id') regionId?: number,
+  ) {
+    return this.service.findAll(page, perPage, false, regionId);
   }
 
   @Post()
   @Roles('editor')
   @ApiOperation({ summary: 'Admin: create news article' })
-  create(@Body() dto: { title: string; slug: string; body?: string; imageUrl?: string; source?: string; sourceUrl?: string; isPublished?: boolean }) {
+  create(
+    @Body()
+    dto: {
+      title: string;
+      slug: string;
+      body?: string;
+      imageUrl?: string;
+      source?: string;
+      sourceUrl?: string;
+      isPublished?: boolean;
+      regionId?: number | null;
+      mediaFileIds?: number[] | null;
+    },
+  ) {
     return this.service.create(dto);
   }
 
   @Put(':id')
   @Roles('editor')
   @ApiOperation({ summary: 'Admin: update news article' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: { title?: string; slug?: string; body?: string; imageUrl?: string; source?: string; sourceUrl?: string; isPublished?: boolean }) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    dto: {
+      title?: string;
+      slug?: string;
+      body?: string;
+      imageUrl?: string;
+      source?: string;
+      sourceUrl?: string;
+      isPublished?: boolean;
+      regionId?: number | null;
+      mediaFileIds?: number[] | null;
+    },
+  ) {
     return this.service.update(id, dto);
   }
 

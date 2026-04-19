@@ -295,11 +295,16 @@ export class BlocksService {
       _count: {
         select: {
           listings: {
-            where: { status: ListingStatus.ACTIVE, kind: ListingKind.APARTMENT, isPublished: true },
+            // «В продаже» = ACTIVE + RESERVED. Совпадает с layouts на сайте.
+            where: {
+              status: { in: [ListingStatus.ACTIVE, ListingStatus.RESERVED] },
+              kind: ListingKind.APARTMENT,
+              isPublished: true,
+            },
           },
         },
       },
-    } as const;
+    } satisfies Prisma.BlockInclude;
 
     const total = await this.prisma.block.count({ where });
     if (total === 0) {
@@ -424,11 +429,18 @@ export class BlocksService {
     return result;
   }
 
+  /**
+   * Минимальная «вменяемая» цена объекта в рублях. Всё, что меньше — мусор из фида,
+   * не должно попадать в агрегаты «от …» и в фасеты каталога.
+   */
+  private static readonly MIN_REASONABLE_PRICE_RUB = 100_000;
+
   private async listingPriceBoundsByBlockIds(
     blockIds: number[],
   ): Promise<Map<number, { min: number; max: number }>> {
     const map = new Map<number, { min: number; max: number }>();
     if (!blockIds.length) return map;
+    const minPrice = BlocksService.MIN_REASONABLE_PRICE_RUB;
     if (await this.isCatalogMvAvailable()) {
       try {
         const rows = await this.prisma.$queryRaw<
@@ -437,6 +449,7 @@ export class BlocksService {
           SELECT mv.block_id, MIN(mv.price) AS min_p, MAX(mv.price) AS max_p
           FROM catalog_apartment_active_mv mv
           WHERE mv.block_id IN (${Prisma.join(blockIds)})
+            AND mv.price >= ${minPrice}
           GROUP BY mv.block_id
         `;
         for (const row of rows) {
@@ -457,7 +470,7 @@ export class BlocksService {
         blockId: { in: blockIds },
         status: ListingStatus.ACTIVE,
         kind: ListingKind.APARTMENT,
-        price: { not: null },
+        price: { gte: minPrice },
         isPublished: true,
       },
       _min: { price: true },
@@ -514,11 +527,16 @@ export class BlocksService {
     _count: {
       select: {
         listings: {
-          where: { status: ListingStatus.ACTIVE, kind: ListingKind.APARTMENT, isPublished: true },
+          // «В продаже» = ACTIVE + RESERVED. SOLD исключаем, isPublished обязателен.
+          where: {
+            status: { in: [ListingStatus.ACTIVE, ListingStatus.RESERVED] },
+            kind: ListingKind.APARTMENT,
+            isPublished: true,
+          },
         },
       },
     },
-  };
+  } satisfies Prisma.BlockInclude;
 
   async findOne(id: number) {
     const block = await this.prisma.block.findUnique({

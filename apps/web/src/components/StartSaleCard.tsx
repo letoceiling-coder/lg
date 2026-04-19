@@ -1,5 +1,7 @@
 import { Heart, MapPin } from 'lucide-react';
 import PropertyBadge from './PropertyBadge';
+import CardShell from './CardShell';
+import PriceLabel from './PriceLabel';
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -51,8 +53,7 @@ const StartSaleCard = ({ data }: { data: StartSaleData }) => {
   }, [hovered]);
 
   return (
-    <div
-      className="group relative rounded-xl overflow-hidden bg-card border border-border transition-shadow duration-200 hover:shadow-md h-[300px] flex flex-col"
+    <CardShell
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -86,7 +87,7 @@ const StartSaleCard = ({ data }: { data: StartSaleData }) => {
         <div className="p-3 flex-1 flex flex-col gap-0.5">
           <div className="flex justify-between items-start gap-2">
             <h3 className="font-semibold text-sm leading-tight truncate">{data.title}</h3>
-            <span className="font-bold text-sm shrink-0">{data.price}</span>
+            <PriceLabel value={data.price} />
           </div>
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
             <MapPin className="w-3 h-3 shrink-0" />
@@ -111,7 +112,7 @@ const StartSaleCard = ({ data }: { data: StartSaleData }) => {
         <div className="p-3 border-b border-border">
           <div className="flex justify-between items-start gap-2">
             <h3 className="font-semibold text-sm leading-tight truncate">{data.title}</h3>
-            <span className="font-bold text-sm shrink-0 text-primary">{data.price}</span>
+            <PriceLabel value={data.price} />
           </div>
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
             <MapPin className="w-3 h-3 shrink-0" />
@@ -157,7 +158,7 @@ const StartSaleCard = ({ data }: { data: StartSaleData }) => {
           </Link>
         </div>
       </div>
-    </div>
+    </CardShell>
   );
 };
 

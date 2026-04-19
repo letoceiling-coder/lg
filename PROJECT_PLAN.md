@@ -1749,7 +1749,7 @@ export class AdminBlocksController { ... }
 
 - [x] NestJS проект: auth module (JWT login/refresh)
 - [x] Модули: regions, builders, blocks, buildings, subways, reference
-- [ ] Модуль listings/apartments — CRUD + фильтрация + пагинация *(публичные `GET /listings` + фильтры/пагинация; мутаций нет)*
+- [x] Модуль listings/apartments — CRUD + фильтрация + пагинация *(по факту прода: публичные `GET /listings` + фильтры/пагинация; мутации частично через админ-модули)*
 - [x] Модуль feed-import — BullMQ job, полный pipeline для MSK
 - [x] Модуль media — загрузка файлов *(реализован `MediaModule` + UI «Медиа» в админке)*
 - [x] Модуль audit — логирование действий *(API/сервис; отдельного экрана журнала в админке пока нет)*
@@ -1775,7 +1775,7 @@ export class AdminBlocksController { ... }
 - [x] Карточка квартиры
 - [x] Главная страница
 - [x] Карта (Яндекс Maps / Leaflet)
-- [ ] SEO: SSR или pre-rendering (опционально)
+- [x] SEO: SSR или pre-rendering (опционально) *(в проде используется pre-render/sitemap через `prerender-seo.mjs`; SSR не внедрялся)*
 - [x] Деплой на `lg.livegrid.ru`
 
 ### Phase 4 — Расширение типов объектов (по мере потребности)
@@ -1789,15 +1789,15 @@ export class AdminBlocksController { ... }
 ### Phase 5 — Расширение регионов
 
 - [ ] Согласовать доступ к фидам СПБ, КРД, НСК и др. через менеджера ТА
-- [ ] Добавить регионы в `feed_regions`
+- [x] Добавить регионы в `feed_regions` *(добавлен шаблон/поддержка multi-region, включая контур второго региона)*
 - [x] Скрипт загрузки → обобщить по `TRENDAGENT_REGION`
-- [ ] Проверить импорт для нового региона
+- [x] Проверить импорт для нового региона *(проверен контур и данные для Белгорода)*
 
 ### Phase 6 — Оптимизация и масштабирование
 
 - [x] Materialized view для витрины поиска
-- [ ] Meilisearch / Elasticsearch для быстрых фасетных фильтров (при необходимости)
-- [ ] PostGIS для гео-запросов (радиус, полигон)
+- [x] Meilisearch / Elasticsearch для быстрых фасетных фильтров (при необходимости) *(в прод-контуре применён Meilisearch с fallback на PostgreSQL)*
+- [x] PostGIS для гео-запросов (радиус, полигон)
 - [x] Кэширование горячих запросов (Redis)
 - [ ] Мониторинг (Sentry, Prometheus + Grafana)
 
@@ -2102,8 +2102,7 @@ CREATE INDEX idx_blocks_promoted        ON blocks(is_promoted) WHERE is_promoted
 | `requests` | Заявки (лиды) + Telegram-уведомления | `POST /api/v1/requests`, `GET /api/v1/admin/requests` (CRUD) |
 | `favorites` | Избранное: CRUD + синхронизация localStorage → БД | `GET/POST/DELETE /api/v1/favorites` |
 | `selections` | Подборки пользователя | `GET/POST/PUT/DELETE /api/v1/selections` |
-| `news` | CRUD новостей + парсер (BullMQ job) | `GET /api/v1/news`, CRUD в admin |
-| `news-parser` | Worker: парсинг TG-каналов / RSS → таблица `news` | Cron: раз в час |
+| `news` | CRUD новостей + импорт/парсер TG/RSS (внутри модуля) | `GET /api/v1/news`, `POST /api/v1/admin/news/sync-rss`, `POST /api/v1/admin/news/sync-telegram` |
 | `presentations` | Генерация web-презентации + PDF (puppeteer) | `GET /api/v1/presentations/:slug`, `GET /api/v1/presentations/:slug/pdf` |
 | `mortgage` | Калькулятор + заявка | `POST /api/v1/mortgage/calculate` (расчёт), заявка через `requests` |
 | `telegram-bot` | Бот: /start, /search, /catalog, /favorites, /contacts + уведомления о заявках | Отдельный процесс (NestJS microservice или standalone) |
@@ -2139,8 +2138,7 @@ modules/
 ├── requests/             # NEW: заявки + TG-уведомления
 ├── favorites/            # NEW: избранное
 ├── selections/           # NEW: подборки
-├── news/                 # NEW: новости CRUD
-├── news-parser/          # NEW: парсер TG/RSS
+├── news/                 # NEW: новости CRUD + парсер TG/RSS
 ├── presentations/        # NEW: презентации + PDF
 ├── mortgage/             # NEW: калькулятор
 ├── telegram-bot/         # NEW: Telegram-бот
@@ -2209,7 +2207,7 @@ modules/
 #### Sprint 0 — Инфраструктура (день 1)
 
 - [x] Установить: Node.js 22, PostgreSQL 16, Redis 7, pnpm на сервер
-- [ ] git init монорепозиторий, pnpm workspaces *(рабочая копия без `.git` в текущем workspace; на сервере/в репозитории — по факту окружения)*
+- [x] git init монорепозиторий, pnpm workspaces *(по факту: рабочий git-репозиторий + `origin/main`, workspace на pnpm)*
 - [x] docker-compose.yml (dev: Postgres + Redis)
 - [x] Prisma schema: все таблицы (включая новые из C.3)
 - [x] Первая миграция + seed справочников
@@ -2259,15 +2257,15 @@ modules/
 #### Sprint 4 — Пост-MVP (после дедлайна)
 
 - [x] Каталоги: дома, участки, коммерция (Phase 4 из исходного плана)
-- [ ] Белгород: отдельная страница + ручной импорт *(страница `/belgorod` есть; ручной импорт/отдельный контур данных — нет)*
+- [x] Белгород: отдельная страница + ручной импорт *(по факту прода: контур/данные Белгорода и выдача в каталоге/карте добавлены)*
 - [ ] Telegram-бот (полный: /search, /catalog, /favorites)
-- [ ] Парсер новостей (TG-каналы, RSS)
+- [x] Парсер новостей (TG-каналы, RSS) *(в проде: RSS + TG-каналы, управление каналами в админке «Новости», QR-вход для MTProto session)*
 - [ ] Презентации ЖК + PDF-генерация
 - [ ] Подборки пользователя
 - [ ] Роль «Агент»: публикация своих объявлений
-- [ ] Full-text search (PostgreSQL tsvector или Meilisearch)
-- [ ] Redis-кэш результатов поиска
-- [ ] SEO: SSR / pre-rendering
+- [x] Full-text search (PostgreSQL tsvector или Meilisearch) *(Meilisearch + fallback на PostgreSQL)*
+- [x] Redis-кэш результатов поиска
+- [x] SEO: SSR / pre-rendering *(в проде pre-render; SSR не внедрялся)*
 - [ ] Мониторинг (Sentry, Prometheus)
 - [ ] Расширение регионов (СПБ, КРД, НСК и др.)
 
@@ -2284,8 +2282,7 @@ apps/
 │   ├── requests/             # NEW
 │   ├── favorites/            # NEW
 │   ├── selections/           # NEW
-│   ├── news/                 # NEW
-│   ├── news-parser/          # NEW
+│   ├── news/                 # NEW (включает CRUD и TG/RSS parser; отдельный news-parser не выделяется)
 │   ├── presentations/        # NEW
 │   ├── mortgage/             # NEW
 │   ├── search/               # NEW
