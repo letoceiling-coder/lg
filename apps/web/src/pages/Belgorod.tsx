@@ -68,10 +68,10 @@ export default function Belgorod() {
           </div>
           {region && (
             <Link
-              to={`/catalog?region_id=${region.id}&geo_preset=belgorod`}
+              to={`/catalog?region_id=${region.id}${kind !== 'ALL' && kind !== 'APARTMENT' ? `&type=${kind === 'HOUSE' ? 'houses' : kind === 'LAND' ? 'land' : 'commercial'}` : ''}`}
               className="text-sm text-primary hover:underline"
             >
-              Посмотреть на карте/в каталоге →
+              Посмотреть в каталоге →
             </Link>
           )}
         </div>

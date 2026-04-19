@@ -1,4 +1,4 @@
-import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Calculator, Heart, Share2, GitCompare, FileText } from 'lucide-react';
@@ -94,6 +94,19 @@ const RedesignApartment = () => {
 
   const loading = listingId != null && listingQuery.isPending;
   const apiFailed = listingId != null && (listingQuery.isError || (listingQuery.isFetched && !apiPage));
+
+  // Если объект пришёл, но это не квартира (например, дом/участок/коммерция/паркинг
+  // или квартира без блока) — отдадим работу универсальной странице.
+  const fetchedKind = listingQuery.data?.kind;
+  const fetchedHasBlock = !!listingQuery.data?.block;
+  if (
+    listingId != null &&
+    listingQuery.isFetched &&
+    listingQuery.data &&
+    (fetchedKind !== 'APARTMENT' || !fetchedHasBlock)
+  ) {
+    return <Navigate to={`/listing/${listingId}`} replace />;
+  }
 
   if (loading) {
     return (

@@ -146,7 +146,7 @@ const ListingCard = ({ listing, variant = 'grid' }: Props) => {
   const statusLabel = STATUS_LABEL[listing.status] ?? listing.status;
   const statusTone = STATUS_TONE[listing.status] ?? 'bg-muted text-muted-foreground';
 
-  const linkTo = `/apartment/${listing.id}`;
+  const linkTo = listing.kind === 'APARTMENT' ? `/apartment/${listing.id}` : `/listing/${listing.id}`;
 
   const isList = variant === 'list';
 

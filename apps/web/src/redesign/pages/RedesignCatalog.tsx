@@ -205,6 +205,26 @@ const RedesignCatalog = () => {
     select: (r) => r.map((x) => x.name),
   });
 
+  const kindCountsQuery = useQuery({
+    queryKey: ['stats', 'listing-kind-counts', regionId],
+    queryFn: () => apiGet<Record<string, number>>(`/stats/listing-kind-counts?region_id=${regionId}`),
+    enabled: regionId != null,
+    staleTime: 60_000,
+  });
+
+  const kindCounts = kindCountsQuery.data ?? {};
+  const availableKindLinks = useMemo(() => {
+    const items: { type: ObjectType; label: string; count: number }[] = [
+      { type: 'apartments', label: 'Квартиры', count: kindCounts.APARTMENT ?? 0 },
+      { type: 'houses', label: 'Дома и дачи', count: kindCounts.HOUSE ?? 0 },
+      { type: 'land', label: 'Участки', count: kindCounts.LAND ?? 0 },
+      { type: 'commercial', label: 'Коммерция', count: kindCounts.COMMERCIAL ?? 0 },
+    ];
+    return items.filter((x) => x.count > 0);
+  }, [kindCounts]);
+
+  const showKindSwitcher = availableKindLinks.length >= 2 && availableKindLinks.some((x) => x.type !== filters.objectType);
+
   const subwaysQuery = useQuery({
     queryKey: ['subways', regionId],
     queryFn: () => apiGet<{ name: string }[]>(`/subways?region_id=${regionId}`),
@@ -364,6 +384,28 @@ const RedesignCatalog = () => {
           <p className="text-sm text-muted-foreground mb-4">Нет регионов в базе — добавьте регион и ЖК в админке.</p>
         )}
 
+        {showKindSwitcher && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground mr-1">В этом регионе доступно:</span>
+            {availableKindLinks.map((x) => (
+              <button
+                key={x.type}
+                type="button"
+                onClick={() => handleFiltersChange({ ...filters, objectType: x.type })}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors',
+                  filters.objectType === x.type
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card text-foreground border-border hover:bg-muted/60',
+                )}
+              >
+                {x.label}
+                <span className="opacity-70">({x.count})</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-6">
           <aside className="hidden lg:block w-[260px] shrink-0">
             <div className="sticky top-20">
@@ -431,7 +473,23 @@ const RedesignCatalog = () => {
                   <SlidersHorizontal className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <p className="text-muted-foreground text-sm mb-1">Ничего не найдено</p>
-                <p className="text-muted-foreground text-xs">Попробуйте изменить параметры фильтров или строку поиска</p>
+                <p className="text-muted-foreground text-xs mb-4">Попробуйте изменить параметры фильтров или строку поиска</p>
+                {availableKindLinks.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 justify-center">
+                    {availableKindLinks
+                      .filter((x) => x.type !== filters.objectType)
+                      .map((x) => (
+                        <button
+                          key={x.type}
+                          type="button"
+                          onClick={() => handleFiltersChange({ ...filters, objectType: x.type })}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border border-primary text-primary hover:bg-primary/10"
+                        >
+                          Открыть «{x.label}» ({x.count})
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

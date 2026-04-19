@@ -14,6 +14,7 @@ const RedesignIndex = lazy(() => import("./redesign/pages/RedesignIndex"));
 const RedesignCatalog = lazy(() => import("./redesign/pages/RedesignCatalog"));
 const RedesignComplex = lazy(() => import("./redesign/pages/RedesignComplex"));
 const RedesignApartment = lazy(() => import("./redesign/pages/RedesignApartment"));
+const RedesignListingDetail = lazy(() => import("./redesign/pages/RedesignListingDetail"));
 const RedesignMap = lazy(() => import("./redesign/pages/RedesignMap"));
 const RedesignLayouts = lazy(() => import("./redesign/pages/RedesignLayouts"));
 
@@ -93,6 +94,7 @@ const AppRoutes = () => (
     <Route path="/belgorod" element={<Belgorod />} />
     <Route path="/complex/:slug" element={<RedesignComplex />} />
     <Route path="/apartment/:id" element={<RedesignApartment />} />
+    <Route path="/listing/:id" element={<RedesignListingDetail />} />
     <Route path="/presentation/:slug" element={<Presentation />} />
     <Route path="/layouts/:complex" element={<RedesignLayouts />} />
     <Route path="/map" element={<RedesignMap />} />

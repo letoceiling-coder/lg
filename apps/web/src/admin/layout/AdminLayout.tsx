@@ -17,7 +17,7 @@ const navItems = [
   { to: '/admin/blocks', icon: Building2, label: 'ЖК', roles: ['admin', 'editor'] },
   { to: '/admin/builders', icon: HardHat, label: 'Застройщики', roles: ['admin', 'editor'] },
   { to: '/admin/buildings', icon: Building, label: 'Корпуса', roles: ['admin', 'editor'] },
-  { to: '/admin/listings', icon: Home, label: 'Квартиры', roles: ['admin', 'editor', 'manager', 'agent'] },
+  { to: '/admin/listings', icon: Home, label: 'Объявления', roles: ['admin', 'editor', 'manager', 'agent'] },
   { to: '/admin/feed-import', icon: Download, label: 'Импорт фидов', roles: ['admin', 'editor'] },
   { to: '/admin/reference', icon: BookOpen, label: 'Справочники', roles: ['admin', 'editor'] },
   { to: '/admin/regions', icon: Globe, label: 'Регионы', roles: ['admin', 'editor'] },

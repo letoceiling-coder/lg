@@ -164,7 +164,14 @@ export class ListingsService {
       },
     });
     if (!listing) throw new NotFoundException('Listing not found');
-    return listing;
+
+    const media = await this.prisma.mediaFile.findMany({
+      where: { entityType: 'listing', entityId: id },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      select: { id: true, url: true, kind: true, sortOrder: true },
+    });
+
+    return { ...listing, mediaFiles: media };
   }
 
   private async buildWhere(query: QueryListingsDto): Promise<Prisma.ListingWhereInput> {
