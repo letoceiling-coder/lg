@@ -137,6 +137,24 @@ export class ContentService implements OnModuleInit {
   }
 
   /** Уведомления о заявках: значения из site_settings (не из env). */
+
+  async getBotContacts() {
+    const [email, address, workHours] = await Promise.all([
+      this.prisma.siteSetting.findUnique({ where: { key: 'contacts_email' }, select: { value: true } }),
+      this.prisma.siteSetting.findUnique({ where: { key: 'contacts_address' }, select: { value: true } }),
+      this.prisma.siteSetting.findUnique({ where: { key: 'contacts_work_hours' }, select: { value: true } }),
+    ]);
+
+    return {
+      phone: '+7 (904) 539-34-34',
+      email: email?.value?.trim() || 'info@livegrid.ru',
+      address: address?.value?.trim() || 'Белгород, офис Live Grid',
+      workHours: workHours?.value?.trim() || 'пн–пт 9:00–18:00',
+      siteUrl: 'https://livegrid.ru',
+      contactsUrl: 'https://livegrid.ru/contacts',
+    };
+  }
+
   /** Ключ для загрузки виджета карт в браузере (не секрет сервера; хранится в integrations). */
   async getYandexMapsPublicConfig(): Promise<{ apiKey: string | null }> {
     const row = await this.prisma.siteSetting.findUnique({

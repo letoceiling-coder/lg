@@ -15,7 +15,6 @@ import LatestNews from '@/components/LatestNews';
 import ContactsSection from '@/components/ContactsSection';
 import FooterSection from '@/components/FooterSection';
 import { apiGet } from '@/lib/api';
-import { complexes } from '@/redesign/data/mock-data';
 import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
 
@@ -40,7 +39,7 @@ const RedesignIndex = () => {
     const rows = blocksFeatured.data?.data ?? [];
     const promoted = rows.filter((b) => b.isPromoted);
     const pick = (promoted.length ? promoted : rows).slice(0, 4).map(mapApiBlockListRowToResidentialComplex);
-    return pick.length ? pick : complexes.slice(0, 4);
+    return pick;
   }, [blocksFeatured.data]);
 
   return (
@@ -49,7 +48,7 @@ const RedesignIndex = () => {
       <ApiConnectionStrip />
       <HeroSearch />
 
-      {/* Популярные ЖК */}
+      {featured.length > 0 && (
       <section className="max-w-[1400px] mx-auto px-4 pt-6 pb-6 sm:pb-10">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-base sm:text-xl font-bold">Популярные ЖК</h2>
@@ -93,6 +92,8 @@ const RedesignIndex = () => {
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </section>
+      )}
+
 
       <PropertyGridSection title="Горячие предложения" type="hot" />
       <PropertyGridSection title="Старт продаж" type="start" />

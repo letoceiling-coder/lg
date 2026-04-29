@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Lock, Eye, EyeOff, UserCircle2 } from 'lucide-react';
 import Header from '@/redesign/components/RedesignHeader';
@@ -6,10 +6,28 @@ import FooterSection from '@/components/FooterSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/shared/hooks/useAuth';
+import type { UserRole } from '@/shared/types';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
+import { apiPost } from '@/lib/api';
+
+const ADMIN_ROLES: UserRole[] = ['admin', 'editor', 'manager', 'agent'];
+
+function pickRedirectTarget(
+  search: string,
+  state: unknown,
+  role: UserRole | null,
+): string {
+  const params = new URLSearchParams(search);
+  const next = params.get('next');
+  if (next && next.startsWith('/')) return next;
+  const fromState = (state as { from?: { pathname?: string } } | null)?.from?.pathname;
+  if (fromState && fromState !== '/login') return fromState;
+  if (role && ADMIN_ROLES.includes(role)) return '/admin';
+  return '/';
+}
 
 const Login = () => {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
@@ -18,12 +36,52 @@ const Login = () => {
   const [error, setError] = useState('');
   const [tgError, setTgError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [tgCode, setTgCode] = useState('');
+  const [tgCodeMessage, setTgCodeMessage] = useState('');
+  const [tgCodeLoading, setTgCodeLoading] = useState(false);
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  const target = useMemo(
+    () => pickRedirectTarget(location.search, location.state, user?.role ?? null),
+    [location.search, location.state, user?.role],
+  );
 
-  if (isAuthenticated) {
-    navigate(from, { replace: true });
-  }
+  const roleErrorVisible = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('error') === 'role';
+  }, [location.search]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (isAuthenticated) {
+      navigate(target, { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate, target]);
+
+
+  const requestTelegramCode = async () => {
+    setTgCode('');
+    setTgCodeMessage('');
+    const trimmed = loginId.trim();
+    if (!trimmed || !password.trim()) {
+      setTgCodeMessage('Укажите email/телефон и пароль, затем запросите код.');
+      return;
+    }
+
+    const body = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)
+      ? { email: trimmed, password }
+      : { phone: trimmed, password };
+
+    try {
+      setTgCodeLoading(true);
+      const response = await apiPost<{ code: string; expiresAt: string }>('/auth/telegram/code', body);
+      setTgCode(response.code);
+      setTgCodeMessage(`Код действует 10 минут. Введите в боте: /auth ${response.code}`);
+    } catch (err: unknown) {
+      setTgCodeMessage(err instanceof Error ? err.message : 'Не удалось получить код');
+    } finally {
+      setTgCodeLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +89,6 @@ const Login = () => {
     setSubmitting(true);
     try {
       await login(loginId, password);
-      navigate(from, { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Ошибка входа';
       try {
@@ -54,6 +111,12 @@ const Login = () => {
             <h1 className="text-2xl font-bold">Вход в аккаунт</h1>
             <p className="text-sm text-muted-foreground">Войдите, чтобы продолжить</p>
           </div>
+
+          {roleErrorVisible && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive text-center">
+              Недостаточно прав для запрошенной страницы. Войдите под учётной записью с нужной ролью.
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -111,11 +174,30 @@ const Login = () => {
           {tgError && (
             <p className="text-sm text-destructive text-center">{tgError}</p>
           )}
+
+          <Button
+            variant="outline"
+            className="w-full rounded-full"
+            onClick={requestTelegramCode}
+            disabled={tgCodeLoading}
+          >
+            {tgCodeLoading ? 'Запрос кода…' : 'Получить код для Telegram-бота'}
+          </Button>
+
+          {tgCode ? (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center">
+              <p className="text-xs text-muted-foreground">Код для команды /auth:</p>
+              <p className="text-2xl font-bold tracking-[0.3em]">{tgCode}</p>
+            </div>
+          ) : null}
+
+          {tgCodeMessage ? (
+            <p className="text-xs text-muted-foreground text-center">{tgCodeMessage}</p>
+          ) : null}
           <TelegramLoginButton
             className="w-full"
             onSuccess={() => {
               setTgError('');
-              navigate(from, { replace: true });
             }}
             onError={(msg) => setTgError(msg)}
           />

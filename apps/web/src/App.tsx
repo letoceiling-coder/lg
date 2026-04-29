@@ -2,33 +2,53 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "./components/ScrollToTop";
 import { lazy, Suspense } from "react";
+
+// Auto-reload once on ChunkLoadError (happens after new deploy while old SPA is open)
+function lazyWithReload<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+): React.LazyExoticComponent<T> {
+  return lazy(() =>
+    factory().catch((err: unknown) => {
+      const msg = (err as Error)?.message ?? '';
+      const isChunk =
+        (err as Error)?.name === 'ChunkLoadError' ||
+        /Loading chunk \d+ failed|Failed to fetch dynamically imported module|Importing a module script failed/.test(msg);
+      if (isChunk && sessionStorage.getItem('chunk_reload') !== '1') {
+        sessionStorage.setItem('chunk_reload', '1');
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw err;
+    })
+  );
+}
+
+
 import { AuthProvider, useAuthState } from "@/shared/hooks/useAuth";
 import { RequireAuth } from "@/shared/components/RequireAuth";
 import SeoRouteMeta from "@/shared/components/SeoRouteMeta";
 
 // Main pages
-const RedesignIndex = lazy(() => import("./redesign/pages/RedesignIndex"));
-const RedesignCatalog = lazy(() => import("./redesign/pages/RedesignCatalog"));
-const RedesignComplex = lazy(() => import("./redesign/pages/RedesignComplex"));
-const RedesignApartment = lazy(() => import("./redesign/pages/RedesignApartment"));
-const RedesignMap = lazy(() => import("./redesign/pages/RedesignMap"));
-const RedesignLayouts = lazy(() => import("./redesign/pages/RedesignLayouts"));
+const RedesignIndex = lazyWithReload(() => import("./redesign/pages/RedesignIndex"));
+const RedesignCatalog = lazyWithReload(() => import("./redesign/pages/RedesignCatalog"));
+const RedesignComplex = lazyWithReload(() => import("./redesign/pages/RedesignComplex"));
+const RedesignApartment = lazyWithReload(() => import("./redesign/pages/RedesignApartment"));
+const RedesignListingDetail = lazyWithReload(() => import("./redesign/pages/RedesignListingDetail"));
+const RedesignMap = lazyWithReload(() => import("./redesign/pages/RedesignMap"));
+const RedesignLayouts = lazyWithReload(() => import("./redesign/pages/RedesignLayouts"));
 
 // Catalog sub-pages
 const CatalogApartments = lazy(() => import("./pages/CatalogApartments"));
-const CatalogHouses = lazy(() => import("./pages/CatalogHouses"));
-const CatalogLand = lazy(() => import("./pages/CatalogLand"));
-const CatalogCommercial = lazy(() => import("./pages/CatalogCommercial"));
 const Belgorod = lazy(() => import("./pages/Belgorod"));
 
 // Detail / utility pages
-const Presentation = lazy(() => import("./pages/Presentation"));
+const Presentation = lazyWithReload(() => import("./pages/Presentation"));
 const Mortgage = lazy(() => import("./pages/Mortgage"));
 const Compare = lazy(() => import("./pages/Compare"));
-const Favorites = lazy(() => import("./pages/Favorites"));
+const Favorites = lazyWithReload(() => import("./pages/Favorites"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Profile = lazy(() => import("./pages/Profile"));
@@ -62,6 +82,7 @@ const AdminBuilders = lazy(() => import("./admin/pages/AdminBuilders"));
 const AdminBuildings = lazy(() => import("./admin/pages/AdminBuildings"));
 const AdminListings = lazy(() => import("./admin/pages/AdminListings"));
 const AdminManualListing = lazy(() => import("./admin/pages/AdminManualListing"));
+const AdminListingWizard = lazy(() => import("./admin/pages/AdminListingWizard"));
 const AdminManualHouse = lazy(() => import("./admin/pages/AdminManualHouse"));
 const AdminManualLand = lazy(() => import("./admin/pages/AdminManualLand"));
 const AdminManualCommercial = lazy(() => import("./admin/pages/AdminManualCommercial"));
@@ -73,7 +94,7 @@ const AdminHomepage = lazy(() => import("./admin/pages/AdminHomepage"));
 const AdminReference = lazy(() => import("./admin/pages/AdminReference"));
 const EditorPage = lazy(() => import("./admin/components/editor/EditorPage"));
 
-const NotFound = lazy(() => import("./pages/NotFound"));
+const NotFound = lazyWithReload(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -89,12 +110,13 @@ const AppRoutes = () => (
     <Route path="/" element={<RedesignIndex />} />
     <Route path="/catalog" element={<RedesignCatalog />} />
     <Route path="/catalog/apartments" element={<CatalogApartments />} />
-    <Route path="/catalog/houses" element={<CatalogHouses />} />
-    <Route path="/catalog/land" element={<CatalogLand />} />
-    <Route path="/catalog/commercial" element={<CatalogCommercial />} />
+    <Route path="/catalog/houses" element={<Navigate to="/catalog?type=houses" replace />} />
+    <Route path="/catalog/land" element={<Navigate to="/catalog?type=land" replace />} />
+    <Route path="/catalog/commercial" element={<Navigate to="/catalog?type=commercial" replace />} />
     <Route path="/belgorod" element={<Belgorod />} />
     <Route path="/complex/:slug" element={<RedesignComplex />} />
     <Route path="/apartment/:id" element={<RedesignApartment />} />
+    <Route path="/listing/:id" element={<RedesignListingDetail />} />
     <Route path="/presentation/:slug" element={<Presentation />} />
     <Route path="/layouts/:complex" element={<RedesignLayouts />} />
     <Route path="/map" element={<RedesignMap />} />
@@ -128,6 +150,7 @@ const AppRoutes = () => (
       <Route path="builders" element={<RequireAuth roles={['admin', 'editor']}><AdminBuilders /></RequireAuth>} />
       <Route path="buildings" element={<RequireAuth roles={['admin', 'editor']}><AdminBuildings /></RequireAuth>} />
       <Route path="listings" element={<AdminListings />} />
+      <Route path="listings/wizard/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminListingWizard /></RequireAuth>} />
       <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual-house/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualHouse /></RequireAuth>} />

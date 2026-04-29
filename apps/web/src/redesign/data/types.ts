@@ -7,6 +7,11 @@ export interface ResidentialComplex {
   district: string;
   subway: string;
   subwayDistance: string;
+  nearbySubways?: {
+    name: string;
+    distanceTime: number | null;
+    distanceType?: 1 | 2 | null;
+  }[];
   address: string;
   deadline: string;
   status: 'building' | 'completed' | 'planned';
@@ -50,11 +55,18 @@ export interface Apartment {
   /** Доп. фото (вид из окна и т.д.). */
   galleryImages?: string[];
   section: number;
+  /** Номер квартиры/лота из источника. */
+  number?: string;
+  /** Название корпуса/строения. */
+  buildingName?: string;
+  /** Очередь строительства (если есть в источнике). */
+  buildingQueue?: string;
 }
 
 export interface LayoutGroup {
   id: string;
   complexId: string;
+  apartmentId?: string;
   rooms: number;
   area: number;
   priceFrom: number;

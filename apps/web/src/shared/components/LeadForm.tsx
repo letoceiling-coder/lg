@@ -27,6 +27,33 @@ interface Props {
   embedded?: boolean;
 }
 
+function formatPhoneMask(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  let core = digits;
+  if (core.startsWith('8')) core = `7${core.slice(1)}`;
+  if (!core.startsWith('7')) core = `7${core}`;
+  core = core.slice(0, 11);
+
+  const p1 = core.slice(1, 4);
+  const p2 = core.slice(4, 7);
+  const p3 = core.slice(7, 9);
+  const p4 = core.slice(9, 11);
+
+  let out = '+7';
+  if (p1) out += ` (${p1}`;
+  if (p1.length === 3) out += ')';
+  if (p2) out += ` ${p2}`;
+  if (p3) out += `-${p3}`;
+  if (p4) out += `-${p4}`;
+  return out;
+}
+
+function normalizePhoneForApi(masked: string): string {
+  const digits = masked.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('7')) return `+${digits}`;
+  return masked.trim();
+}
+
 function inferRequestType(source: string): PublicRequestType {
   if (source === 'mortgage') return 'MORTGAGE';
   if (source === 'contacts') return 'CONTACT';
@@ -45,7 +72,7 @@ const LeadForm = ({
 }: Props) => {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState('+7');
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,7 +80,9 @@ const LeadForm = ({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim()) return;
+    const normalizedPhone = normalizePhoneForApi(phone);
+    const digits = normalizedPhone.replace(/\D/g, '');
+    if (!name.trim() || digits.length < 11) return;
     setLoading(true);
     setError('');
     const type = requestTypeProp ?? inferRequestType(source);
@@ -68,7 +97,7 @@ const LeadForm = ({
     try {
       await apiPost('/requests', {
         name: name.trim(),
-        phone: phone.trim(),
+        phone: normalizedPhone,
         type,
         comment: commentPayload,
         sourceUrl: typeof window !== 'undefined' ? window.location.href : undefined,
@@ -125,7 +154,7 @@ const LeadForm = ({
           type="tel"
           placeholder="Телефон"
           value={phone}
-          onChange={e => setPhone(e.target.value)}
+          onChange={e => setPhone(formatPhoneMask(e.target.value))}
           required
           className="h-11"
         />

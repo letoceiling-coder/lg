@@ -9,6 +9,7 @@ import AboutPlatform from '@/components/AboutPlatform';
 import ContactsSection from '@/components/ContactsSection';
 import { apiGet } from '@/lib/api';
 import { stripHtmlToPlainText, truncatePlain } from '@/lib/html';
+import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 
 import complex1 from '@/assets/complex-1.jpg';
 
@@ -30,10 +31,13 @@ interface PaginatedResult {
 const News = () => {
   const [page, setPage] = useState(1);
   const perPage = 20;
+  const { data: regionId } = useDefaultRegionId();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['news', 'public', page],
-    queryFn: () => apiGet<PaginatedResult>(`/news?page=${page}&per_page=${perPage}`),
+    queryKey: ['news', 'public', page, regionId ?? null],
+    queryFn: () =>
+      apiGet<PaginatedResult>(`/news?page=${page}&per_page=${perPage}${regionId != null ? `&region_id=${regionId}` : ''}`),
+    enabled: regionId != null,
     staleTime: 60_000,
   });
 

@@ -11,10 +11,21 @@ declare global {
 }
 
 const DEFAULT_CENTER = [55.751244, 37.618423];
+// Known region centers (fallback when no complexes have coords)
+const REGION_CENTERS: Record<number, [number, number]> = {
+  1: [55.751244, 37.618423], // Москва
+  2: [59.939095, 30.315868], // Санкт-Петербург
+  3: [45.035470, 38.975313], // Краснодар
+  4: [56.838002, 60.597295], // Екатеринбург
+  5: [54.989347, 82.904635], // Новосибирск
+  6: [55.796127, 49.106405], // Казань
+  7: [50.595414, 36.587277], // Белгород
+};
 const DEFAULT_ZOOM = 11;
 
 interface Props {
   complexes: ResidentialComplex[];
+  regionId?: number | null;
   activeSlug?: string | null;
   onSelect?: (slug: string | null) => void;
   height?: string;
@@ -26,10 +37,11 @@ function getAptCount(c: ResidentialComplex) {
   return c.buildings.reduce((s, b) => s + b.apartments.filter(a => a.status === 'available').length, 0);
 }
 
-const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }: Props) => {
+const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, regionId }: Props) => {
   const fillParent = Boolean(compact) || height === '100%';
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
+  const clustererRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const { ready } = useYandexMapsReady();
 
@@ -37,8 +49,9 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }
 
   useEffect(() => {
     if (!ready || !mapRef.current || mapInstance.current) return;
+    const regionCenter = (regionId && REGION_CENTERS[regionId]) ?? DEFAULT_CENTER;
     mapInstance.current = new window.ymaps.Map(mapRef.current, {
-      center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM,
+      center: regionCenter, zoom: DEFAULT_ZOOM,
       controls: ['zoomControl'],
     });
   }, [ready]);
@@ -47,8 +60,21 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }
   useEffect(() => {
     if (!mapInstance.current || !ready) return;
     const map = mapInstance.current;
-    markersRef.current.forEach(m => map.geoObjects.remove(m));
-    markersRef.current = [];
+
+    // Reset previous clusterer
+    if (clustererRef.current) {
+      map.geoObjects.remove(clustererRef.current);
+      clustererRef.current = null;
+    }
+
+    const clusterer = new window.ymaps.Clusterer({
+      preset: 'islands#invertedBlueClusterIcons',
+      groupByCoordinates: false,
+      clusterDisableClickZoom: false,
+      clusterOpenBalloonOnClick: false,
+    });
+
+    const placemarks: any[] = [];
 
     complexes.forEach(c => {
       const aptCount = getAptCount(c);
@@ -61,27 +87,31 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }
 
       const layout = window.ymaps.templateLayoutFactory.createClass(
         `<div style="
-          background: ${isActive ? '#2563EB' : '#1e293b'};
-          color: #fff;
-          padding: 5px 10px;
-          border-radius: 20px;
-          font-size: 11px;
-          font-weight: 600;
+          background: ${isActive ? '#ffffff' : '#ffffff'};
+          color: ${isActive ? '#ef4444' : '#1d4ed8'};
+          padding: 6px 12px;
+          border-radius: 999px;
+          font-size: 12px;
+          line-height: 1;
+          font-weight: 700;
+          letter-spacing: 0.2px;
           white-space: nowrap;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.20);
           cursor: pointer;
           transform: translate(-50%, -100%);
-          border: 2px solid ${isActive ? '#1d4ed8' : 'rgba(255,255,255,0.2)'};
+          border: 2px solid ${isActive ? '#ef4444' : 'rgba(37, 99, 235, 0.55)'};
+          text-shadow: ${isActive ? 'none' : 'none'};
           position: relative;
         ">${priceLabel}<div style="
           position: absolute;
-          bottom: -6px;
+          bottom: -8px;
           left: 50%;
           transform: translateX(-50%);
           width: 0; height: 0;
-          border-left: 5px solid transparent;
-          border-right: 5px solid transparent;
-          border-top: 6px solid ${isActive ? '#2563EB' : '#1e293b'};
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-top: 8px solid ${isActive ? '#ef4444' : '#ffffff'};
+          filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.18));
         "></div></div>`
       );
 
@@ -94,10 +124,14 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact }
       });
 
       pm.events.add('click', () => onSelect?.(c.slug));
-      map.geoObjects.add(pm);
-      markersRef.current.push(pm);
+      placemarks.push(pm);
     });
+
+    clusterer.add(placemarks);
+    map.geoObjects.add(clusterer);
+    clustererRef.current = clusterer;
   }, [complexes, ready, activeSlug, onSelect]);
+
 
   // Center on active
   useEffect(() => {

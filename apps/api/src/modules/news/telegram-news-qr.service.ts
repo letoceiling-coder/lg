@@ -152,7 +152,11 @@ export class TelegramNewsQrAuthService {
           },
           password: async (hint?: string) => {
             if (generation !== this.runGeneration) throw new Error('CANCELLED');
-            this.setActive({ phase: 'awaiting_password', passwordHint: hint ?? null });
+            this.setActive({
+              phase: 'awaiting_password',
+              passwordHint: hint ?? null,
+              expiresAtMs: Date.now() + 120_000,
+            });
             return await new Promise<string>((resolve, reject) => {
               const timer = setTimeout(() => {
                 if (this.passwordWait?.flowId === flowId) {
@@ -169,6 +173,13 @@ export class TelegramNewsQrAuthService {
           },
           onError: async (err: Error) => {
             this.log.warn(`Telegram QR onError: ${err.message}`);
+            if (
+              err.message.includes('таймаут ввода пароля 2FA') ||
+              err.message.includes('PASSWORD_TIMEOUT')
+            ) {
+              // Stop QR loop on password timeout: this is a terminal user action.
+              throw err;
+            }
             return false;
           },
         },
@@ -219,5 +230,25 @@ export class TelegramNewsQrAuthService {
         this.disconnectInFlight = null;
       }
     }
+  }
+
+  async resetActiveFlow() {
+    const hadActive = Boolean(this.active);
+    this.runGeneration += 1;
+    if (this.passwordWait) {
+      clearTimeout(this.passwordWait.timer);
+      this.passwordWait.reject(new Error('RESET'));
+      this.passwordWait = null;
+    }
+    if (this.disconnectInFlight) {
+      try {
+        await this.disconnectInFlight();
+      } catch {
+        /* ignore */
+      }
+      this.disconnectInFlight = null;
+    }
+    this.active = null;
+    return { ok: true, hadActive };
   }
 }

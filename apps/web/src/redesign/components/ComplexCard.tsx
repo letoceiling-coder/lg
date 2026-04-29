@@ -39,6 +39,8 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
   const blockNum = parseApiBlockId(complex.id);
   const liked = blockNum != null && isBlockFavorite(blockNum);
   const inCompare = isCompared(complex.slug);
+  const hasBuilder = Boolean(complex.builder && complex.builder !== '—');
+  const hasDeadline = Boolean(complex.deadline && complex.deadline !== '—');
   const fromBuildings = complex.buildings.reduce(
     (s, b) => s + b.apartments.filter((a) => a.status === 'available').length,
     0,
@@ -98,7 +100,9 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
               <MapPin className="w-3 h-3 shrink-0" />
               <span className="truncate">{complex.district} · {complex.address}</span>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{totalApts} квартир · Сдача {complex.deadline}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {totalApts} квартир{hasDeadline ? ` · Сдача ${complex.deadline}` : ''}
+            </p>
           </div>
           <span className="text-primary text-[11px] font-medium mt-1">Подробнее →</span>
         </div>
@@ -109,7 +113,7 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
   return (
     <Link
       to={`/complex/${complex.slug}`}
-      className="group flex flex-col rounded-xl overflow-hidden bg-card border border-border transition-all duration-200 hover:shadow-md hover:-translate-y-px"
+      className="group flex flex-col h-[390px] rounded-xl overflow-hidden bg-card border border-border transition-all duration-200 hover:shadow-md hover:-translate-y-px"
     >
       {/* Image */}
       <div className="relative shrink-0 overflow-hidden h-[160px]">
@@ -157,19 +161,37 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
       </div>
 
       {/* Info */}
-      <div className="p-3 flex flex-col gap-0.5">
+      <div className="p-3 flex-1 flex flex-col gap-1.5">
         <div className="flex justify-between items-start gap-2">
-          <h3 className="font-semibold text-sm leading-tight truncate">{complex.name}</h3>
+          <h3 className="font-semibold text-[16px] leading-tight truncate">{complex.name}</h3>
           <span className="font-bold text-sm shrink-0 text-primary">
-            {complex.priceFrom > 0 ? `от ${formatPrice(complex.priceFrom)}` : '—'}
+            {(() => {
+              const formatted = formatPrice(complex.priceFrom);
+              return formatted === '—' ? '—' : `от ${formatted}`;
+            })()}
           </span>
         </div>
         <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <MapPin className="w-3 h-3 shrink-0" />
-          <span className="truncate">{complex.district} · м. {complex.subway}</span>
+          <span className="truncate">{complex.address}</span>
         </div>
-        <p className="text-[11px] text-muted-foreground">{totalApts} квартир в продаже</p>
-        <span className="text-primary text-[11px] font-medium mt-1 hover:underline">Подробнее</span>
+        <p className="text-[11px] text-muted-foreground truncate">м. {complex.subway} · {complex.subwayDistance}</p>
+        {hasBuilder ? (
+          <p className="text-[11px] text-muted-foreground truncate">Застройщик: {complex.builder}</p>
+        ) : null}
+        <div className="pt-2 mt-auto border-t border-border/70 space-y-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground">Квартир</span>
+            <span className="font-medium">{totalApts}</span>
+          </div>
+          {hasDeadline ? (
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground">Сдача</span>
+              <span className="font-medium">{complex.deadline}</span>
+            </div>
+          ) : null}
+          <span className="text-primary text-[11px] font-medium hover:underline">Подробнее</span>
+        </div>
       </div>
     </Link>
   );

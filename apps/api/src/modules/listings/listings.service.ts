@@ -55,6 +55,28 @@ function validateManualApartmentMedia(apt: {
   }
 }
 
+function validateManualGalleryMedia(data: {
+  photoUrl?: string | null;
+  extraPhotoUrls?: unknown;
+}, label: string) {
+  assertMediaLibraryUrl(data.photoUrl ?? undefined, `${label}: основное фото`);
+  if (data.extraPhotoUrls == null) return;
+  if (!Array.isArray(data.extraPhotoUrls)) {
+    throw new BadRequestException(`${label}: extraPhotoUrls ожидается массив строк`);
+  }
+  if (data.extraPhotoUrls.length > 24) {
+    throw new BadRequestException(`${label}: не более 24 дополнительных фото`);
+  }
+  let i = 0;
+  for (const u of data.extraPhotoUrls) {
+    i += 1;
+    if (typeof u !== 'string') {
+      throw new BadRequestException(`${label}: дополнительное фото #${i} имеет неверный формат`);
+    }
+    assertMediaLibraryUrl(u, `${label}: дополнительное фото #${i}`);
+  }
+}
+
 @Injectable()
 export class ListingsService {
   constructor(
@@ -142,7 +164,14 @@ export class ListingsService {
       },
     });
     if (!listing) throw new NotFoundException('Listing not found');
-    return listing;
+
+    const media = await this.prisma.mediaFile.findMany({
+      where: { entityType: 'listing', entityId: id },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      select: { id: true, url: true, kind: true, sortOrder: true },
+    });
+
+    return { ...listing, mediaFiles: media };
   }
 
   private async buildWhere(query: QueryListingsDto): Promise<Prisma.ListingWhereInput> {
@@ -168,10 +197,40 @@ export class ListingsService {
       return where;
     }
     if (query.kind) where.kind = query.kind as $Enums.ListingKind;
-    if (query.status) where.status = query.status as $Enums.ListingStatus;
+    if (query.statuses?.trim()) {
+      const statusList = query.statuses
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0) as $Enums.ListingStatus[];
+      if (statusList.length === 1) {
+        where.status = statusList[0];
+      } else if (statusList.length > 1) {
+        where.status = { in: statusList };
+      }
+    } else if (query.status) {
+      where.status = query.status as $Enums.ListingStatus;
+    }
+    if (query.is_published !== undefined) {
+      where.isPublished = query.is_published;
+    }
     if (query.data_source) where.dataSource = query.data_source as $Enums.DataSource;
     if (query.builder_id != null) where.builderId = query.builder_id;
     if (query.district_id != null) where.districtId = query.district_id;
+    if (query.district_names?.trim()) {
+      const names = query.district_names.split(',').map(s => s.trim()).filter(Boolean);
+      if (names.length > 0) {
+        const districts = await this.prisma.district.findMany({
+          where: { regionId: query.region_id, name: { in: names } },
+          select: { id: true },
+        });
+        const ids = districts.map(d => d.id);
+        if (ids.length > 0) {
+          where.districtId = { in: ids };
+        } else {
+          where.id = { lt: 0 }; // no matching districts
+        }
+      }
+    }
 
     const priceFilter: Prisma.DecimalNullableFilter<'Listing'> = {};
     if (query.price_min != null) priceFilter.gte = query.price_min;
@@ -198,6 +257,30 @@ export class ListingsService {
       where.apartment = { AND: apartmentParts };
     }
 
+    // House area filter (area_total_min/max -> house.areaTotal)
+    if (query.kind === 'HOUSE' && (query.area_total_min != null || query.area_total_max != null)) {
+      const houseArea: Prisma.DecimalNullableFilter<'ListingHouse'> = {};
+      if (query.area_total_min != null) houseArea.gte = new Prisma.Decimal(query.area_total_min);
+      if (query.area_total_max != null) houseArea.lte = new Prisma.Decimal(query.area_total_max);
+      where.house = { areaTotal: houseArea };
+    }
+
+    // Land area filter (area_total_min/max -> land.areaSotki)
+    if (query.kind === 'LAND' && (query.area_total_min != null || query.area_total_max != null)) {
+      const landArea: Prisma.DecimalNullableFilter<'ListingLand'> = {};
+      if (query.area_total_min != null) landArea.gte = new Prisma.Decimal(query.area_total_min);
+      if (query.area_total_max != null) landArea.lte = new Prisma.Decimal(query.area_total_max);
+      where.land = { areaSotki: landArea };
+    }
+
+    // Commercial area filter (area_total_min/max -> commercial.area)
+    if (query.kind === 'COMMERCIAL' && (query.area_total_min != null || query.area_total_max != null)) {
+      const commArea: Prisma.DecimalNullableFilter<'ListingCommercial'> = {};
+      if (query.area_total_min != null) commArea.gte = new Prisma.Decimal(query.area_total_min);
+      if (query.area_total_max != null) commArea.lte = new Prisma.Decimal(query.area_total_max);
+      where.commercial = { area: commArea };
+    }
+
     if (query.search?.trim()) {
       const term = query.search.trim();
       const searchOr: Prisma.ListingWhereInput[] = [
@@ -213,8 +296,9 @@ export class ListingsService {
   private buildApartmentWhereParts(query: QueryListingsDto): Prisma.ListingApartmentWhereInput[] {
     const parts: Prisma.ListingApartmentWhereInput[] = [];
 
-    const roomIds = this.parseIdList(query.rooms);
-    if (roomIds?.length) parts.push({ roomTypeId: { in: roomIds } });
+    // rooms param is room-category list (0=studio,1=1к,2=2к...) same as blocks API
+    const roomCatIds = this.parseRoomCategoryIds(query.rooms);
+    if (roomCatIds?.length) parts.push({ roomTypeId: { in: roomCatIds } });
 
     const finishingIds = this.parseIdList(query.finishing);
     if (finishingIds?.length) parts.push({ finishingId: { in: finishingIds } });
@@ -229,11 +313,15 @@ export class ListingsService {
       parts.push({ floor: { lte: query.floor_max } });
     }
 
-    if (query.area_total_min != null) {
-      parts.push({ areaTotal: { gte: query.area_total_min } });
-    }
-    if (query.area_total_max != null) {
-      parts.push({ areaTotal: { lte: query.area_total_max } });
+    // Only apply apartment area filter when not filtering by a non-apartment kind
+    // (HOUSE/LAND/COMMERCIAL have their own area filters applied separately)
+    if (query.kind == null || query.kind === 'APARTMENT') {
+      if (query.area_total_min != null) {
+        parts.push({ areaTotal: { gte: query.area_total_min } });
+      }
+      if (query.area_total_max != null) {
+        parts.push({ areaTotal: { lte: query.area_total_max } });
+      }
     }
 
     if (query.area_kitchen_min != null) {
@@ -254,6 +342,35 @@ export class ListingsService {
     }
 
     return parts;
+  }
+
+  /** Convert room-category numbers (0=studio,1=1к…4=4+) to roomType IDs from DB.
+   *  Frontend always sends category values 0-4, NEVER raw room_type IDs.
+   *  Map: 0→Студии, 1→1к, 2→2к, 3→3к, 4→4к+
+   */
+  private parseRoomCategoryIds(raw?: string): number[] | undefined {
+    if (!raw?.trim()) return undefined;
+    const categories = Array.from(
+      new Set(
+        raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 0 && n <= 4),
+      ),
+    );
+    if (!categories.length) return undefined;
+
+    // Always use category → type_id mapping (frontend sends 0-4 category codes)
+    const CAT_TO_TYPE_IDS: Record<number, number[]> = {
+      0: [1, 18],           // Студии (both variants)
+      1: [2],               // 1-к.кв
+      2: [3, 9],            // 2-к.кв, 2Е-к.кв
+      3: [4, 10],           // 3-к.кв, 3Е-к.кв
+      4: [5, 6, 7, 8, 11, 12], // 4к, 5к, 6к, 7к, 4Е, 5Е
+    };
+
+    const ids: number[] = [];
+    for (const c of categories) {
+      ids.push(...(CAT_TO_TYPE_IDS[c] ?? []));
+    }
+    return ids.length ? Array.from(new Set(ids)) : undefined;
   }
 
   private parseIdList(raw?: string): number[] | undefined {
@@ -337,6 +454,7 @@ export class ListingsService {
               a.extraPhotoUrls != null && a.extraPhotoUrls.length > 0
                 ? (a.extraPhotoUrls as Prisma.InputJsonValue)
                 : undefined,
+            blockAddress: a.blockAddress ?? null,
             buildingName: a.buildingName ?? null,
             number: a.number ?? null,
           },
@@ -373,6 +491,7 @@ export class ListingsService {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const h = dto.house;
+    validateManualGalleryMedia(h, 'Дом');
 
     return this.prisma.listing.create({
       data: {
@@ -395,6 +514,11 @@ export class ListingsService {
             bathrooms: h.bathrooms ?? null,
             hasGarage: h.hasGarage ?? null,
             yearBuilt: h.yearBuilt ?? null,
+            photoUrl: h.photoUrl ?? null,
+            extraPhotoUrls:
+              h.extraPhotoUrls != null && h.extraPhotoUrls.length > 0
+                ? (h.extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
           },
         },
       },
@@ -429,6 +553,7 @@ export class ListingsService {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const l = dto.land;
+    validateManualGalleryMedia(l, 'Участок');
 
     return this.prisma.listing.create({
       data: {
@@ -447,6 +572,11 @@ export class ListingsService {
             landCategory: l.landCategory ?? null,
             cadastralNumber: l.cadastralNumber ?? null,
             hasCommunications: l.hasCommunications ?? null,
+            photoUrl: l.photoUrl ?? null,
+            extraPhotoUrls:
+              l.extraPhotoUrls != null && l.extraPhotoUrls.length > 0
+                ? (l.extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
           },
         },
       },
@@ -620,6 +750,7 @@ export class ListingsService {
             ? (p.extraPhotoUrls as Prisma.InputJsonValue)
             : Prisma.DbNull;
       }
+      if (p.blockAddress !== undefined) aptPatch.blockAddress = p.blockAddress;
       if (p.buildingName !== undefined) aptPatch.buildingName = p.buildingName;
       if (p.number !== undefined) aptPatch.number = p.number;
     }
@@ -652,6 +783,9 @@ export class ListingsService {
     });
     if (!current || current.kind !== 'HOUSE') {
       throw new BadRequestException('Операция доступна только для ручных домов (MANUAL + HOUSE)');
+    }
+    if (dto.house) {
+      validateManualGalleryMedia(dto.house, 'Дом');
     }
 
     if (dto.blockId !== undefined && dto.blockId != null) {
@@ -694,6 +828,13 @@ export class ListingsService {
       if (h.bathrooms !== undefined) housePatch.bathrooms = h.bathrooms;
       if (h.hasGarage !== undefined) housePatch.hasGarage = h.hasGarage;
       if (h.yearBuilt !== undefined) housePatch.yearBuilt = h.yearBuilt;
+      if (h.photoUrl !== undefined) housePatch.photoUrl = h.photoUrl;
+      if (h.extraPhotoUrls !== undefined) {
+        housePatch.extraPhotoUrls =
+          h.extraPhotoUrls != null && h.extraPhotoUrls.length > 0
+            ? (h.extraPhotoUrls as Prisma.InputJsonValue)
+            : Prisma.DbNull;
+      }
     }
 
     const hasListing = Object.keys(listingPatch).length > 0;
@@ -724,6 +865,9 @@ export class ListingsService {
     });
     if (!current || current.kind !== 'LAND') {
       throw new BadRequestException('Операция доступна только для ручных участков (MANUAL + LAND)');
+    }
+    if (dto.land) {
+      validateManualGalleryMedia(dto.land, 'Участок');
     }
 
     if (dto.blockId !== undefined && dto.blockId != null) {
@@ -760,6 +904,13 @@ export class ListingsService {
       if (l.landCategory !== undefined) landPatch.landCategory = l.landCategory;
       if (l.cadastralNumber !== undefined) landPatch.cadastralNumber = l.cadastralNumber;
       if (l.hasCommunications !== undefined) landPatch.hasCommunications = l.hasCommunications;
+      if (l.photoUrl !== undefined) landPatch.photoUrl = l.photoUrl;
+      if (l.extraPhotoUrls !== undefined) {
+        landPatch.extraPhotoUrls =
+          l.extraPhotoUrls != null && l.extraPhotoUrls.length > 0
+            ? (l.extraPhotoUrls as Prisma.InputJsonValue)
+            : Prisma.DbNull;
+      }
     }
 
     const hasListing = Object.keys(listingPatch).length > 0;

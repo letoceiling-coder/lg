@@ -34,6 +34,10 @@ declare global {
   interface Window { ymaps: any; }
 }
 
+const COMPLEX_SLUG_ALIASES: Record<string, string> = {
+  'zelenyj-kvartal': '1-j-lermontovskij',
+};
+
 const SimilarComplexCard = ({ complex }: { complex: ResidentialComplex }) => {
   const totalApts =
     complex.listingCount ??
@@ -69,18 +73,26 @@ const RedesignComplex = () => {
   const { isCompared, toggle: toggleCompare, count: compareCount } = useCompare();
   const { ready: ymapsReady } = useYandexMapsReady();
   const mockComplex = useMemo(() => getComplexBySlug(slug || ''), [slug]);
+  const resolvedSlug = useMemo(() => {
+    const raw = (slug || '').trim();
+    if (!raw) return raw;
+    return COMPLEX_SLUG_ALIASES[raw] ?? raw;
+  }, [slug]);
 
   const apiBlockQuery = useQuery({
-    queryKey: ['block', 'slug', slug],
-    queryFn: () => apiGetOrNull<ApiBlockDetail>(`/blocks/${encodeURIComponent(slug || '')}`),
-    enabled: Boolean(slug),
+    queryKey: ['block', 'slug', resolvedSlug],
+    queryFn: () => apiGetOrNull<ApiBlockDetail>(`/blocks/${encodeURIComponent(resolvedSlug || '')}`),
+    enabled: Boolean(resolvedSlug),
   });
 
   const listingsQuery = useQuery({
     queryKey: ['listings', 'block', apiBlockQuery.data?.id],
     queryFn: () =>
       apiGet<{ data: ApiListingRow[] }>(
-        `/listings?block_id=${apiBlockQuery.data!.id}&kind=APARTMENT&status=ACTIVE&per_page=500`,
+        // Грузим все актуальные статусы (включая SOLD/RESERVED), чтобы шахматка
+        // могла раскрашивать ячейки, и принудительно фильтруем неопубликованные,
+        // чтобы счётчики совпадали с агрегатами блока.
+        `/listings?block_id=${apiBlockQuery.data!.id}&kind=APARTMENT&statuses=ACTIVE,RESERVED,SOLD&is_published=true&per_page=500`,
       ),
     enabled: Boolean(apiBlockQuery.data?.id),
   });
@@ -130,7 +142,7 @@ const RedesignComplex = () => {
   const allApartments = useMemo(() => {
     if (!complex) return [];
     let apts = complex.buildings.flatMap((b) => b.apartments).filter((a) => a.status !== 'sold');
-    if (roomFilter !== null) apts = apts.filter((a) => a.rooms === roomFilter);
+    if (roomFilter !== null) apts = apts.filter((a) => (a.rooms ?? 1) === roomFilter);
     apts.sort((a, b) => {
       const m = sort.dir === 'asc' ? 1 : -1;
       return (a[sort.field] - b[sort.field]) * m;
@@ -207,6 +219,35 @@ const RedesignComplex = () => {
   }
 
   const roomCounts = [...new Set(complex.buildings.flatMap(b => b.apartments).filter(a => a.status !== 'sold').map(a => a.rooms))].sort();
+  const metroItems = (complex.nearbySubways ?? []).slice(0, 8);
+  const hasApartmentsTab = allApartments.length > 0;
+  const hasLayoutsTab = layouts.length > 0;
+  const hasChessTab = complex.buildings.some((b) => b.apartments.length > 0);
+  const hasAboutTab = [
+    complex.description,
+    complex.address,
+    complex.builder,
+    complex.district,
+    complex.subway,
+    complex.deadline,
+  ].some((v) => typeof v === 'string' && v.trim().length > 0 && v !== '—');
+  const hasInfraTab = complex.infrastructure.length > 0;
+  const hasMapTab =
+    Array.isArray(complex.coords) &&
+    complex.coords.length === 2 &&
+    Number.isFinite(complex.coords[0]) &&
+    Number.isFinite(complex.coords[1]) &&
+    (complex.coords[0] !== 0 || complex.coords[1] !== 0);
+
+  const tabOrder = [
+    hasApartmentsTab ? 'apartments' : null,
+    hasLayoutsTab ? 'layouts' : null,
+    hasChessTab ? 'chess' : null,
+    hasAboutTab ? 'about' : null,
+    hasInfraTab ? 'infra' : null,
+    hasMapTab ? 'map' : null,
+  ].filter((v): v is 'apartments' | 'layouts' | 'chess' | 'about' | 'infra' | 'map' => Boolean(v));
+  const defaultTab = tabOrder[0] ?? 'about';
 
   const inCompare = isCompared(complex.slug);
   const handleCompare = (e: React.MouseEvent) => {
@@ -275,26 +316,34 @@ const RedesignComplex = () => {
           </div>
         </div>
 
-        <ComplexHero complex={complex} />
+        <ComplexHero
+          complex={complex}
+          blockId={fromApi && apiBlockQuery.data ? apiBlockQuery.data.id : undefined}
+        />
 
         {/* Main content with sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
           <div className="lg:col-span-3">
-            <Tabs defaultValue="apartments" onValueChange={v => { if (v === 'map') setTimeout(initMap, 100); }}>
+            <Tabs defaultValue={defaultTab} onValueChange={v => { if (v === 'map') setTimeout(initMap, 100); }}>
               <TabsList className="w-full justify-start bg-muted/50 rounded-xl p-1 h-auto flex-wrap gap-0.5">
-                <TabsTrigger value="apartments" className="rounded-lg text-sm data-[state=active]:shadow-sm">
-                  Квартиры <span className="ml-1 text-xs text-muted-foreground">({allApartments.length || (complex.listingCount ?? 0)})</span>
-                </TabsTrigger>
-                <TabsTrigger value="layouts" className="rounded-lg text-sm data-[state=active]:shadow-sm">
-                  Планировки <span className="ml-1 text-xs text-muted-foreground">({layouts.length})</span>
-                </TabsTrigger>
-                <TabsTrigger value="chess" className="rounded-lg text-sm data-[state=active]:shadow-sm">Шахматка</TabsTrigger>
-                <TabsTrigger value="about" className="rounded-lg text-sm data-[state=active]:shadow-sm">О комплексе</TabsTrigger>
-                <TabsTrigger value="infra" className="rounded-lg text-sm data-[state=active]:shadow-sm">Инфраструктура</TabsTrigger>
-                <TabsTrigger value="map" className="rounded-lg text-sm data-[state=active]:shadow-sm">Карта</TabsTrigger>
+                {hasApartmentsTab ? (
+                  <TabsTrigger value="apartments" className="rounded-lg text-sm data-[state=active]:shadow-sm">
+                    Квартиры <span className="ml-1 text-xs text-muted-foreground">({allApartments.length || (complex.listingCount ?? 0)})</span>
+                  </TabsTrigger>
+                ) : null}
+                {hasLayoutsTab ? (
+                  <TabsTrigger value="layouts" className="rounded-lg text-sm data-[state=active]:shadow-sm">
+                    Планировки <span className="ml-1 text-xs text-muted-foreground">({layouts.length})</span>
+                  </TabsTrigger>
+                ) : null}
+                {hasChessTab ? <TabsTrigger value="chess" className="rounded-lg text-sm data-[state=active]:shadow-sm">Шахматка</TabsTrigger> : null}
+                {hasAboutTab ? <TabsTrigger value="about" className="rounded-lg text-sm data-[state=active]:shadow-sm">О комплексе</TabsTrigger> : null}
+                {hasInfraTab ? <TabsTrigger value="infra" className="rounded-lg text-sm data-[state=active]:shadow-sm">Инфраструктура</TabsTrigger> : null}
+                {hasMapTab ? <TabsTrigger value="map" className="rounded-lg text-sm data-[state=active]:shadow-sm">Карта</TabsTrigger> : null}
               </TabsList>
 
               {/* Apartments */}
+              {hasApartmentsTab ? (
               <TabsContent value="apartments" className="mt-6">
                 <div className="flex gap-2 mb-4 flex-wrap">
                   <button
@@ -311,20 +360,26 @@ const RedesignComplex = () => {
                 </div>
                 <ApartmentTable apartments={allApartments} sort={sort} onSort={handleSort} />
               </TabsContent>
+              ) : null}
 
               {/* Layouts */}
+              {hasLayoutsTab ? (
               <TabsContent value="layouts" className="mt-6">
                 <LayoutGrid layouts={layouts} complexSlug={complex.slug} />
               </TabsContent>
+              ) : null}
 
               {/* Chessboard */}
+              {hasChessTab ? (
               <TabsContent value="chess" className="mt-6 space-y-8">
                 {complex.buildings.map(b => (
                   <Chessboard key={b.id} apartments={b.apartments} floors={b.floors} sections={b.sections} buildingName={b.name} />
                 ))}
               </TabsContent>
+              ) : null}
 
               {/* About */}
+              {hasAboutTab ? (
               <TabsContent value="about" className="mt-6">
                 <div className="bg-card rounded-xl border border-border p-6 space-y-5">
                   <h3 className="font-semibold text-lg">О комплексе</h3>
@@ -336,6 +391,22 @@ const RedesignComplex = () => {
                   ) : (
                     <p className="text-sm text-muted-foreground leading-relaxed">{complex.description}</p>
                   )}
+                  {metroItems.length > 0 ? (
+                    <div className="rounded-xl border border-border/70 bg-muted/20 p-4 space-y-3">
+                      <p className="text-sm font-medium">{complex.address}</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
+                        {metroItems.map((m) => (
+                          <div key={`${m.name}-${m.distanceTime ?? 'na'}`} className="text-sm text-muted-foreground flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                            <span>
+                              {m.name}
+                              {m.distanceTime != null ? `, ${m.distanceTime} минут ${m.distanceType === 1 ? 'пешком' : 'транспортом'}` : ''}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 pt-2">
                     {[
                       ['Адрес', complex.address],
@@ -354,27 +425,27 @@ const RedesignComplex = () => {
                   </div>
                 </div>
               </TabsContent>
+              ) : null}
 
               {/* Infrastructure */}
+              {hasInfraTab ? (
               <TabsContent value="infra" className="mt-6">
                 <div className="bg-card rounded-xl border border-border p-6">
                   <h3 className="font-semibold text-lg mb-5">Инфраструктура</h3>
-                  {complex.infrastructure.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Данные появятся после наполнения в админке.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {complex.infrastructure.map((item, i) => (
-                        <div key={i} className="flex items-center gap-3 text-sm text-muted-foreground p-3 rounded-lg bg-muted/30">
-                          <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {complex.infrastructure.map((item, i) => (
+                      <div key={i} className="flex items-center gap-3 text-sm text-muted-foreground p-3 rounded-lg bg-muted/30">
+                        <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </TabsContent>
+              ) : null}
 
               {/* Map */}
+              {hasMapTab ? (
               <TabsContent value="map" className="mt-6">
                 <div className="rounded-xl border border-border overflow-hidden bg-card">
                   <div className="p-4 border-b border-border flex items-center gap-2">
@@ -385,6 +456,7 @@ const RedesignComplex = () => {
                   <div ref={mapRef} className="h-[400px] bg-muted" />
                 </div>
               </TabsContent>
+              ) : null}
             </Tabs>
           </div>
 

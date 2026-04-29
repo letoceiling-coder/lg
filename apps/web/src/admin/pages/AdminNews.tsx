@@ -14,16 +14,23 @@ import {
   Rss,
   MessageCircle,
   RefreshCw,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
+  X,
 } from 'lucide-react';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUrl, getAccessToken } from '@/lib/api';
 import { toast } from '@/components/ui/sonner';
+import MediaPickerDialog from '@/admin/components/MediaPickerDialog';
 
 interface NewsRow {
   id: number;
   slug: string;
+  regionId: number | null;
   title: string;
   body: string | null;
   imageUrl: string | null;
+  mediaFiles?: { id: number; url: string }[];
   isPublished: boolean;
   publishedAt: string | null;
   createdAt: string;
@@ -53,6 +60,11 @@ interface TelegramParserStatus {
   credentialsOk: boolean;
   credentials: { apiIdOk: boolean; apiHashOk: boolean; sessionOk: boolean };
   channels: { inDatabaseTotal: number; inDatabaseEnabled: number; envListCount: number };
+  telegramAuth: {
+    connected: boolean;
+    sessionSource: 'env' | 'database' | 'none';
+    lastConnectedAt: string | null;
+  };
   hints: string[];
 }
 
@@ -66,6 +78,7 @@ interface TgQrPoll {
 
 interface TelegramChannelRow {
   id: number;
+  regionId: number;
   channelRef: string;
   label: string | null;
   isEnabled: boolean;
@@ -74,17 +87,26 @@ interface TelegramChannelRow {
   sortOrder: number;
 }
 
+interface RegionRow {
+  id: number;
+  code: string;
+  name: string;
+}
+
 function TelegramChannelEditorRow({
   row,
+  regions,
   selected,
   onToggleSelect,
   onUpdated,
 }: {
   row: TelegramChannelRow;
+  regions: RegionRow[];
   selected: boolean;
   onToggleSelect: () => void;
   onUpdated: () => void;
 }) {
+  const [regionId, setRegionId] = useState(String(row.regionId));
   const [channelRef, setChannelRef] = useState(row.channelRef);
   const [label, setLabel] = useState(row.label ?? '');
   const [isEnabled, setIsEnabled] = useState(row.isEnabled);
@@ -93,6 +115,7 @@ function TelegramChannelEditorRow({
   const [sortOrder, setSortOrder] = useState(String(row.sortOrder));
 
   useEffect(() => {
+    setRegionId(String(row.regionId));
     setChannelRef(row.channelRef);
     setLabel(row.label ?? '');
     setIsEnabled(row.isEnabled);
@@ -104,6 +127,7 @@ function TelegramChannelEditorRow({
   const saveMut = useMutation({
     mutationFn: () =>
       apiPut(`/admin/news/telegram-channels/${row.id}`, {
+        regionId: Number(regionId),
         channelRef,
         label: label.trim() ? label.trim() : null,
         isEnabled,
@@ -131,6 +155,19 @@ function TelegramChannelEditorRow({
     <tr className="border-t align-top">
       <td className="px-3 py-2">
         <input type="checkbox" checked={selected} onChange={onToggleSelect} className="rounded mt-1" title="Участвует в выборочном импорте" />
+      </td>
+      <td className="px-3 py-2">
+        <select
+          value={regionId}
+          onChange={(e) => setRegionId(e.target.value)}
+          className="border rounded-lg px-2 py-1.5 text-xs w-full min-w-[130px] bg-background"
+        >
+          {regions.map((r) => (
+            <option key={r.id} value={String(r.id)}>
+              {r.name}
+            </option>
+          ))}
+        </select>
       </td>
       <td className="px-3 py-2">
         <input
@@ -215,12 +252,39 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('ru-RU');
+}
+
+function formatCountdown(secondsLeft: number): string {
+  const mm = Math.floor(secondsLeft / 60);
+  const ss = secondsLeft % 60;
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
 export default function AdminNews() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<NewsRow | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: '', slug: '', body: '', imageUrl: '', isPublished: false });
+  const [form, setForm] = useState({
+    title: '',
+    slug: '',
+    body: '',
+    isPublished: false,
+    regionId: '',
+    mediaFileIds: [] as number[],
+    mediaUrls: [] as string[],
+  });
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const { data: regions = [] } = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => apiGet<RegionRow[]>('/regions'),
+    staleTime: 60_000,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'news', page],
@@ -229,12 +293,28 @@ export default function AdminNews() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => apiPost('/admin/news', form),
+    mutationFn: () =>
+      apiPost('/admin/news', {
+        title: form.title,
+        slug: form.slug,
+        body: form.body,
+        isPublished: form.isPublished,
+        mediaFileIds: form.mediaFileIds,
+        regionId: form.regionId ? Number(form.regionId) : null,
+      }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin', 'news'] }); setCreating(false); resetForm(); },
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => apiPut(`/admin/news/${editing!.id}`, form),
+    mutationFn: () =>
+      apiPut(`/admin/news/${editing!.id}`, {
+        title: form.title,
+        slug: form.slug,
+        body: form.body,
+        isPublished: form.isPublished,
+        mediaFileIds: form.mediaFileIds,
+        regionId: form.regionId ? Number(form.regionId) : null,
+      }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin', 'news'] }); setEditing(null); resetForm(); },
   });
 
@@ -258,6 +338,7 @@ export default function AdminNews() {
 
   const [tgNewRef, setTgNewRef] = useState('');
   const [tgNewLabel, setTgNewLabel] = useState('');
+  const [tgNewRegionId, setTgNewRegionId] = useState('');
   const [tgRunLimit, setTgRunLimit] = useState('20');
   const [selectedTgIds, setSelectedTgIds] = useState<number[]>([]);
 
@@ -276,6 +357,7 @@ export default function AdminNews() {
   const tgAddMutation = useMutation({
     mutationFn: () =>
       apiPost<TelegramChannelRow>('/admin/news/telegram-channels', {
+        regionId: Number(tgNewRegionId),
         channelRef: tgNewRef.trim(),
         label: tgNewLabel.trim() ? tgNewLabel.trim() : null,
       }),
@@ -310,9 +392,27 @@ export default function AdminNews() {
     onError: (e: unknown) => toast.error(formatApiError(e)),
   });
 
+  const tgBackfillPhotosMutation = useMutation({
+    mutationFn: (limit: number) =>
+      apiPost<{ scanned: number; updated: number; skipped: number; failed: number }>(
+        '/admin/news/backfill-telegram-photos',
+        { limit },
+      ),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ['admin', 'news'] });
+      void qc.invalidateQueries({ queryKey: ['news'] });
+      toast.success(
+        `Фото: обновлено ${res.updated} из ${res.scanned}. Пропущено ${res.skipped}, ошибок ${res.failed}.`,
+      );
+    },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
   const [tgQrFlowId, setTgQrFlowId] = useState<string | null>(null);
   const [tgQrPwd, setTgQrPwd] = useState('');
   const [tgQrDataUrl, setTgQrDataUrl] = useState<string | null>(null);
+  const [tgQrWizardOpen, setTgQrWizardOpen] = useState(false);
+  const [tgNowMs, setTgNowMs] = useState(() => Date.now());
 
   const tgQrPollQuery = useQuery({
     queryKey: ['admin', 'news', 'telegram-qr', tgQrFlowId],
@@ -326,6 +426,16 @@ export default function AdminNews() {
     },
   });
   const tgQrPoll = tgQrPollQuery.data;
+  const tgQrSecondsLeft =
+    tgQrPoll?.expiresAtMs != null
+      ? Math.max(0, Math.ceil((tgQrPoll.expiresAtMs - tgNowMs) / 1000))
+      : null;
+
+  useEffect(() => {
+    if (!tgQrWizardOpen || !tgQrPoll?.expiresAtMs) return;
+    const timer = window.setInterval(() => setTgNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [tgQrWizardOpen, tgQrPoll?.expiresAtMs]);
 
   useEffect(() => {
     const url = tgQrPoll?.loginUrl;
@@ -352,11 +462,16 @@ export default function AdminNews() {
     if (tgQrPoll.phase === 'success') {
       toast.success('Telegram MTProto: сессия сохранена. Можно запускать импорт.');
       void qc.invalidateQueries({ queryKey: ['admin', 'news', 'telegram-parser-status'] });
+      setTgQrFlowId(null);
+      setTgQrPwd('');
+      setTgQrWizardOpen(false);
     } else if (tgQrPoll.phase === 'error' && tgQrPoll.errorMessage) {
       toast.error(tgQrPoll.errorMessage);
+    } else if (tgQrPoll.phase === 'cancelled') {
+      setTgQrFlowId(null);
+      setTgQrPwd('');
+      setTgQrWizardOpen(false);
     }
-    setTgQrFlowId(null);
-    setTgQrPwd('');
   }, [tgQrFlowId, tgQrPoll, qc]);
 
   const tgQrStartMut = useMutation({
@@ -378,8 +493,14 @@ export default function AdminNews() {
     onSuccess: () => {
       setTgQrFlowId(null);
       setTgQrPwd('');
+      setTgQrWizardOpen(false);
       toast.message('Вход по QR отменён');
     },
+    onError: (e: unknown) => toast.error(formatApiError(e)),
+  });
+
+  const tgQrResetMut = useMutation({
+    mutationFn: () => apiPost<{ ok: boolean; hadActive?: boolean }>('/admin/news/telegram-qr/reset', {}),
     onError: (e: unknown) => toast.error(formatApiError(e)),
   });
 
@@ -393,16 +514,74 @@ export default function AdminNews() {
     onError: (e: unknown) => toast.error(formatApiError(e)),
   });
 
+  async function startQrWizard() {
+    if (
+      !tgStatusQuery.data?.credentials.apiIdOk ||
+      !tgStatusQuery.data?.credentials.apiHashOk
+    ) {
+      toast.error('Сначала настройте TG_API_ID и TG_API_HASH на сервере.');
+      return;
+    }
+    setTgQrWizardOpen(true);
+    setTgQrPwd('');
+    setTgNowMs(Date.now());
+    tgQrHandled.current = null;
+    try {
+      await tgQrStartMut.mutateAsync();
+    } catch {
+      // Error toast is handled in mutation onError.
+    }
+  }
+
+  async function resetAndStartQrWizard() {
+    try {
+      await tgQrResetMut.mutateAsync();
+      setTgQrFlowId(null);
+      setTgQrPwd('');
+      setTgNowMs(Date.now());
+      tgQrHandled.current = null;
+      await tgQrStartMut.mutateAsync();
+    } catch {
+      // Error toast is handled in mutation onError.
+    }
+  }
+
   const tgChannels = tgChannelsQuery.data ?? [];
   const enabledTgIds = tgChannels.filter((c) => c.isEnabled).map((c) => c.id);
   const allEnabledSelected =
     enabledTgIds.length > 0 && enabledTgIds.every((id) => selectedTgIds.includes(id));
 
-  function resetForm() { setForm({ title: '', slug: '', body: '', imageUrl: '', isPublished: false }); }
+  useEffect(() => {
+    if (regions.length === 0) return;
+    const preferred = regions.find((r) => (r.code ?? '').toLowerCase() === 'msk') ?? regions[0];
+    if (!tgNewRegionId) setTgNewRegionId(String(preferred.id));
+    setForm((prev) => (prev.regionId ? prev : { ...prev, regionId: String(preferred.id) }));
+  }, [regions, tgNewRegionId]);
+
+  function resetForm() {
+    const preferred = regions.find((r) => (r.code ?? '').toLowerCase() === 'msk') ?? regions[0];
+    setForm({
+      title: '',
+      slug: '',
+      body: '',
+      isPublished: false,
+      regionId: preferred ? String(preferred.id) : '',
+      mediaFileIds: [],
+      mediaUrls: [],
+    });
+  }
   function startEdit(row: NewsRow) {
     setEditing(row);
     setCreating(false);
-    setForm({ title: row.title, slug: row.slug, body: row.body ?? '', imageUrl: row.imageUrl ?? '', isPublished: row.isPublished });
+    setForm({
+      title: row.title,
+      slug: row.slug,
+      body: row.body ?? '',
+      isPublished: row.isPublished,
+      regionId: row.regionId != null ? String(row.regionId) : '',
+      mediaFileIds: (row.mediaFiles ?? []).map((m) => m.id),
+      mediaUrls: (row.mediaFiles ?? []).map((m) => m.url),
+    });
   }
   function startCreate() {
     setEditing(null);
@@ -487,6 +666,15 @@ export default function AdminNews() {
             >
               {tgStatusQuery.isLoading ? 'Проверка…' : tgStatusQuery.data?.ready ? 'Готово к импорту' : 'Требуется настройка'}
             </span>
+            <span
+              className={`text-xs px-2 py-1 rounded-lg font-medium ${
+                tgStatusQuery.data?.telegramAuth.connected
+                  ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-zinc-500/15 text-zinc-800 dark:text-zinc-200'
+              }`}
+            >
+              {tgStatusQuery.data?.telegramAuth.connected ? 'Telegram подключен' : 'Telegram не подключен'}
+            </span>
           </div>
         </div>
 
@@ -514,79 +702,46 @@ export default function AdminNews() {
                 type="button"
                 disabled={
                   tgQrStartMut.isPending ||
-                  !!tgQrFlowId ||
                   !tgStatusQuery.data?.credentials.apiIdOk ||
                   !tgStatusQuery.data?.credentials.apiHashOk
                 }
-                onClick={() => tgQrStartMut.mutate()}
+                onClick={() => {
+                  void startQrWizard();
+                }}
                 className="inline-flex items-center gap-2 text-sm border border-sky-600 text-sky-700 dark:text-sky-300 px-3 py-2 rounded-xl hover:bg-sky-500/10 disabled:opacity-50"
               >
                 {tgQrStartMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Подключить по QR
+                Открыть мастер 1-2-3
               </button>
-              {tgQrFlowId && (
-                <button
-                  type="button"
-                  disabled={tgQrCancelMut.isPending}
-                  onClick={() => tgQrCancelMut.mutate(tgQrFlowId)}
-                  className="text-sm text-muted-foreground underline px-2 py-2 disabled:opacity-50"
-                >
-                  Отменить
-                </button>
-              )}
             </div>
           </div>
-          {tgQrFlowId && (
-            <div className="flex flex-wrap gap-4 items-start">
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>
-                  Статус:{' '}
-                  <span className="font-medium text-foreground">
-                    {tgQrPoll?.phase === 'starting' && 'Подготовка…'}
-                    {tgQrPoll?.phase === 'awaiting_scan' && 'Ждём сканирование'}
-                    {tgQrPoll?.phase === 'awaiting_password' && 'Нужен пароль 2FA'}
-                    {tgQrPoll?.phase === 'success' && 'Готово'}
-                    {tgQrPoll?.phase === 'error' && 'Ошибка'}
-                    {tgQrPoll?.phase === 'cancelled' && 'Отменено'}
-                    {!tgQrPoll && '…'}
-                  </span>
-                </p>
-                {tgQrPoll?.phase === 'awaiting_password' && (
-                  <div className="flex flex-wrap gap-2 items-end pt-2">
-                    <div>
-                      <label className="text-[11px] font-medium block mb-1">Пароль 2FA</label>
-                      <input
-                        type="password"
-                        value={tgQrPwd}
-                        onChange={(e) => setTgQrPwd(e.target.value)}
-                        autoComplete="current-password"
-                        className="border rounded-lg px-2 py-1.5 text-sm w-48 bg-background"
-                        placeholder={tgQrPoll.passwordHint ? `Подсказка: ${tgQrPoll.passwordHint}` : 'Пароль'}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      disabled={tgQrPwdMut.isPending || !tgQrPwd.trim()}
-                      onClick={() =>
-                        tgQrPwdMut.mutate({ flowId: tgQrFlowId, password: tgQrPwd })
-                      }
-                      className="text-sm bg-sky-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
-                    >
-                      {tgQrPwdMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Отправить'}
-                    </button>
-                  </div>
-                )}
-              </div>
-              {tgQrDataUrl && tgQrPoll?.phase !== 'awaiting_password' && (
-                <div className="shrink-0">
-                  <img src={tgQrDataUrl} alt="QR для входа в Telegram" className="w-[220px] h-[220px] rounded-lg border bg-white" />
-                </div>
-              )}
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Последнее успешное подключение:{' '}
+            <span className="font-medium text-foreground">
+              {formatDateTime(tgStatusQuery.data?.telegramAuth.lastConnectedAt)}
+            </span>
+            {' · '}
+            Источник сессии:{' '}
+            <span className="font-medium text-foreground">
+              {tgStatusQuery.data?.telegramAuth.sessionSource === 'env'
+                ? '.env'
+                : tgStatusQuery.data?.telegramAuth.sessionSource === 'database'
+                  ? 'База данных (QR)'
+                  : 'не задан'}
+            </span>
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 text-xs">
+          <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+            <p className="font-medium text-foreground">Подключение Telegram</p>
+            <p>
+              {tgStatusQuery.data?.telegramAuth.connected ? 'Активно' : 'Не подключено'}
+            </p>
+            <p className="text-muted-foreground">
+              {formatDateTime(tgStatusQuery.data?.telegramAuth.lastConnectedAt)}
+            </p>
+          </div>
           <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
             <p className="font-medium text-foreground">Сервер (env)</p>
             <p>
@@ -612,6 +767,21 @@ export default function AdminNews() {
         </div>
 
         <div className="flex flex-wrap gap-2 items-end border-t pt-4">
+          <div className="min-w-[170px]">
+            <label className="text-xs font-medium block mb-1">Город</label>
+            <select
+              value={tgNewRegionId}
+              onChange={(e) => setTgNewRegionId(e.target.value)}
+              className="border rounded-xl px-3 py-2 text-sm w-full bg-background"
+            >
+              <option value="">Выберите город</option>
+              {regions.map((r) => (
+                <option key={r.id} value={String(r.id)}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex-1 min-w-[200px]">
             <label className="text-xs font-medium block mb-1">Канал</label>
             <input
@@ -632,7 +802,7 @@ export default function AdminNews() {
           </div>
           <button
             type="button"
-            disabled={tgAddMutation.isPending || !tgNewRef.trim()}
+            disabled={tgAddMutation.isPending || !tgNewRef.trim() || !tgNewRegionId}
             onClick={() => tgAddMutation.mutate()}
             className="inline-flex items-center gap-2 bg-sky-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-sky-700 disabled:opacity-50 h-[42px]"
           >
@@ -668,6 +838,7 @@ export default function AdminNews() {
                       className="rounded"
                     />
                   </th>
+                  <th className="px-3 py-2 font-medium">Город</th>
                   <th className="px-3 py-2 font-medium">Канал</th>
                   <th className="px-3 py-2 font-medium">Подпись</th>
                   <th className="px-3 py-2 font-medium text-center">Вкл.</th>
@@ -682,6 +853,7 @@ export default function AdminNews() {
                   <TelegramChannelEditorRow
                     key={row.id}
                     row={row}
+                    regions={regions}
                     selected={selectedTgIds.includes(row.id)}
                     onToggleSelect={() =>
                       setSelectedTgIds((prev) =>
@@ -720,6 +892,20 @@ export default function AdminNews() {
             {tgSyncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
             {selectedTgIds.length ? `Импорт: выбранные (${selectedTgIds.length})` : 'Импортировать все включённые'}
           </button>
+          <button
+            type="button"
+            disabled={tgBackfillPhotosMutation.isPending}
+            onClick={() => {
+              const raw = window.prompt('Сколько последних Telegram-новостей проверить на фото?', '30');
+              if (raw === null) return;
+              const limit = Math.max(1, Math.min(200, Number(raw) || 30));
+              tgBackfillPhotosMutation.mutate(limit);
+            }}
+            className="inline-flex items-center gap-2 border border-border bg-background px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-muted disabled:opacity-50"
+          >
+            {tgBackfillPhotosMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Дотянуть фото
+          </button>
           {selectedTgIds.length > 0 && (
             <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setSelectedTgIds([])}>
               Сбросить выбор
@@ -727,6 +913,175 @@ export default function AdminNews() {
           )}
         </div>
       </div>
+
+      {tgQrWizardOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px] flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-2xl border bg-background shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div>
+                <h3 className="text-lg font-semibold">Подключение Telegram: мастер 1-2-3</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Выполните шаги ниже, чтобы сохранить MTProto-сессию и запускать импорт без CLI.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="p-2 rounded-lg hover:bg-muted"
+                onClick={() => setTgQrWizardOpen(false)}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div className="rounded-lg border p-3">
+                  <p className="font-semibold">1. Сканируйте QR</p>
+                  <p className="text-muted-foreground mt-1">Telegram → Настройки → Устройства → Подключить устройство.</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="font-semibold">2. Введите 2FA</p>
+                  <p className="text-muted-foreground mt-1">Если Telegram запросит облачный пароль, введите его здесь.</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="font-semibold">3. Дождитесь “Готово”</p>
+                  <p className="text-muted-foreground mt-1">После сохранения сессии можно сразу запускать импорт.</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-3 text-sm">
+                Статус:{' '}
+                <span className="font-semibold">
+                  {tgQrPoll?.phase === 'starting' && 'Подготовка…'}
+                  {tgQrPoll?.phase === 'awaiting_scan' && 'Ждём сканирование'}
+                  {tgQrPoll?.phase === 'awaiting_password' && 'Нужен облачный пароль Telegram'}
+                  {tgQrPoll?.phase === 'success' && 'Готово'}
+                  {tgQrPoll?.phase === 'error' && 'Ошибка'}
+                  {tgQrPoll?.phase === 'cancelled' && 'Отменено'}
+                  {!tgQrPoll && (tgQrStartMut.isPending ? 'Запуск…' : 'Ожидание запуска')}
+                </span>
+              </div>
+
+              {!tgQrFlowId && !tgQrStartMut.isPending && (
+                <div className="rounded-lg border border-dashed p-6 text-center">
+                  <p className="text-sm text-muted-foreground mb-3">Нажмите кнопку ниже, чтобы запустить новый QR-flow.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void startQrWizard();
+                    }}
+                    className="inline-flex items-center gap-2 text-sm border border-sky-600 text-sky-700 dark:text-sky-300 px-3 py-2 rounded-xl hover:bg-sky-500/10"
+                  >
+                    Запустить подключение
+                  </button>
+                </div>
+              )}
+
+              {tgQrDataUrl && tgQrPoll?.phase === 'awaiting_scan' && (
+                <div className="rounded-lg border p-4 flex justify-center bg-muted/20">
+                  <img src={tgQrDataUrl} alt="QR для входа в Telegram" className="w-[260px] h-[260px] rounded-lg border bg-white" />
+                </div>
+              )}
+
+              {tgQrPoll?.phase === 'awaiting_password' && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                      <ShieldAlert className="w-4 h-4" />
+                      <span className="text-sm font-semibold">Введите облачный пароль Telegram</span>
+                    </div>
+                    {tgQrSecondsLeft != null && (
+                      <span className="text-xs font-semibold px-2 py-1 rounded bg-amber-600/20 text-amber-900 dark:text-amber-100">
+                        Осталось: {formatCountdown(tgQrSecondsLeft)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Это пароль двухэтапной аутентификации Telegram (2FA), не SMS-код.
+                  </p>
+                  <div className="rounded-lg border border-amber-500/30 bg-background/70 p-3 text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground">Где взять облачный пароль?</p>
+                    <p>
+                      Откройте Telegram: <span className="font-medium">Настройки → Конфиденциальность → Двухэтапная аутентификация</span>.
+                    </p>
+                    <p>
+                      Если пароль не помните — нажмите <span className="font-medium">«Забыли пароль?»</span> в Telegram и восстановите через привязанный email.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <div className="flex-1 min-w-[220px]">
+                      <label className="text-[11px] font-medium block mb-1">Облачный пароль</label>
+                      <input
+                        type="password"
+                        value={tgQrPwd}
+                        onChange={(e) => setTgQrPwd(e.target.value)}
+                        autoComplete="current-password"
+                        className="border rounded-lg px-2 py-2 text-sm w-full bg-background"
+                        placeholder={tgQrPoll.passwordHint ? `Подсказка: ${tgQrPoll.passwordHint}` : 'Пароль 2FA'}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={tgQrPwdMut.isPending || !tgQrPwd.trim()}
+                      onClick={() => tgQrFlowId && tgQrPwdMut.mutate({ flowId: tgQrFlowId, password: tgQrPwd })}
+                      className="text-sm bg-sky-600 text-white px-3 py-2 rounded-lg disabled:opacity-50"
+                    >
+                      {tgQrPwdMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Отправить пароль'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tgQrPoll?.phase === 'success' && (
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 flex items-center gap-2 text-emerald-800 dark:text-emerald-200">
+                  <ShieldCheck className="w-4 h-4" />
+                  <p className="text-sm font-medium">Сессия успешно сохранена. Теперь импорт из Telegram доступен.</p>
+                </div>
+              )}
+
+              {tgQrPoll?.phase === 'error' && (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+                  <p className="text-sm font-medium text-destructive">Подключение не завершено</p>
+                  <p className="text-xs text-muted-foreground mt-1">{tgQrPoll.errorMessage ?? 'Произошла ошибка входа по QR.'}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                className="text-sm px-3 py-2 rounded-lg border hover:bg-muted"
+                onClick={() => setTgQrWizardOpen(false)}
+              >
+                Закрыть
+              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={tgQrResetMut.isPending || tgQrStartMut.isPending}
+                  onClick={() => {
+                    void resetAndStartQrWizard();
+                  }}
+                  className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-sky-600 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10 disabled:opacity-50"
+                >
+                  {(tgQrResetMut.isPending || tgQrStartMut.isPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  Сбросить и начать заново
+                </button>
+                {tgQrFlowId && (
+                  <button
+                    type="button"
+                    disabled={tgQrCancelMut.isPending}
+                    onClick={() => tgQrCancelMut.mutate(tgQrFlowId)}
+                    className="text-sm px-3 py-2 rounded-lg border hover:bg-muted disabled:opacity-50"
+                  >
+                    Отменить текущий
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit form */}
       {showForm && (
@@ -749,6 +1104,21 @@ export default function AdminNews() {
                 className="border rounded-xl px-3 py-2 text-sm w-full bg-background"
               />
             </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Город</label>
+              <select
+                value={form.regionId}
+                onChange={e => setForm(f => ({ ...f, regionId: e.target.value }))}
+                className="border rounded-xl px-3 py-2 text-sm w-full bg-background"
+              >
+                <option value="">Выберите город</option>
+                {regions.map((r) => (
+                  <option key={r.id} value={String(r.id)}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <label className="text-sm font-medium mb-1 block">Текст</label>
@@ -760,13 +1130,37 @@ export default function AdminNews() {
             />
           </div>
           <div>
-            <label className="text-sm font-medium mb-1 block">URL изображения</label>
-            <input
-              value={form.imageUrl}
-              onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))}
-              className="border rounded-xl px-3 py-2 text-sm w-full bg-background"
-              placeholder="https://..."
-            />
+            <label className="text-sm font-medium mb-1 block">Фото из медиа</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {form.mediaUrls.map((u) => (
+                <div key={u} className="relative h-16 w-16 rounded-lg border overflow-hidden group">
+                  <img src={u} alt="" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white"
+                    onClick={() =>
+                      setForm((prev) => {
+                        const idx = prev.mediaUrls.indexOf(u);
+                        if (idx < 0) return prev;
+                        const mediaUrls = prev.mediaUrls.filter((_, i) => i !== idx);
+                        const mediaFileIds = prev.mediaFileIds.filter((_, i) => i !== idx);
+                        return { ...prev, mediaUrls, mediaFileIds };
+                      })
+                    }
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setMediaPickerOpen(true)}
+              className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 rounded-xl text-sm hover:bg-muted"
+            >
+              <Plus className="w-4 h-4" />
+              Добавить из медиа
+            </button>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -780,7 +1174,7 @@ export default function AdminNews() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => editing ? updateMutation.mutate() : createMutation.mutate()}
-              disabled={createMutation.isPending || updateMutation.isPending || !form.title || !form.slug}
+              disabled={createMutation.isPending || updateMutation.isPending || !form.title || !form.slug || !form.regionId}
               className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
             >
               {(createMutation.isPending || updateMutation.isPending) ? 'Сохранение…' : 'Сохранить'}
@@ -791,6 +1185,27 @@ export default function AdminNews() {
           </div>
         </div>
       )}
+
+      <MediaPickerDialog
+        open={mediaPickerOpen}
+        onOpenChange={setMediaPickerOpen}
+        title="Фото новости"
+        multiple
+        onPick={(items) =>
+          setForm((prev) => {
+            const seen = new Set(prev.mediaFileIds);
+            const mediaFileIds = [...prev.mediaFileIds];
+            const mediaUrls = [...prev.mediaUrls];
+            for (const item of items) {
+              if (seen.has(item.id)) continue;
+              seen.add(item.id);
+              mediaFileIds.push(item.id);
+              mediaUrls.push(item.url);
+            }
+            return { ...prev, mediaFileIds, mediaUrls };
+          })
+        }
+      />
 
       {isLoading && (
         <div className="flex items-center justify-center py-16">

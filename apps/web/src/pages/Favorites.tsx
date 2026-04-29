@@ -8,9 +8,43 @@ import { formatPrice } from '@/redesign/data/mock-data';
 import { Button } from '@/components/ui/button';
 import { useFavorites } from '@/shared/hooks/useFavorites';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiGetOrNull, apiPost } from '@/lib/api';
 import { toast } from '@/components/ui/sonner';
+import ListingCard, { type ApiListingCardRow } from '@/redesign/components/ListingCard';
+import ComplexCard from '@/redesign/components/ComplexCard';
+import { mapApiBlockDetailToResidentialComplex, type ApiBlockDetail } from '@/redesign/lib/blocks-from-api';
+import type { ResidentialComplex } from '@/redesign/data/types';
 
+
+
+const FavoriteBlockCard = ({ blockId, slug, name }: { blockId: number; slug?: string | null; name: string }) => {
+  const slugOrId = (slug && slug.trim()) ? slug.trim() : String(blockId);
+
+  const q = useQuery({
+    queryKey: ['favorite-block', slugOrId],
+    queryFn: () => apiGetOrNull<ApiBlockDetail>(`/blocks/${encodeURIComponent(slugOrId)}`),
+  });
+
+  if (q.isLoading) {
+    return <div className="rounded-2xl border border-border bg-card h-[420px]" />;
+  }
+
+  const apiBlock = q.data;
+  if (!apiBlock) {
+    return (
+      <Link
+        to={`/complex/${slugOrId}`}
+        className="block rounded-2xl border border-border bg-card p-4 hover:shadow-sm transition-shadow"
+      >
+        <div className="font-semibold text-sm line-clamp-2">{name}</div>
+        <div className="text-xs text-muted-foreground mt-1">Жилой комплекс</div>
+      </Link>
+    );
+  }
+
+  const complex = mapApiBlockDetailToResidentialComplex(apiBlock, []);
+  return <ComplexCard complex={complex} />;
+};
 function listingPrice(p: unknown): number {
   if (p == null) return 0;
   if (typeof p === 'number') return p;
@@ -150,44 +184,44 @@ const Favorites = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {rows.map((row) => {
               const block = row.block;
-              const listing = row.listing;
-              const title = block?.name ?? (listing ? `Объявление #${listing.id}` : `Запись #${row.id}`);
-              const href = block
-                ? `/complex/${block.slug}`
-                : listing
-                  ? `/apartment/${listing.id}`
-                  : '#';
-              const sub =
-                listing && !block
-                  ? `${listing.kind ?? 'объект'} · ${formatPrice(listingPrice(listing.price))}`
-                  : block
-                    ? 'Жилой комплекс'
-                    : '';
+              const listing = row.listing as unknown as ApiListingCardRow | null;
 
               return (
-                <div key={row.id} className="bg-card border border-border rounded-xl p-4 flex flex-col">
-                  <Link to={href} className="font-medium text-sm mb-1 hover:text-primary line-clamp-2">
-                    {title}
-                  </Link>
-                  {sub ? <p className="text-xs text-muted-foreground mb-3">{sub}</p> : null}
-                  <div className="mt-auto pt-2">
+                <div key={row.id} className="relative">
+                  {row.blockId != null ? (
+                    <FavoriteBlockCard blockId={row.blockId} slug={block?.slug} name={block?.name ?? `ЖК #${row.blockId}`} />
+                  ) : listing ? (
+                    <ListingCard listing={listing} />
+                  ) : (
+                    <div className="rounded-xl border border-border bg-card p-4">Неизвестный объект</div>
+                  )}
+
+                  <div className="print:hidden absolute bottom-2 right-2 z-10 flex items-center gap-1">
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="secondary"
                       size="sm"
-                      className="print:hidden text-xs h-8 px-0 mr-3"
+                      className="h-8 px-2 text-xs"
                       disabled={!isAuthenticated || addingItemId === row.id}
                       title={!isAuthenticated ? 'Войдите в аккаунт' : undefined}
-                      onClick={() => void saveSingleFavoriteToCollection(row)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void saveSingleFavoriteToCollection(row);
+                      }}
                     >
-                      {addingItemId === row.id ? 'Сохранение…' : 'В подборку'}
+                      {addingItemId === row.id ? '…' : 'В подборку'}
                     </Button>
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="destructive"
                       size="sm"
-                      className="print:hidden text-xs text-destructive hover:text-destructive h-8 px-0"
-                      onClick={() => void removeByFavoriteId(row.id)}
+                      className="h-8 px-2 text-xs"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void removeByFavoriteId(row.id);
+                      }}
                     >
                       Удалить
                     </Button>

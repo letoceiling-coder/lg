@@ -1,9 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class FeedProcessorService {
   private readonly logger = new Logger(FeedProcessorService.name);
+
+  /**
+   * Минимальная и максимальная «вменяемая» цена объекта недвижимости в рублях.
+   * Значения вне диапазона считаются мусором и заменяются на null с предупреждением.
+   */
+  private static readonly MIN_REASONABLE_PRICE_RUB = 100_000;
+  private static readonly MAX_REASONABLE_PRICE_RUB = 5_000_000_000;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -15,6 +23,92 @@ export class FeedProcessorService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Извлекает инфраструктуру из произвольного формата фида.
+   * Возвращает:
+   *  - undefined — поле в фиде отсутствует, не трогаем существующее значение в БД;
+   *  - null — поле явно пустое, очищаем в БД;
+   *  - JSON — массив строк/объектов для сохранения как есть.
+   */
+  private extractInfrastructure(item: Record<string, unknown>): unknown {
+    const candidates = [
+      'infrastructure',
+      'infra',
+      'block_infra',
+      'block_infrastructure',
+      'pois',
+      'poi',
+    ];
+    for (const key of candidates) {
+      if (!(key in item)) continue;
+      const raw = item[key];
+      if (raw == null) return null;
+      if (Array.isArray(raw)) {
+        const cleaned = raw
+          .map((v) => {
+            if (typeof v === 'string') return v.trim();
+            if (v && typeof v === 'object') return v as Record<string, unknown>;
+            return null;
+          })
+          .filter((v) => v !== null && v !== '');
+        return cleaned.length > 0 ? cleaned : null;
+      }
+      if (typeof raw === 'string') {
+        const t = raw.trim();
+        return t ? [t] : null;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Извлекает массив URL фото из произвольных полей фида.
+   * Возвращает массив строк (только http/https) или null, если ничего нет.
+   */
+  private extractPhotoArray(item: Record<string, unknown>, keys: string[]): string[] | null {
+    for (const k of keys) {
+      const raw = item[k];
+      if (raw == null) continue;
+      if (Array.isArray(raw)) {
+        const urls = raw
+          .map((v) => (typeof v === 'string' ? v.trim() : ''))
+          .filter((u) => u.startsWith('http'));
+        if (urls.length > 0) return urls;
+      } else if (typeof raw === 'string' && raw.trim().startsWith('http')) {
+        return [raw.trim()];
+      }
+    }
+    return null;
+  }
+
+  private extractFirstPhoto(item: Record<string, unknown>, keys: string[]): string | null {
+    const arr = this.extractPhotoArray(item, keys);
+    return arr?.[0] ?? null;
+  }
+
+  /**
+   * Защита от мусорных цен из фида: 0, отрицательные, не-числа,
+   * слишком маленькие (< 100 000 ₽) или фантастически большие (> 5 млрд ₽)
+   * заменяются на null. Один раз логируем причину для диагностики фида.
+   */
+  private normalizeListingPrice(raw: unknown, externalId?: string): number | null {
+    if (raw == null || raw === '') return null;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(n) || n <= 0) {
+      this.logger.warn(`Skip price for listing ${externalId ?? '?'}: not a positive number (${String(raw)})`);
+      return null;
+    }
+    if (n < FeedProcessorService.MIN_REASONABLE_PRICE_RUB) {
+      this.logger.warn(`Skip price for listing ${externalId ?? '?'}: below ${FeedProcessorService.MIN_REASONABLE_PRICE_RUB} ₽ (${n})`);
+      return null;
+    }
+    if (n > FeedProcessorService.MAX_REASONABLE_PRICE_RUB) {
+      this.logger.warn(`Skip price for listing ${externalId ?? '?'}: above ${FeedProcessorService.MAX_REASONABLE_PRICE_RUB} ₽ (${n})`);
+      return null;
+    }
+    return n;
   }
 
   async processRooms(data: any[]): Promise<number> {
@@ -158,6 +252,11 @@ export class FeedProcessorService {
       const blockStatus = this.mapBlockStatus(item.status);
       const salesStart = this.parseBlockSalesStart(item);
       const startPatch = salesStart ? { salesStartDate: salesStart } : {};
+      const infra = this.extractInfrastructure(item);
+      const infraPatch =
+        infra !== undefined
+          ? { infrastructure: infra === null ? Prisma.DbNull : (infra as Prisma.InputJsonValue) }
+          : {};
 
       const block = await this.prisma.block.upsert({
         where: { regionId_externalId: { regionId, externalId: item._id } },
@@ -170,6 +269,7 @@ export class FeedProcessorService {
           crmId: this.toCrmBigInt(item.crm_id),
           ...(blockStatus && { status: blockStatus }),
           ...startPatch,
+          ...infraPatch,
         },
         create: {
           regionId,
@@ -184,6 +284,7 @@ export class FeedProcessorService {
           dataSource: 'FEED',
           ...(blockStatus && { status: blockStatus }),
           ...startPatch,
+          ...infraPatch,
         },
       });
 
@@ -332,10 +433,12 @@ export class FeedProcessorService {
         const builderId = builderMap.get(apt.block_builder) || null;
         const districtId = districtMap.get(apt.block_district) || null;
 
+        const normalizedPrice = this.normalizeListingPrice(apt.price, apt._id);
+
         const listing = await this.prisma.listing.upsert({
           where: { regionId_externalId: { regionId, externalId: apt._id } },
           update: {
-            price: apt.price ?? null,
+            price: normalizedPrice,
             blockId,
             buildingId,
             builderId,
@@ -347,7 +450,7 @@ export class FeedProcessorService {
             kind: 'APARTMENT',
             externalId: apt._id,
             crmId: this.toCrmBigInt(apt.block_crm_id),
-            price: apt.price ?? null,
+            price: normalizedPrice,
             blockId,
             buildingId,
             builderId,
@@ -360,6 +463,33 @@ export class FeedProcessorService {
         const roomTypeId = roomTypeMap.get(String(apt.room)) || null;
         const finishingId = finishingMap.get(apt.finishing) || null;
         const buildingTypeId = buildingTypeMap.get(apt.building_type) || null;
+
+        // Доп. фото квартиры (вид из окна, ракурсы и т.д.) — собираем из вариантов имён полей
+        // фида (TrendAgent: photo/photos/gallery; стандартные: images/extra_photos; вид из окна: window_view/view).
+        const extraPhotoUrls = this.extractPhotoArray(apt as Record<string, unknown>, [
+          'photos',
+          'photo',
+          'gallery',
+          'images',
+          'extra_photos',
+          'window_view',
+          'view',
+          'view_photos',
+        ]);
+        const finishingPhotoUrl = this.extractFirstPhoto(apt as Record<string, unknown>, [
+          'finishing_photo',
+          'finishing_photos',
+          'interior_photo',
+          'interior_photos',
+        ]);
+
+        const aptPhotoPatch = {
+          extraPhotoUrls:
+            extraPhotoUrls != null
+              ? (extraPhotoUrls as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+          finishingPhotoUrl: finishingPhotoUrl ?? null,
+        };
 
         await this.prisma.listingApartment.upsert({
           where: { listingId: listing.id },
@@ -390,6 +520,7 @@ export class FeedProcessorService {
             blockIsCity: apt.block_iscity ?? null,
             blockCityId: apt.block_city || null,
             planUrl: apt.plan?.[0] || null,
+            ...aptPhotoPatch,
           },
           create: {
             listingId: listing.id,
@@ -419,6 +550,11 @@ export class FeedProcessorService {
             blockIsCity: apt.block_iscity ?? null,
             blockCityId: apt.block_city || null,
             planUrl: apt.plan?.[0] || null,
+            extraPhotoUrls:
+              extraPhotoUrls != null
+                ? (extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
+            finishingPhotoUrl: finishingPhotoUrl ?? null,
           },
         });
 

@@ -77,6 +77,11 @@ export class QueryBlocksDto {
   @IsString()
   room_type_ids?: string;
 
+  @ApiPropertyOptional({ description: 'Comma-separated room categories: 0,1,2,3,4 (0=studio)' })
+  @IsOptional()
+  @IsString()
+  rooms?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -88,6 +93,12 @@ export class QueryBlocksDto {
   @IsInt()
   @Type(() => Number)
   price_max?: number;
+
+
+  @ApiPropertyOptional({ description: 'Срок сдачи (comma-separated). Поддержка: YYYY, YYYY MM, Qn YYYY, Сдан' })
+  @IsOptional()
+  @IsString()
+  deadline?: string;
 
   @ApiPropertyOptional({ enum: ['name_asc', 'name_desc', 'created_desc', 'price_asc', 'price_desc', 'sales_start_asc'] })
   @IsOptional()
@@ -161,4 +172,29 @@ export class QueryBlocksDto {
   @IsOptional()
   @IsString()
   geo_preset?: string;
+
+  @ApiPropertyOptional({ description: 'Min apartment area (m²)' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  area_min?: number;
+
+  @ApiPropertyOptional({ description: 'Max apartment area (m²)' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  area_max?: number;
+
+  @ApiPropertyOptional({ description: 'Min floor number' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  floor_min?: number;
+
+  @ApiPropertyOptional({ description: 'Max floor number' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  floor_max?: number;
+
 }

@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Image, Users, Settings, ChevronLeft,
   ChevronRight, Palette, BookOpen, ClipboardList, Building2, Building, Download, Newspaper, Home, History, HardHat,
-  Globe, LayoutTemplate, BellRing,
+  Globe, LayoutTemplate, BellRing, ExternalLink, LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -17,7 +17,7 @@ const navItems = [
   { to: '/admin/blocks', icon: Building2, label: 'ЖК', roles: ['admin', 'editor'] },
   { to: '/admin/builders', icon: HardHat, label: 'Застройщики', roles: ['admin', 'editor'] },
   { to: '/admin/buildings', icon: Building, label: 'Корпуса', roles: ['admin', 'editor'] },
-  { to: '/admin/listings', icon: Home, label: 'Квартиры', roles: ['admin', 'editor', 'manager', 'agent'] },
+  { to: '/admin/listings', icon: Home, label: 'Объявления', roles: ['admin', 'editor', 'manager', 'agent'] },
   { to: '/admin/feed-import', icon: Download, label: 'Импорт фидов', roles: ['admin', 'editor'] },
   { to: '/admin/reference', icon: BookOpen, label: 'Справочники', roles: ['admin', 'editor'] },
   { to: '/admin/regions', icon: Globe, label: 'Регионы', roles: ['admin', 'editor'] },
@@ -32,7 +32,8 @@ const navItems = [
 
 export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const availableNavItems = navItems.filter((item) => {
     if (!item.roles?.length) return true;
@@ -40,6 +41,16 @@ export default function AdminLayout() {
     if (!role) return false;
     return item.roles.includes(role);
   });
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate('/login', { replace: true });
+    }
+  };
+
+  const userInitial = (user?.name?.trim()?.[0] ?? user?.email?.[0] ?? '?').toUpperCase();
 
   return (
     <div className="flex h-screen bg-muted/30 overflow-hidden">
@@ -84,6 +95,48 @@ export default function AdminLayout() {
             Сборка: {__LG_BUILD_TIME__}
           </div>
         ) : null}
+
+        <div className="border-t px-2 py-2 space-y-1">
+          {!collapsed && user ? (
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40">
+              <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold shrink-0">
+                {userInitial}
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-medium truncate">{user.name}</div>
+                <div className="text-[10px] text-muted-foreground truncate">{user.role}</div>
+              </div>
+            </div>
+          ) : null}
+
+          <Link
+            to="/"
+            target="_blank"
+            rel="noreferrer"
+            className={cn(
+              'flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
+              collapsed && 'justify-center px-0',
+            )}
+            title="Открыть сайт в новой вкладке"
+          >
+            <ExternalLink className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="truncate">На сайт</span>}
+          </Link>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors',
+              collapsed && 'justify-center px-0',
+            )}
+            title="Выйти"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="truncate">Выйти</span>}
+          </button>
+        </div>
+
         <button
           onClick={() => setCollapsed(c => !c)}
           className="flex items-center justify-center h-12 border-t text-muted-foreground hover:text-foreground transition-colors"

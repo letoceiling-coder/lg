@@ -181,7 +181,7 @@ const HeroSearch = () => {
         return;
       }
       setStoredRegionId(belgorodRegion.id);
-      navigate(`/catalog?region_id=${belgorodRegion.id}&geo_preset=belgorod`);
+      navigate(`/catalog?region_id=${belgorodRegion.id}`);
       return;
     }
     navigate('/belgorod');
@@ -223,8 +223,18 @@ const HeroSearch = () => {
     regionRows?.find((r) => r.id === regionId)?.name ?? 'Регион';
 
   const ctaLabel = useMemo(() => {
-    if (activeTab === 'apartments' && catalogStats) {
-      return `${catalogStats.apartments.toLocaleString('ru')} квартир в ${catalogStats.blocks.toLocaleString('ru')} ЖК →`;
+    if (activeTab === 'apartments') {
+      const blocks = catalogStats?.blocks ?? 0;
+      const apartmentsInBlocks = catalogStats?.apartments ?? 0;
+      const standaloneApartments = kindCounts?.APARTMENT ?? 0;
+      if (blocks > 0) {
+        return `${apartmentsInBlocks.toLocaleString('ru')} квартир в ${blocks.toLocaleString('ru')} ЖК →`;
+      }
+      if (standaloneApartments > 0) {
+        return `${standaloneApartments.toLocaleString('ru')} квартир →`;
+      }
+      if (catalogStats == null && kindCounts == null) return 'Найти →';
+      return 'Нет квартир в этом регионе';
     }
     const tab = objectTabs.find((t) => t.value === activeTab);
     const k = tab?.kind;
@@ -242,6 +252,13 @@ const HeroSearch = () => {
     }
     return 'Найти →';
   }, [activeTab, catalogStats, kindCounts]);
+
+  const apartmentsHeadlineCount = useMemo(() => {
+    const fromStats = catalogStats?.apartments ?? 0;
+    if (fromStats > 0) return fromStats;
+    const fromKinds = kindCounts?.APARTMENT ?? 0;
+    return fromKinds > 0 ? fromKinds : 62_000;
+  }, [catalogStats, kindCounts]);
 
   return (
     <section className="relative bg-background">
@@ -290,8 +307,8 @@ const HeroSearch = () => {
 
           <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold leading-tight text-center">
             <span className="text-[#2563EB]">Live Grid.</span>{' '}
-            <span className="hidden sm:inline text-foreground">62 000+ квартир по России</span>
-            <span className="sm:hidden text-foreground">62 000+ квартир</span>
+            <span className="hidden sm:inline text-foreground">{apartmentsHeadlineCount.toLocaleString('ru-RU')}+ квартир по России</span>
+            <span className="sm:hidden text-foreground">{apartmentsHeadlineCount.toLocaleString('ru-RU')}+ квартир</span>
           </h1>
         </div>
 
@@ -321,12 +338,16 @@ const HeroSearch = () => {
           <button
             type="button"
             onClick={onBelgorodClick}
+            title={isBelgorodActive ? 'Сбросить регион (вернуться к Москве)' : 'Перейти в каталог Белгорода'}
             className={cn(
-              'flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 shrink-0 text-white shadow-sm',
-              isBelgorodActive ? 'bg-[#EA580C] ring-2 ring-offset-2 ring-[#F97316]' : 'bg-[#F97316] hover:bg-[#EA580C]',
+              'inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors duration-200 shrink-0 text-white shadow-sm border-2',
+              isBelgorodActive
+                ? 'bg-[#EA580C] border-[#7c2d12]'
+                : 'bg-[#F97316] hover:bg-[#EA580C] border-transparent',
             )}
           >
-            🏙 Белгород
+            <span aria-hidden>🏙</span>
+            <span>Белгород</span>
           </button>
         </div>
 

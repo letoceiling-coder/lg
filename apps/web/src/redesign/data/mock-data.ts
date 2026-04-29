@@ -171,8 +171,19 @@ export const subways = [...new Set(complexesRaw.map(c => c.subway))];
 export const builders = [...new Set(complexesRaw.map(c => c.builder))];
 export const deadlines = [...new Set(complexesRaw.map(c => c.deadline))];
 
-export function formatPrice(n: number): string {
-  if (!n || n <= 0) return '—';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace('.0', '')} млн ₽`;
-  return `${(n / 1000).toFixed(0)} тыс ₽`;
+/**
+ * Минимальная «вменяемая» цена объекта недвижимости в рублях.
+ * Всё, что меньше — считаем мусором из фида и не показываем.
+ */
+export const MIN_REASONABLE_PRICE_RUB = 100_000;
+
+/**
+ * Единый форматтер цены. Вход — всегда рубли (Decimal от API).
+ * Цены ниже MIN_REASONABLE_PRICE_RUB трактуются как невалидные и заменяются на «—».
+ * Большие значения отображаются в миллионах, средние — в тысячах.
+ */
+export function formatPrice(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n) || n < MIN_REASONABLE_PRICE_RUB) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')} млн ₽`;
+  return `${Math.round(n / 1000)} тыс ₽`;
 }

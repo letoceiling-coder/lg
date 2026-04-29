@@ -1,8 +1,10 @@
-import { Heart } from 'lucide-react';
+import { Heart, MapPin } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import PropertyBadge from './PropertyBadge';
+import CardShell from './CardShell';
+import PriceLabel from './PriceLabel';
 
 export interface PropertyData {
   image: string;
@@ -20,6 +22,9 @@ export interface PropertyData {
   deadline?: string;
   mortgage?: string;
   coords?: [number, number];
+  developer?: string;
+  listingCount?: number;
+  metroNotes?: { name: string; time?: number | null; by?: 'walk' | 'transport' }[];
 }
 
 const PropertyCard = ({ data, variant = 'default' }: { data: PropertyData; basePath?: string; variant?: 'default' | 'hot' }) => {
@@ -27,53 +32,82 @@ const PropertyCard = ({ data, variant = 'default' }: { data: PropertyData; baseP
   const slug = data.slug || data.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-zа-яё0-9-]/gi, '');
   const linkPath = `/complex/${slug}`;
   const isHot = variant === 'hot';
+  const hasBuilder = Boolean(data.developer && data.developer !== '—');
+  const hasDeadline = Boolean(data.deadline && data.deadline !== '—');
 
   return (
-    <Link
-      to={linkPath}
-      className={cn(
-        'group flex flex-col rounded-xl overflow-hidden bg-card border transition-all duration-200 hover:shadow-md hover:-translate-y-px',
-        isHot ? 'border-primary/20 hover:border-primary/40' : 'border-border'
-      )}
-    >
-      {/* Image */}
-      <div className="relative shrink-0 overflow-hidden h-[160px]">
-        <img
-          src={data.image}
-          alt={data.title}
-          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-        />
-        {isHot && (
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground/15 via-transparent to-transparent" />
-        )}
-        {data.badges && data.badges.length > 0 && (
-          <div className="absolute top-2 left-2 flex flex-wrap gap-1 z-10">
-            {data.badges.map((b, i) => (
-              <PropertyBadge key={i} label={b} type={isHot ? undefined : 'info'} />
-            ))}
-          </div>
-        )}
-        <button
-          className="absolute top-2 right-2 w-7 h-7 bg-background/70 backdrop-blur-sm rounded-full flex items-center justify-center z-10 hover:bg-background/90 transition-colors"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLiked(!liked); }}
-        >
-          <Heart className={cn('w-3.5 h-3.5', liked ? 'fill-destructive text-destructive' : 'text-muted-foreground')} />
-        </button>
-      </div>
-
-      {/* Info */}
-      <div className="p-3 flex flex-col gap-0.5">
-        <div className="flex justify-between items-start gap-2">
-          <h3 className="font-semibold text-sm leading-tight truncate">{data.title}</h3>
-          <span className={cn('font-bold text-sm shrink-0', isHot ? 'text-[#EF4444]' : 'text-primary')}>{data.price}</span>
+    <CardShell highlighted={isHot} className="h-[390px]">
+      <Link to={linkPath} className="flex flex-col flex-1 min-h-0">
+        <div className="relative shrink-0 overflow-hidden h-[160px]">
+          <img
+            src={data.image}
+            alt={data.title}
+            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+          />
+          {isHot && (
+            <div className="absolute inset-0 bg-gradient-to-t from-foreground/15 via-transparent to-transparent" />
+          )}
+          {data.badges && data.badges.length > 0 && (
+            <div className="absolute top-2 left-2 flex flex-wrap gap-1 z-10">
+              {data.badges.map((b, i) => (
+                <PropertyBadge key={i} label={b} type={isHot ? undefined : 'info'} />
+              ))}
+            </div>
+          )}
+          <button
+            className="absolute top-2 right-2 w-7 h-7 bg-background/70 backdrop-blur-sm rounded-full flex items-center justify-center z-10 hover:bg-background/90 transition-colors"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLiked(!liked); }}
+          >
+            <Heart className={cn('w-3.5 h-3.5', liked ? 'fill-destructive text-destructive' : 'text-muted-foreground')} />
+          </button>
         </div>
-        <p className="text-[11px] text-muted-foreground truncate">{data.address}</p>
-        {(data.area || data.rooms) && (
-          <p className="text-[11px] text-muted-foreground">{[data.area, data.rooms].filter(Boolean).join(' · ')}</p>
-        )}
-        <span className="text-primary text-[11px] font-medium mt-1 hover:underline">Подробнее</span>
-      </div>
-    </Link>
+
+        <div className="p-3 flex-1 flex flex-col gap-1.5">
+          <div className="flex justify-between items-start gap-2">
+            <h3 className="font-semibold text-[16px] leading-tight truncate">{data.title}</h3>
+            <PriceLabel value={data.price} hot={isHot} />
+          </div>
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <MapPin className="w-3 h-3 shrink-0" />
+            <span className="truncate">{data.address}</span>
+          </div>
+          {data.metroNotes && data.metroNotes.length > 0 ? (
+            <div className="space-y-0.5">
+              {data.metroNotes.slice(0, 2).map((m, idx) => (
+                <p key={`${m.name}-${idx}`} className="text-[11px] text-muted-foreground flex items-center gap-1.5 truncate">
+                  <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', idx === 0 ? 'bg-emerald-500' : 'bg-amber-500')} />
+                  <span className="truncate">
+                    {m.name}
+                    {m.time != null ? `, ${m.time} минут ${m.by === 'walk' ? 'пешком' : 'транспортом'}` : ''}
+                  </span>
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {hasBuilder ? (
+            <p className="text-[11px] text-muted-foreground truncate">Застройщик: {data.developer}</p>
+          ) : null}
+          {(data.area || data.rooms) && (
+            <p className="text-[11px] text-muted-foreground">{[data.area, data.rooms].filter(Boolean).join(' · ')}</p>
+          )}
+          <div className="pt-2 mt-auto border-t border-border/70 space-y-1">
+            {hasDeadline ? (
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">Сдача</span>
+                <span className="font-medium">{data.deadline}</span>
+              </div>
+            ) : null}
+            {data.listingCount ? (
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">Квартир</span>
+                <span className="font-medium">{data.listingCount}</span>
+              </div>
+            ) : null}
+            <span className="text-primary text-[11px] font-medium hover:underline">Подробнее</span>
+          </div>
+        </div>
+      </Link>
+    </CardShell>
   );
 };
 

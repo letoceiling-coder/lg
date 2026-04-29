@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Post,
@@ -20,6 +21,8 @@ import {
   TokensDto,
   RefreshDto,
   TelegramWidgetConfigDto,
+  TelegramCodeResponseDto,
+  TelegramRefreshDto,
 } from './dto';
 import { Public, CurrentUser } from './decorators';
 
@@ -97,6 +100,29 @@ export class AuthController {
   @ApiResponse({ status: 200, type: TokensDto })
   async refresh(@Body() dto: RefreshDto): Promise<TokensDto> {
     return this.authService.refresh(dto.refreshToken);
+  }
+
+
+
+  @Public()
+  @Post('telegram/code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Сгенерировать 6-значный код для /auth в Telegram-боте' })
+  @ApiResponse({ status: 200, type: TelegramCodeResponseDto })
+  async createTelegramCode(@Body() dto: LoginDto): Promise<TelegramCodeResponseDto> {
+    return this.authService.createTelegramCode(dto);
+  }
+
+  @Public()
+  @Post('telegram/refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Обновить JWT бота по telegramId (внутренний endpoint)' })
+  @ApiResponse({ status: 200, type: TokensDto })
+  async refreshTelegramToken(
+    @Body() dto: TelegramRefreshDto,
+    @Headers('x-telegram-bot-secret') secretHeader?: string,
+  ): Promise<TokensDto> {
+    return this.authService.refreshTelegramToken(dto.telegramId, secretHeader);
   }
 
   @Post('logout')

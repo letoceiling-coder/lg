@@ -67,6 +67,12 @@ export class ManualApartmentFieldsDto {
   @MaxLength(2048, { each: true })
   extraPhotoUrls?: string[];
 
+  @ApiPropertyOptional({ description: 'Адрес объекта (если без привязки к ЖК)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  blockAddress?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -165,6 +171,12 @@ export class ManualApartmentPatchDto {
   @IsString({ each: true })
   @MaxLength(2048, { each: true })
   extraPhotoUrls?: string[];
+
+  @ApiPropertyOptional({ description: 'Адрес объекта (если без привязки к ЖК)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  blockAddress?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

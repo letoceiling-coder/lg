@@ -27,4 +27,4 @@ echo "=== 2/2  Running deploy on server ==="
 ssh "$SERVER" "cd $REMOTE_DIR && bash deploy/deploy-full.sh"
 
 echo ""
-echo "=== Done! Site: https://lg.livegrid.ru/ ==="
+echo "=== Done! Site: https://livegrid.ru/ ==="

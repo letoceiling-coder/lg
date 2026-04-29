@@ -1,14 +1,18 @@
 import type { PropertyData } from '@/components/PropertyCard';
 import type { StartSaleData } from '@/components/StartSaleCard';
 import type { ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
+import { MIN_REASONABLE_PRICE_RUB } from '@/redesign/data/mock-data';
 
 const PLACEHOLDER = '/placeholder.svg';
 
 export function formatListingPriceMinRub(rub: number | null | undefined): string {
-  if (rub == null || rub <= 0) return '—';
+  if (rub == null || !Number.isFinite(rub) || rub < MIN_REASONABLE_PRICE_RUB) return '—';
   const m = rub / 1_000_000;
-  const s = m >= 10 ? m.toFixed(0) : m.toFixed(1).replace(/\.0$/, '');
-  return `от ${s} млн`;
+  if (m >= 1) {
+    const s = m >= 10 ? m.toFixed(0) : m.toFixed(1).replace(/\.0$/, '');
+    return `от ${s} млн`;
+  }
+  return `от ${Math.round(rub / 1000)} тыс ₽`;
 }
 
 export function blockMainImage(b: ApiBlockListRow): string {
@@ -34,11 +38,24 @@ export function formatSalesStartLabel(iso: string | Date | null | undefined): st
 
 export function mapApiBlockToHomeHotCard(b: ApiBlockListRow, badge: string): PropertyData {
   const bdg = badge.trim();
+  const metroNotes = (b.subways ?? [])
+    .filter((x) => Boolean(x?.subway?.name))
+    .slice(0, 2)
+    .map((x) => ({
+      name: x.subway.name,
+      time: x.distanceTime ?? null,
+      by: x.distanceType === 1 ? 'walk' : 'transport',
+    }));
   return {
     image: blockMainImage(b),
     title: b.name,
     price: formatListingPriceMinRub(b.listingPriceMin ?? null),
     address: blockAddressLine(b),
+    district: b.district?.name ?? undefined,
+    developer: b.builder?.name ?? undefined,
+    deadline: formatSalesStartLabel(b.salesStartDate ?? null) || undefined,
+    listingCount: b._count?.listings ?? 0,
+    metroNotes,
     slug: b.slug,
     badges: bdg ? [bdg] : [],
   };
@@ -59,5 +76,13 @@ export function mapApiBlockToHomeStartCard(b: ApiBlockListRow, badge: string): S
     apartments: [],
     listingCount: b._count?.listings ?? 0,
     salesStartLabel: label || undefined,
+    metroNotes: (b.subways ?? [])
+      .filter((x) => Boolean(x?.subway?.name))
+      .slice(0, 3)
+      .map((x) => ({
+        name: x.subway.name,
+        time: x.distanceTime ?? null,
+        by: x.distanceType === 1 ? 'walk' : 'transport',
+      })),
   };
 }
