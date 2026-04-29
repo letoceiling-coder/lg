@@ -11,6 +11,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { ManualSellerDto } from './manual-seller.dto';
 
 const PARKING_TYPES = ['UNDERGROUND', 'GROUND', 'MULTILEVEL'] as const;
 
@@ -64,6 +65,12 @@ export class CreateManualParkingDto {
   @IsBoolean()
   isPublished?: boolean;
 
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
+
   @ApiProperty({ type: ManualParkingFieldsDto })
   @ValidateNested()
   @Type(() => ManualParkingFieldsDto)
@@ -115,6 +122,12 @@ export class UpdateManualParkingDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiPropertyOptional({ type: ManualParkingPatchDto })
   @IsOptional()

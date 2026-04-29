@@ -7,6 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import MediaPickerDialog from '@/admin/components/MediaPickerDialog';
+import SellerFields, {
+  emptySellerForm,
+  normalizeSellerForm,
+  sellerFormFromApi,
+  type ApiSeller,
+  type SellerForm,
+} from '@/admin/components/SellerFields';
 
 type RegionRow = { id: number; code: string; name: string };
 type RefOpt = { id: number; name: string };
@@ -36,6 +43,7 @@ export default function AdminManualListing() {
   const [blockAddress, setBlockAddress] = useState('');
   const [buildingName, setBuildingName] = useState('');
   const [number, setNumber] = useState('');
+  const [seller, setSeller] = useState<SellerForm>(emptySellerForm);
   const [formError, setFormError] = useState('');
 
   const [picker, setPicker] = useState<null | 'plan' | 'finishing' | 'extra'>(null);
@@ -85,6 +93,7 @@ export default function AdminManualListing() {
     setPrice(editListing.price != null ? String(editListing.price) : '');
     setStatus((editListing.status as 'ACTIVE' | 'DRAFT') || 'DRAFT');
     setIsPublished(Boolean(editListing.isPublished));
+    setSeller(sellerFormFromApi(editListing.seller as ApiSeller));
     if (apt) {
       setAreaTotal(apt.areaTotal != null ? String(apt.areaTotal) : '');
       setAreaKitchen(apt.areaKitchen != null ? String(apt.areaKitchen) : '');
@@ -146,11 +155,13 @@ export default function AdminManualListing() {
       if (blockAddress.trim()) apartment.blockAddress = blockAddress.trim();
       if (buildingName.trim()) apartment.buildingName = buildingName.trim();
       if (number.trim()) apartment.number = number.trim();
+      const sellerPayload = normalizeSellerForm(seller);
 
       if (!isNew && editNumericId != null) {
         const patch: Record<string, unknown> = { price: p, status, isPublished, apartment };
         if (blockId.trim() === '') patch.blockId = null;
         else patch.blockId = bid;
+        if (sellerPayload) patch.seller = sellerPayload;
         return apiPatch(`/admin/listings/${editNumericId}/manual-apartment`, patch);
       }
 
@@ -162,6 +173,7 @@ export default function AdminManualListing() {
         apartment,
       };
       if (bid != null) body.blockId = bid;
+      if (sellerPayload) body.seller = sellerPayload;
       return apiPost('/admin/listings/manual-apartment', body);
     },
     onSuccess: () => {
@@ -205,7 +217,7 @@ export default function AdminManualListing() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
         <Button type="button" variant="ghost" size="icon" asChild>
           <Link to="/admin/listings" aria-label="Назад">
@@ -394,6 +406,8 @@ export default function AdminManualListing() {
           <Label>Номер квартиры</Label>
           <Input value={number} onChange={(e) => setNumber(e.target.value)} />
         </div>
+
+        <SellerFields value={seller} onChange={setSeller} />
 
         <div className="flex gap-2 pt-4 border-t">
           <Button type="button" variant="outline" asChild>

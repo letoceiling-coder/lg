@@ -13,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { ManualSellerDto } from './manual-seller.dto';
 
 export class ManualApartmentFieldsDto {
   @ApiProperty({ example: 54.2 })
@@ -111,6 +112,12 @@ export class CreateManualApartmentDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiProperty({ type: ManualApartmentFieldsDto })
   @ValidateNested()
@@ -212,6 +219,12 @@ export class UpdateManualApartmentDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiPropertyOptional({ type: ManualApartmentPatchDto })
   @IsOptional()

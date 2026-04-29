@@ -9,6 +9,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { ManualSellerDto } from './manual-seller.dto';
 
 const COMMERCIAL_TYPES = ['OFFICE', 'RETAIL', 'WAREHOUSE', 'RESTAURANT', 'OTHER'] as const;
 
@@ -61,6 +62,12 @@ export class CreateManualCommercialDto {
   @IsBoolean()
   isPublished?: boolean;
 
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
+
   @ApiProperty({ type: ManualCommercialFieldsDto })
   @ValidateNested()
   @Type(() => ManualCommercialFieldsDto)
@@ -111,6 +118,12 @@ export class UpdateManualCommercialDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiPropertyOptional({ type: ManualCommercialPatchDto })
   @IsOptional()

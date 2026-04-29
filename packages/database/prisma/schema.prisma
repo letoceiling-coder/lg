@@ -180,6 +180,8 @@ model User {
   favorites          Favorite[]
   collections      UserCollection[]
   telegramAuthCodes TelegramAuthCode[]
+  createdSellers    Seller[] @relation("SellerCreatedBy")
+  updatedSellers    Seller[] @relation("SellerUpdatedBy")
 
   @@map("users")
 }
@@ -486,6 +488,7 @@ model Listing {
   address     String?       @db.Text
   description String?       @db.Text
   sourceUrl   String?       @map("source_url") @db.Text
+  sellerId    Int?          @map("seller_id")
   lat         Decimal?      @db.Decimal(10, 8)
   lng         Decimal?      @db.Decimal(11, 8)
   createdAt  DateTime      @default(now()) @map("created_at")
@@ -496,6 +499,7 @@ model Listing {
   building  Building?  @relation(fields: [buildingId], references: [id])
   builder   Builder?   @relation(fields: [builderId], references: [id])
   district  District?  @relation(fields: [districtId], references: [id])
+  seller    Seller?    @relation(fields: [sellerId], references: [id], onDelete: SetNull)
 
   apartment  ListingApartment?
   parking    ListingParking?
@@ -511,9 +515,37 @@ model Listing {
   @@index([blockId])
   @@index([buildingId])
   @@index([builderId])
+  @@index([sellerId])
   @@index([status])
   @@index([dataSource])
   @@map("listings")
+}
+
+// ============================================================
+// Sellers (object owners / продавцы)
+// ============================================================
+
+model Seller {
+  id          Int      @id @default(autoincrement())
+  fullName    String?  @map("full_name") @db.VarChar(255)
+  phone       String?  @db.VarChar(64)
+  phoneAlt    String?  @map("phone_alt") @db.VarChar(64)
+  email       String?  @db.VarChar(255)
+  address     String?  @db.Text
+  notes       String?  @db.Text
+  createdById String?  @map("created_by_id") @db.Uuid
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy User? @relation("SellerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("SellerUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  listings  Listing[]
+
+  @@index([createdById])
+  @@index([phone])
+  @@index([fullName])
+  @@map("sellers")
 }
 
 // ============================================================

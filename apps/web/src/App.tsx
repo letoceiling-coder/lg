@@ -81,6 +81,7 @@ const AdminBlockEditor = lazy(() => import("./admin/pages/AdminBlockEditor"));
 const AdminBuilders = lazy(() => import("./admin/pages/AdminBuilders"));
 const AdminBuildings = lazy(() => import("./admin/pages/AdminBuildings"));
 const AdminListings = lazy(() => import("./admin/pages/AdminListings"));
+const AdminSellers = lazy(() => import("./admin/pages/AdminSellers"));
 const AdminManualListing = lazy(() => import("./admin/pages/AdminManualListing"));
 const AdminListingWizard = lazy(() => import("./admin/pages/AdminListingWizard"));
 const AdminManualHouse = lazy(() => import("./admin/pages/AdminManualHouse"));
@@ -150,6 +151,7 @@ const AppRoutes = () => (
       <Route path="builders" element={<RequireAuth roles={['admin', 'editor']}><AdminBuilders /></RequireAuth>} />
       <Route path="buildings" element={<RequireAuth roles={['admin', 'editor']}><AdminBuildings /></RequireAuth>} />
       <Route path="listings" element={<AdminListings />} />
+      <Route path="sellers" element={<RequireAuth roles={['admin', 'editor', 'manager', 'agent']}><AdminSellers /></RequireAuth>} />
       <Route path="listings/wizard/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminListingWizard /></RequireAuth>} />
       <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />

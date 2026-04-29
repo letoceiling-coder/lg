@@ -12,6 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { ManualSellerDto } from './manual-seller.dto';
 
 export class ManualLandFieldsDto {
   @ApiPropertyOptional({ example: 8.5, description: 'Площадь участка в сотках' })
@@ -76,6 +77,12 @@ export class CreateManualLandDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiProperty({ type: ManualLandFieldsDto })
   @ValidateNested()
@@ -142,6 +149,12 @@ export class UpdateManualLandDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiPropertyOptional({ type: ManualLandPatchDto })
   @IsOptional()

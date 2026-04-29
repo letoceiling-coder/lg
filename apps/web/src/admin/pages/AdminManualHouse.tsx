@@ -7,6 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import MediaPickerDialog from '@/admin/components/MediaPickerDialog';
+import SellerFields, {
+  emptySellerForm,
+  normalizeSellerForm,
+  sellerFormFromApi,
+  type ApiSeller,
+  type SellerForm,
+} from '@/admin/components/SellerFields';
 
 type RegionRow = { id: number; code: string; name: string };
 type BlockRow = { id: number; name: string };
@@ -31,6 +38,7 @@ type ListingDetail = {
   status: 'ACTIVE' | 'DRAFT' | 'RESERVED' | 'SOLD';
   isPublished: boolean;
   house: ListingHouse | null;
+  seller?: ApiSeller;
 };
 
 const statusOptions = ['DRAFT', 'ACTIVE', 'RESERVED', 'SOLD'] as const;
@@ -95,6 +103,7 @@ export default function AdminManualHouse() {
   const [yearBuilt, setYearBuilt] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [extraPhotoUrls, setExtraPhotoUrls] = useState<string[]>([]);
+  const [seller, setSeller] = useState<SellerForm>(emptySellerForm);
   const [picker, setPicker] = useState<null | 'main' | 'extra'>(null);
   const [didInitForm, setDidInitForm] = useState(false);
 
@@ -122,6 +131,7 @@ export default function AdminManualHouse() {
     setPrice(current.price != null ? String(current.price) : '');
     setStatus(current.status);
     setIsPublished(Boolean(current.isPublished));
+    setSeller(sellerFormFromApi(current.seller));
     setHouseType(current.house?.houseType ?? '');
     setAreaTotal(current.house?.areaTotal != null ? String(current.house.areaTotal) : '');
     setAreaLand(current.house?.areaLand != null ? String(current.house.areaLand) : '');
@@ -145,7 +155,8 @@ export default function AdminManualHouse() {
       if (!effectiveRegionId) throw new Error('Выберите регион');
       if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) throw new Error('Введите корректную цену');
 
-      const body = {
+      const sellerPayload = normalizeSellerForm(seller);
+      const body: Record<string, unknown> = {
         regionId: effectiveRegionId,
         blockId: blockId === '' ? undefined : blockId,
         price: parsedPrice,
@@ -164,6 +175,7 @@ export default function AdminManualHouse() {
           extraPhotoUrls: extraPhotoUrls.length ? extraPhotoUrls : undefined,
         },
       };
+      if (sellerPayload) body.seller = sellerPayload;
       if (isEdit && editId != null) {
         return apiPatch(`/admin/listings/${editId}/manual-house`, body);
       }
@@ -342,6 +354,8 @@ export default function AdminManualHouse() {
           </Button>
         </div>
       </div>
+
+      <SellerFields value={seller} onChange={setSeller} />
 
       <Button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
         {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}

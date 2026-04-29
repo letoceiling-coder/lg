@@ -6,6 +6,13 @@ import { apiGet, apiPatch, apiPost, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
+import SellerFields, {
+  emptySellerForm,
+  normalizeSellerForm,
+  sellerFormFromApi,
+  type ApiSeller,
+  type SellerForm,
+} from '@/admin/components/SellerFields';
 
 type RegionRow = { id: number; code: string; name: string };
 type BlockRow = { id: number; name: string };
@@ -24,6 +31,7 @@ type ListingDetail = {
   status: 'ACTIVE' | 'DRAFT' | 'RESERVED' | 'SOLD';
   isPublished: boolean;
   commercial: ListingCommercial | null;
+  seller?: ApiSeller;
 };
 
 const statusOptions = ['DRAFT', 'ACTIVE', 'RESERVED', 'SOLD'] as const;
@@ -83,6 +91,7 @@ export default function AdminManualCommercial() {
   const [area, setArea] = useState('');
   const [floor, setFloor] = useState('');
   const [hasSeparateEntrance, setHasSeparateEntrance] = useState(false);
+  const [seller, setSeller] = useState<SellerForm>(emptySellerForm);
   const [didInitForm, setDidInitForm] = useState(false);
 
   const effectiveRegionId = regionId || initialRegionId;
@@ -107,6 +116,7 @@ export default function AdminManualCommercial() {
     setPrice(current.price != null ? String(current.price) : '');
     setStatus(current.status);
     setIsPublished(Boolean(current.isPublished));
+    setSeller(sellerFormFromApi(current.seller));
     setCommercialType(current.commercial?.commercialType ?? '');
     setArea(current.commercial?.area != null ? String(current.commercial.area) : '');
     setFloor(current.commercial?.floor != null ? String(current.commercial.floor) : '');
@@ -120,7 +130,8 @@ export default function AdminManualCommercial() {
       if (!effectiveRegionId) throw new Error('Выберите регион');
       if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) throw new Error('Введите корректную цену');
 
-      const body = {
+      const sellerPayload = normalizeSellerForm(seller);
+      const body: Record<string, unknown> = {
         regionId: effectiveRegionId,
         blockId: blockId === '' ? undefined : blockId,
         price: parsedPrice,
@@ -133,6 +144,7 @@ export default function AdminManualCommercial() {
           hasSeparateEntrance,
         },
       };
+      if (sellerPayload) body.seller = sellerPayload;
       if (isEdit && editId != null) {
         return apiPatch(`/admin/listings/${editId}/manual-commercial`, body);
       }
@@ -258,6 +270,8 @@ export default function AdminManualCommercial() {
           Опубликовано
         </label>
       </div>
+
+      <SellerFields value={seller} onChange={setSeller} />
 
       <Button type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
         {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}

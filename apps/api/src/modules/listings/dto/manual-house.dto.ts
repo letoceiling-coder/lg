@@ -12,6 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { ManualSellerDto } from './manual-seller.dto';
 
 export class ManualHouseFieldsDto {
   @ApiPropertyOptional({ enum: ['DETACHED', 'SEMI', 'TOWNHOUSE', 'DUPLEX'] })
@@ -99,6 +100,12 @@ export class CreateManualHouseDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiProperty({ type: ManualHouseFieldsDto })
   @ValidateNested()
@@ -188,6 +195,12 @@ export class UpdateManualHouseDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ type: ManualSellerDto, description: 'Необязательная информация о продавце объекта' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ManualSellerDto)
+  seller?: ManualSellerDto | null;
 
   @ApiPropertyOptional({ type: ManualHousePatchDto })
   @IsOptional()

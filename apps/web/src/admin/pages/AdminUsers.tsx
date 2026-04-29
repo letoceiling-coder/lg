@@ -51,6 +51,7 @@ const permissionRows = [
   { key: 'catalog', label: 'ЖК, корпуса, застройщики', roles: ['admin', 'editor'] },
   { key: 'listings', label: 'Объявления', roles: ['admin', 'editor', 'manager', 'agent'] },
   { key: 'manual-listings', label: 'Создание и редактирование объектов', roles: ['admin', 'editor', 'agent'] },
+  { key: 'sellers', label: 'Продавцы объектов', roles: ['admin', 'editor', 'manager', 'agent'] },
   { key: 'feed', label: 'Импорт фидов', roles: ['admin', 'editor'] },
   { key: 'reference', label: 'Справочники и регионы', roles: ['admin', 'editor'] },
   { key: 'news-media', label: 'Новости и медиа', roles: ['admin', 'editor'] },

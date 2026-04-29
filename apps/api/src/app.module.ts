@@ -27,6 +27,7 @@ import { MediaModule } from './modules/media/media.module';
 import { CacheModule } from './common/cache/cache.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { PresentationsModule } from './modules/presentations/presentations.module';
+import { SellersModule } from './modules/sellers/sellers.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { PresentationsModule } from './modules/presentations/presentations.modul
     SearchModule,
     MediaModule,
     PresentationsModule,
+    SellersModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
 })

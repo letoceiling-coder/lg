@@ -3,7 +3,7 @@ import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Image, Users, Settings, ChevronLeft,
   ChevronRight, Palette, BookOpen, ClipboardList, Building2, Building, Download, Newspaper, Home, History, HardHat,
-  Globe, LayoutTemplate, BellRing, ExternalLink, LogOut,
+  Globe, LayoutTemplate, BellRing, ExternalLink, LogOut, Contact,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -18,6 +18,7 @@ const navItems = [
   { to: '/admin/builders', icon: HardHat, label: 'Застройщики', roles: ['admin', 'editor'] },
   { to: '/admin/buildings', icon: Building, label: 'Корпуса', roles: ['admin', 'editor'] },
   { to: '/admin/listings', icon: Home, label: 'Объявления', roles: ['admin', 'editor', 'manager', 'agent'] },
+  { to: '/admin/sellers', icon: Contact, label: 'Продавцы', roles: ['admin', 'editor', 'manager', 'agent'] },
   { to: '/admin/feed-import', icon: Download, label: 'Импорт фидов', roles: ['admin', 'editor'] },
   { to: '/admin/reference', icon: BookOpen, label: 'Справочники', roles: ['admin', 'editor'] },
   { to: '/admin/regions', icon: Globe, label: 'Регионы', roles: ['admin', 'editor'] },

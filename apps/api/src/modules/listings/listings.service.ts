@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, $Enums } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GeoSpatialService } from '../geo/geo-spatial.service';
@@ -18,9 +18,11 @@ import type {
   CreateManualParkingDto,
   UpdateManualParkingDto,
 } from './dto/manual-parking.dto';
+import type { ManualSellerDto } from './dto/manual-seller.dto';
 
 const MEDIA_LIB_PREFIX = '/uploads/media/';
 type ActorContext = { userId: string; role: string };
+type SellerCarrier = { seller?: ManualSellerDto | null };
 
 function assertMediaLibraryUrl(u: string | undefined | null, label: string) {
   if (u == null || u === '') return;
@@ -110,6 +112,7 @@ export class ListingsService {
       building: { select: { name: true } },
       builder: { select: { name: true } },
       region: { select: { code: true, name: true } },
+      seller: true,
     } satisfies Prisma.ListingInclude;
 
     const [data, total] = await Promise.all([
@@ -161,6 +164,7 @@ export class ListingsService {
         builder: true,
         district: true,
         region: true,
+        seller: true,
       },
     });
     if (!listing) throw new NotFoundException('Listing not found');
@@ -291,6 +295,111 @@ export class ListingsService {
     }
 
     return where;
+  }
+
+  private canManageAllSellers(role?: string): boolean {
+    return role === 'admin' || role === 'editor' || role === 'manager';
+  }
+
+  private normalizeSellerData(seller?: ManualSellerDto | null) {
+    if (!seller) return null;
+    const data = {
+      fullName: seller.fullName?.trim() || null,
+      phone: seller.phone?.trim() || null,
+      phoneAlt: seller.phoneAlt?.trim() || null,
+      email: seller.email?.trim() || null,
+      address: seller.address?.trim() || null,
+      notes: seller.notes?.trim() || null,
+    };
+    return Object.values(data).some((v) => v !== null) ? data : null;
+  }
+
+  private async assertSellerAccess(sellerId: number, actorUserId?: string, actorRole?: string) {
+    if (this.canManageAllSellers(actorRole)) return;
+    if (!actorUserId) throw new ForbiddenException('Нет доступа к продавцу');
+    const seller = await this.prisma.seller.findUnique({
+      where: { id: sellerId },
+      select: { id: true, createdById: true },
+    });
+    if (!seller) throw new BadRequestException('Продавец не найден');
+    if (seller.createdById !== actorUserId) {
+      throw new ForbiddenException('Нет доступа к продавцу');
+    }
+  }
+
+  private async resolveSellerListingCreate(
+    dto: SellerCarrier,
+    actorUserId?: string,
+    actorRole?: string,
+  ): Promise<Pick<Prisma.ListingUncheckedCreateInput, 'sellerId'>> {
+    const seller = dto.seller;
+    if (!seller) return {};
+    if (seller.sellerId != null) {
+      await this.assertSellerAccess(seller.sellerId, actorUserId, actorRole);
+      return { sellerId: seller.sellerId };
+    }
+    const data = this.normalizeSellerData(seller);
+    if (!data) return {};
+    const created = await this.prisma.seller.create({
+      data: {
+        ...data,
+        ...(actorUserId ? { createdBy: { connect: { id: actorUserId } } } : {}),
+        ...(actorUserId ? { updatedBy: { connect: { id: actorUserId } } } : {}),
+      },
+      select: { id: true },
+    });
+    return { sellerId: created.id };
+  }
+
+  private async resolveSellerListingUpdate(
+    listingId: number,
+    dto: SellerCarrier,
+    actorUserId?: string,
+    actorRole?: string,
+  ): Promise<{ patch: Pick<Prisma.ListingUpdateInput, 'seller'>; touched: boolean }> {
+    if (dto.seller === undefined) return { patch: {}, touched: false };
+    if (dto.seller === null) return { patch: { seller: { disconnect: true } }, touched: true };
+    const seller = dto.seller;
+
+    if (seller.sellerId !== undefined) {
+      if (seller.sellerId === null) {
+        return { patch: { seller: { disconnect: true } }, touched: true };
+      }
+      await this.assertSellerAccess(seller.sellerId, actorUserId, actorRole);
+      return { patch: { seller: { connect: { id: seller.sellerId } } }, touched: true };
+    }
+
+    const data = this.normalizeSellerData(seller);
+    if (!data) return { patch: {}, touched: false };
+
+    const current = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      select: { sellerId: true },
+    });
+    if (current?.sellerId) {
+      await this.assertSellerAccess(current.sellerId, actorUserId, actorRole);
+      await this.prisma.seller.update({
+        where: { id: current.sellerId },
+        data: {
+          ...data,
+          ...(actorUserId ? { updatedBy: { connect: { id: actorUserId } } } : {}),
+        },
+      });
+      return { patch: {}, touched: true };
+    }
+
+    return {
+      patch: {
+        seller: {
+          create: {
+            ...data,
+            ...(actorUserId ? { createdBy: { connect: { id: actorUserId } } } : {}),
+            ...(actorUserId ? { updatedBy: { connect: { id: actorUserId } } } : {}),
+          },
+        },
+      },
+      touched: true,
+    };
   }
 
   private buildApartmentWhereParts(query: QueryListingsDto): Prisma.ListingApartmentWhereInput[] {
@@ -439,6 +548,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         apartment: {
           create: {
             areaTotal: new Prisma.Decimal(a.areaTotal),
@@ -464,6 +574,7 @@ export class ListingsService {
         apartment: { include: { roomType: true, finishing: true } },
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -504,6 +615,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         house: {
           create: {
             houseType: h.houseType ?? null,
@@ -526,6 +638,7 @@ export class ListingsService {
         house: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -566,6 +679,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         land: {
           create: {
             areaSotki: l.areaSotki != null ? new Prisma.Decimal(l.areaSotki) : null,
@@ -584,6 +698,7 @@ export class ListingsService {
         land: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -623,6 +738,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         commercial: {
           create: {
             commercialType: c.commercialType ?? null,
@@ -636,6 +752,7 @@ export class ListingsService {
         commercial: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -675,6 +792,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         parking: {
           create: {
             parkingType: p.parkingType ?? null,
@@ -688,6 +806,7 @@ export class ListingsService {
         parking: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -723,6 +842,8 @@ export class ListingsService {
         listingPatch.block = { connect: { id: dto.blockId } };
       }
     }
+    const sellerUpdate = await this.resolveSellerListingUpdate(id, dto, actorUserId, actorRole);
+    Object.assign(listingPatch, sellerUpdate.patch);
 
     const aptPatch: Prisma.ListingApartmentUpdateInput = {};
     if (dto.apartment) {
@@ -757,9 +878,10 @@ export class ListingsService {
 
     const hasListing = Object.keys(listingPatch).length > 0;
     const hasApt = Object.keys(aptPatch).length > 0;
-    if (!hasListing && !hasApt) {
+    if (!hasListing && !hasApt && !sellerUpdate.touched) {
       throw new BadRequestException('Укажите хотя бы одно поле для обновления');
     }
+    if (!hasListing && !hasApt && sellerUpdate.touched) return this.findOne(id);
 
     return this.prisma.listing.update({
       where: { id },
@@ -771,6 +893,7 @@ export class ListingsService {
         apartment: { include: { roomType: true, finishing: true } },
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -812,6 +935,8 @@ export class ListingsService {
         listingPatch.block = { connect: { id: dto.blockId } };
       }
     }
+    const sellerUpdate = await this.resolveSellerListingUpdate(id, dto, actorUserId, actorRole);
+    Object.assign(listingPatch, sellerUpdate.patch);
 
     const housePatch: Prisma.ListingHouseUpdateInput = {};
     if (dto.house) {
@@ -839,9 +964,10 @@ export class ListingsService {
 
     const hasListing = Object.keys(listingPatch).length > 0;
     const hasHouse = Object.keys(housePatch).length > 0;
-    if (!hasListing && !hasHouse) {
+    if (!hasListing && !hasHouse && !sellerUpdate.touched) {
       throw new BadRequestException('Укажите хотя бы одно поле для обновления');
     }
+    if (!hasListing && !hasHouse && sellerUpdate.touched) return this.findOne(id);
 
     return this.prisma.listing.update({
       where: { id },
@@ -853,6 +979,7 @@ export class ListingsService {
         house: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -894,6 +1021,8 @@ export class ListingsService {
         listingPatch.block = { connect: { id: dto.blockId } };
       }
     }
+    const sellerUpdate = await this.resolveSellerListingUpdate(id, dto, actorUserId, actorRole);
+    Object.assign(listingPatch, sellerUpdate.patch);
 
     const landPatch: Prisma.ListingLandUpdateInput = {};
     if (dto.land) {
@@ -915,9 +1044,10 @@ export class ListingsService {
 
     const hasListing = Object.keys(listingPatch).length > 0;
     const hasLand = Object.keys(landPatch).length > 0;
-    if (!hasListing && !hasLand) {
+    if (!hasListing && !hasLand && !sellerUpdate.touched) {
       throw new BadRequestException('Укажите хотя бы одно поле для обновления');
     }
+    if (!hasListing && !hasLand && sellerUpdate.touched) return this.findOne(id);
 
     return this.prisma.listing.update({
       where: { id },
@@ -929,6 +1059,7 @@ export class ListingsService {
         land: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -967,6 +1098,8 @@ export class ListingsService {
         listingPatch.block = { connect: { id: dto.blockId } };
       }
     }
+    const sellerUpdate = await this.resolveSellerListingUpdate(id, dto, actorUserId, actorRole);
+    Object.assign(listingPatch, sellerUpdate.patch);
 
     const commercialPatch: Prisma.ListingCommercialUpdateInput = {};
     if (dto.commercial) {
@@ -983,9 +1116,10 @@ export class ListingsService {
 
     const hasListing = Object.keys(listingPatch).length > 0;
     const hasCommercial = Object.keys(commercialPatch).length > 0;
-    if (!hasListing && !hasCommercial) {
+    if (!hasListing && !hasCommercial && !sellerUpdate.touched) {
       throw new BadRequestException('Укажите хотя бы одно поле для обновления');
     }
+    if (!hasListing && !hasCommercial && sellerUpdate.touched) return this.findOne(id);
 
     return this.prisma.listing.update({
       where: { id },
@@ -997,6 +1131,7 @@ export class ListingsService {
         commercial: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
@@ -1035,6 +1170,8 @@ export class ListingsService {
         listingPatch.block = { connect: { id: dto.blockId } };
       }
     }
+    const sellerUpdate = await this.resolveSellerListingUpdate(id, dto, actorUserId, actorRole);
+    Object.assign(listingPatch, sellerUpdate.patch);
 
     const parkingPatch: Prisma.ListingParkingUpdateInput = {};
     if (dto.parking) {
@@ -1049,9 +1186,10 @@ export class ListingsService {
 
     const hasListing = Object.keys(listingPatch).length > 0;
     const hasParking = Object.keys(parkingPatch).length > 0;
-    if (!hasListing && !hasParking) {
+    if (!hasListing && !hasParking && !sellerUpdate.touched) {
       throw new BadRequestException('Укажите хотя бы одно поле для обновления');
     }
+    if (!hasListing && !hasParking && sellerUpdate.touched) return this.findOne(id);
 
     return this.prisma.listing.update({
       where: { id },
@@ -1063,6 +1201,7 @@ export class ListingsService {
         parking: true,
         block: { select: { id: true, name: true, slug: true } },
         region: { select: { id: true, code: true, name: true } },
+        seller: true,
       },
     });
   }
