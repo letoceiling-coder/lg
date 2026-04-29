@@ -24,7 +24,7 @@ const navItems = [
   { to: '/admin/homepage', icon: LayoutTemplate, label: 'Главная: блоки API', roles: ['admin', 'editor'] },
   { to: '/admin/news', icon: Newspaper, label: 'Новости', roles: ['admin', 'editor'] },
   { to: '/admin/media', icon: Image, label: 'Медиа', roles: ['admin', 'editor'] },
-  { to: '/admin/users', icon: Users, label: 'Пользователи', roles: ['admin'] },
+  { to: '/admin/users', icon: Users, label: 'Пользователи и роли', roles: ['admin'] },
   { to: '/admin/tokens', icon: Palette, label: 'Токены', roles: ['admin'] },
   { to: '/admin/docs', icon: BookOpen, label: 'Документация' },
   { to: '/admin/settings', icon: Settings, label: 'Настройки', roles: ['admin', 'editor'] },

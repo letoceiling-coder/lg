@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Loader2, Pencil, Shield, ShieldAlert, ShieldCheck, UserPlus } from 'lucide-react';
+import { CheckCircle2, Eye, Loader2, Pencil, Shield, ShieldAlert, ShieldCheck, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ApiError, apiGet, apiPost, apiPut } from '@/lib/api';
@@ -33,6 +33,34 @@ const roleConfig: Record<string, { label: string; icon: typeof Shield; color: st
 const defaultCfg = { label: 'Пользователь', icon: Eye, color: 'bg-gray-100 text-gray-600' };
 
 const ROLE_OPTIONS: UserRole[] = ['admin', 'editor', 'manager', 'agent', 'client'];
+
+const roleDescriptions: Record<UserRole, string> = {
+  admin: 'Полный доступ: пользователи, роли, настройки, контент, объекты и заявки.',
+  editor: 'Контент и каталог: страницы, ЖК, справочники, новости, медиа, импорт.',
+  manager: 'CRM-доступ: дашборд, заявки и просмотр объявлений.',
+  agent: 'Работа с объектами: объявления и ручное добавление объектов.',
+  client: 'Клиентский аккаунт без доступа к административным разделам.',
+};
+
+const permissionRows = [
+  { key: 'dashboard', label: 'Дашборд', roles: ['admin', 'editor', 'manager'] },
+  { key: 'content', label: 'Страницы и главная', roles: ['admin', 'editor'] },
+  { key: 'requests', label: 'Заявки CRM', roles: ['admin', 'editor', 'manager'] },
+  { key: 'telegram', label: 'Telegram уведомления команды', roles: ['admin'] },
+  { key: 'audit', label: 'Журнал действий', roles: ['admin'] },
+  { key: 'catalog', label: 'ЖК, корпуса, застройщики', roles: ['admin', 'editor'] },
+  { key: 'listings', label: 'Объявления', roles: ['admin', 'editor', 'manager', 'agent'] },
+  { key: 'manual-listings', label: 'Создание и редактирование объектов', roles: ['admin', 'editor', 'agent'] },
+  { key: 'feed', label: 'Импорт фидов', roles: ['admin', 'editor'] },
+  { key: 'reference', label: 'Справочники и регионы', roles: ['admin', 'editor'] },
+  { key: 'news-media', label: 'Новости и медиа', roles: ['admin', 'editor'] },
+  { key: 'users', label: 'Пользователи, роли и права', roles: ['admin'] },
+  { key: 'settings', label: 'Настройки', roles: ['admin', 'editor'] },
+] satisfies Array<{ key: string; label: string; roles: UserRole[] }>;
+
+function roleLabel(role: UserRole | string): string {
+  return roleConfig[role]?.label ?? role;
+}
 
 type UserForm = {
   fullName: string;
@@ -218,9 +246,14 @@ export default function AdminUsers() {
     unlinkTelegramMutation.isPending;
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Пользователи</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Пользователи, роли и права</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Роль пользователя определяет доступ к разделам административной панели.
+          </p>
+        </div>
         <button
           className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
           onClick={() => setShowCreateForm((v) => !v)}
@@ -241,6 +274,71 @@ export default function AdminUsers() {
         </Link>
       </div>
 
+      <section className="border rounded-2xl p-4 mb-4 bg-background">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">Роли и права доступа</h2>
+            <p className="text-sm text-muted-foreground">
+              Права закреплены за ролью. Чтобы изменить доступ пользователя, поменяйте его роль в списке ниже.
+            </p>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-medium">
+            RBAC включен
+          </span>
+        </div>
+
+        <div className="grid md:grid-cols-5 gap-3 mb-5">
+          {ROLE_OPTIONS.map((role) => {
+            const cfg = roleConfig[role] ?? defaultCfg;
+            return (
+              <div key={role} className="rounded-xl border p-3 bg-muted/10">
+                <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg ${cfg.color}`}>
+                  <cfg.icon className="w-3 h-3" />
+                  {cfg.label}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                  {roleDescriptions[role]}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr>
+                <th className="text-left font-medium p-3 min-w-[240px]">Право / раздел</th>
+                {ROLE_OPTIONS.map((role) => (
+                  <th key={role} className="text-center font-medium p-3 min-w-[110px]">
+                    {roleLabel(role)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {permissionRows.map((row) => (
+                <tr key={row.key}>
+                  <td className="p-3 text-muted-foreground">{row.label}</td>
+                  {ROLE_OPTIONS.map((role) => {
+                    const allowed = row.roles.includes(role);
+                    return (
+                      <td key={role} className="p-3 text-center">
+                        {allowed ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto" aria-label="Доступ есть" />
+                        ) : (
+                          <span className="text-muted-foreground/40">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {showCreateForm && (
         <form onSubmit={submitCreate} className="border rounded-2xl p-4 mb-4 bg-background space-y-3">
           <p className="font-medium">Новый пользователь</p>
@@ -253,7 +351,7 @@ export default function AdminUsers() {
               value={createForm.phone} onChange={(e) => setCreateField('phone', e.target.value)} />
             <select className="border rounded-xl px-3 py-2 text-sm"
               value={createForm.role} onChange={(e) => setCreateField('role', e.target.value as UserRole)}>
-              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
+              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
             </select>
             <input className="border rounded-xl px-3 py-2 text-sm md:col-span-2" placeholder="Пароль (мин. 6)"
               type="password" value={createForm.password} onChange={(e) => setCreateField('password', e.target.value)} />
@@ -284,7 +382,7 @@ export default function AdminUsers() {
               value={editForm.phone} onChange={(e) => setEditField('phone', e.target.value)} />
             <select className="border rounded-xl px-3 py-2 text-sm"
               value={editForm.role} onChange={(e) => setEditField('role', e.target.value as UserRole)}>
-              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
+              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
             </select>
           </div>
           <label className="text-sm inline-flex items-center gap-2">
@@ -337,9 +435,28 @@ export default function AdminUsers() {
                 {!u.isActive && (
                   <span className="text-xs px-2 py-1 rounded-lg bg-muted text-muted-foreground">Неактивен</span>
                 )}
-                <span className={`text-xs px-2.5 py-1 rounded-lg ${cfg.color} inline-flex items-center gap-1`}>
-                  <cfg.icon className="w-3 h-3" /> {cfg.label}
-                </span>
+                <div className="flex flex-col gap-1">
+                  <span className={`text-xs px-2.5 py-1 rounded-lg ${cfg.color} inline-flex items-center gap-1 justify-center`}>
+                    <cfg.icon className="w-3 h-3" /> {cfg.label}
+                  </span>
+                  <select
+                    className="border rounded-lg px-2 py-1 text-xs bg-background"
+                    value={(ROLE_OPTIONS.includes(u.role as UserRole) ? u.role : 'client') as UserRole}
+                    disabled={isBusy}
+                    onChange={(e) => {
+                      const nextRole = e.target.value as UserRole;
+                      updateMutation.mutate({
+                        id: u.id,
+                        payload: { role: nextRole },
+                      });
+                    }}
+                    aria-label={`Изменить роль пользователя ${u.fullName || u.email || u.id}`}
+                  >
+                    {ROLE_OPTIONS.map((role) => (
+                      <option key={role} value={role}>{roleLabel(role)}</option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   type="button"
                   className="text-xs px-2.5 py-1 rounded-lg border inline-flex items-center gap-1"
