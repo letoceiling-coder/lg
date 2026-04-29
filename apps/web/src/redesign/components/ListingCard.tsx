@@ -8,6 +8,10 @@ const PLACEHOLDER = '/placeholder.svg';
 export type ApiListingCardRow = {
   id: number;
   kind: string;
+  lat?: string | number | null;
+  lng?: string | number | null;
+  title?: string | null;
+  address?: string | null;
   price: string | number | null;
   status: string;
   block?: { name: string; slug: string } | null;
@@ -166,6 +170,7 @@ const ListingCard = ({ listing, variant = 'grid' }: Props) => {
       >
         <img
           src={img}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER; }}
           alt=""
           loading="lazy"
           className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-200"

@@ -47,6 +47,9 @@ const SECTIONS = [
   { code: 'pomescheniya', kind: 'COMMERCIAL' },
 ];
 
+const UPDATE_MODE = process.argv.includes('--update');
+const FORCE_REFRESH = process.argv.includes('--force-refresh');
+
 const HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (compatible; LiveGrid-Importer/1.0; +https://livegrid.ru)',
@@ -76,6 +79,29 @@ function stripTags(html) {
   return decodeEntities(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')).trim();
 }
 
+function detectCharset(buf, contentTypeHeader) {
+  // 1) Try Content-Type header
+  if (contentTypeHeader) {
+    const m = /charset=([\w-]+)/i.exec(contentTypeHeader);
+    if (m) return m[1].toLowerCase();
+  }
+  // 2) Sniff <meta charset=...> from the first 2 KB (ASCII-safe slice).
+  const head = buf.subarray(0, Math.min(buf.length, 2048)).toString('ascii');
+  const m1 = /<meta[^>]+charset\s*=\s*["']?([\w-]+)/i.exec(head);
+  if (m1) return m1[1].toLowerCase();
+  return 'utf-8';
+}
+
+function decodeHtml(buf, contentTypeHeader) {
+  const charset = detectCharset(buf, contentTypeHeader);
+  // Node's TextDecoder supports windows-1251, koi8-r, utf-8, etc. (whatwg encodings).
+  try {
+    return new TextDecoder(charset, { fatal: false }).decode(buf);
+  } catch {
+    return new TextDecoder('utf-8', { fatal: false }).decode(buf);
+  }
+}
+
 async function fetchHtml(url, attempt = 0) {
   try {
     const ctrl = new AbortController();
@@ -86,7 +112,12 @@ async function fetchHtml(url, attempt = 0) {
       if (res.status === 404) return null;
       throw new Error(`HTTP ${res.status}`);
     }
-    return await res.text();
+    // Read raw bytes and decode using the page's declared charset
+    // (donor avangard31.ru uses windows-1251 without a Content-Type charset).
+    const ab = await res.arrayBuffer();
+    const buf = Buffer.from(ab);
+    const ct = res.headers.get('content-type') ?? '';
+    return decodeHtml(buf, ct);
   } catch (e) {
     if (attempt < 2) {
       await sleep(800 * (attempt + 1));
@@ -282,9 +313,9 @@ async function alreadyImported(regionId, donorId) {
   const externalId = `donor:${donorId}`;
   const row = await prisma.listing.findUnique({
     where: { regionId_externalId: { regionId, externalId } },
-    select: { id: true },
+    select: { id: true, title: true, description: true, address: true, sourceUrl: true },
   });
-  return row?.id ?? null;
+  return row ?? null;
 }
 
 async function downloadPhotos(detail, folderId) {
@@ -328,6 +359,10 @@ async function createListing(detail, region, kind, photos) {
     status: 'ACTIVE',
     dataSource: 'MANUAL',
     isPublished: true,
+    title: detail.title ?? null,
+    address: detail.address ?? null,
+    description: detail.description ?? null,
+    sourceUrl,
   };
 
   let createInput = { data: baseListingData };
@@ -458,11 +493,51 @@ async function processSection(section, region, folder, stats) {
   }
 
   for (const donorId of queue) {
-    const exists = await alreadyImported(region.id, donorId);
-    if (exists) {
-      stats.skipped++;
+    const existing = await alreadyImported(region.id, donorId);
+
+    // In update mode: refresh title/address/description/sourceUrl from the donor
+    // page for previously imported listings, without re-downloading photos.
+    if (existing) {
+      if (!UPDATE_MODE && !FORCE_REFRESH) {
+        stats.skipped++;
+        continue;
+      }
+      const hasContent = !!(existing.title && existing.description);
+      if (UPDATE_MODE && hasContent && !FORCE_REFRESH) {
+        stats.skipped++;
+        continue;
+      }
+      const detailHtml = await fetchHtml(`${DONOR_BASE}/object.php?number=${donorId}`);
+      if (!detailHtml) {
+        console.warn(`  [skip-update] cannot fetch donor #${donorId}`);
+        stats.failed++;
+        continue;
+      }
+      const detail = parseDetail(detailHtml, donorId);
+      if (!detail) {
+        stats.failed++;
+        continue;
+      }
+      try {
+        await prisma.listing.update({
+          where: { id: existing.id },
+          data: {
+            title: detail.title ?? null,
+            address: detail.address ?? null,
+            description: detail.description ?? null,
+            sourceUrl: `${DONOR_BASE}/object.php?number=${donorId}`,
+          },
+        });
+        stats.updated++;
+        console.log(`  ~ #${donorId} → listing ${existing.id} content updated`);
+      } catch (e) {
+        console.error(`  ! donor #${donorId} update failed: ${e.message}`);
+        stats.failed++;
+      }
+      await sleep(REQUEST_DELAY_MS);
       continue;
     }
+
     const detailHtml = await fetchHtml(`${DONOR_BASE}/object.php?number=${donorId}`);
     if (!detailHtml) {
       console.warn(`  [skip] cannot fetch donor #${donorId}`);
@@ -498,13 +573,17 @@ async function main() {
   const folder = await ensureFolder();
   console.log(`Region #${region.id} (${region.code}), folder #${folder.id} (${folder.name})`);
 
-  const stats = { created: 0, skipped: 0, failed: 0 };
+  const stats = { created: 0, updated: 0, skipped: 0, failed: 0 };
+  if (UPDATE_MODE) console.log('Mode: UPDATE (refresh title/address/description for existing listings)');
+  if (FORCE_REFRESH) console.log('Mode: FORCE_REFRESH (re-fetch even if content already present)');
   for (const section of SECTIONS) {
     console.log(`\n=== Section ${section.code} → ${section.kind} ===`);
     await processSection(section, region, folder, stats);
   }
 
-  console.log(`\n=== Done. Created ${stats.created}, skipped ${stats.skipped}, failed ${stats.failed} ===`);
+  console.log(
+    `\n=== Done. Created ${stats.created}, updated ${stats.updated}, skipped ${stats.skipped}, failed ${stats.failed} ===`,
+  );
   await prisma.$disconnect();
 }
 

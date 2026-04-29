@@ -190,49 +190,49 @@ const RedesignApartment = () => {
             <span>/</span>
             <span className="text-foreground font-medium">{roomLabel}, {apt.area} м²</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              disabled={listingId == null}
-              title={listingId == null ? 'Избранное для объявлений из каталога' : undefined}
-              onClick={handleListingFavorite}
-            >
-              <Heart
-                className={cn(
-                  'w-4 h-4',
-                  listingLiked ? 'fill-destructive text-destructive' : 'text-muted-foreground',
-                )}
-              />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              title={inCompare ? 'Убрать ЖК из сравнения' : 'Добавить ЖК в сравнение'}
-              onClick={handleCompare}
-            >
-              <GitCompare className={cn('w-4 h-4', inCompare ? 'text-primary' : 'text-muted-foreground')} />
-            </Button>
-            <Button variant="ghost" size="sm" className="h-8 w-8 px-2" title="Презентация ЖК" asChild>
-              <Link to={`/presentation/${complex.slug}`}>
-                <FileText className="w-4 h-4" />
-              </Link>
-            </Button>
-            <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Поделиться" onClick={handleShare}>
-              <Share2 className="w-4 h-4" />
-            </Button>
-          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Plan & description */}
           <div className="lg:col-span-3 space-y-4">
             <div className="rounded-2xl border border-border bg-card overflow-hidden">
-              <div className="aspect-[4/3] bg-muted/50 flex items-center justify-center p-12">
+              <div className="relative aspect-[4/3] bg-muted/50 flex items-center justify-center p-12">
+                <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-xl border border-border/70 bg-background/90 backdrop-blur-sm px-2 py-1 shadow-sm">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    disabled={listingId == null}
+                    title={listingId == null ? 'Избранное для объявлений из каталога' : undefined}
+                    onClick={handleListingFavorite}
+                  >
+                    <Heart
+                      className={cn(
+                        'w-4 h-4',
+                        listingLiked ? 'fill-destructive text-destructive' : 'text-muted-foreground',
+                      )}
+                    />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    title={inCompare ? 'Убрать ЖК из сравнения' : 'Добавить ЖК в сравнение'}
+                    onClick={handleCompare}
+                  >
+                    <GitCompare className={cn('w-4 h-4', inCompare ? 'text-primary' : 'text-muted-foreground')} />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 px-2" title="Презентация ЖК" asChild>
+                    <Link to={`/presentation/${complex.slug}`}>
+                      <FileText className="w-4 h-4" />
+                    </Link>
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Поделиться" onClick={handleShare}>
+                    <Share2 className="w-4 h-4" />
+                  </Button>
+                </div>
                 <img src={apt.planImage} alt="Планировка" className="max-w-full max-h-full object-contain" />
               </div>
             </div>

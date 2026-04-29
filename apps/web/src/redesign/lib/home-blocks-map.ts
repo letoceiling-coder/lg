@@ -38,11 +38,24 @@ export function formatSalesStartLabel(iso: string | Date | null | undefined): st
 
 export function mapApiBlockToHomeHotCard(b: ApiBlockListRow, badge: string): PropertyData {
   const bdg = badge.trim();
+  const metroNotes = (b.subways ?? [])
+    .filter((x) => Boolean(x?.subway?.name))
+    .slice(0, 2)
+    .map((x) => ({
+      name: x.subway.name,
+      time: x.distanceTime ?? null,
+      by: x.distanceType === 1 ? 'walk' : 'transport',
+    }));
   return {
     image: blockMainImage(b),
     title: b.name,
     price: formatListingPriceMinRub(b.listingPriceMin ?? null),
     address: blockAddressLine(b),
+    district: b.district?.name ?? undefined,
+    developer: b.builder?.name ?? undefined,
+    deadline: formatSalesStartLabel(b.salesStartDate ?? null) || undefined,
+    listingCount: b._count?.listings ?? 0,
+    metroNotes,
     slug: b.slug,
     badges: bdg ? [bdg] : [],
   };
@@ -63,5 +76,13 @@ export function mapApiBlockToHomeStartCard(b: ApiBlockListRow, badge: string): S
     apartments: [],
     listingCount: b._count?.listings ?? 0,
     salesStartLabel: label || undefined,
+    metroNotes: (b.subways ?? [])
+      .filter((x) => Boolean(x?.subway?.name))
+      .slice(0, 3)
+      .map((x) => ({
+        name: x.subway.name,
+        time: x.distanceTime ?? null,
+        by: x.distanceType === 1 ? 'walk' : 'transport',
+      })),
   };
 }

@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { MapPin, Building2, CalendarDays, Shield, ChevronLeft, ChevronRight, Phone, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import LeadForm from '@/shared/components/LeadForm';
 import { cn } from '@/lib/utils';
 import type { ResidentialComplex } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
 
-const ComplexHero = ({ complex }: { complex: ResidentialComplex }) => {
+const ComplexHero = ({ complex, blockId }: { complex: ResidentialComplex; blockId?: number }) => {
   const totalApts = complex.buildings.reduce((s, b) => s + b.apartments.filter(a => a.status === 'available').length, 0);
   const [imgIdx, setImgIdx] = useState(0);
+  const [openViewingForm, setOpenViewingForm] = useState(false);
 
   return (
     <div className="rounded-2xl overflow-hidden border border-border bg-card">
@@ -93,9 +96,27 @@ const ComplexHero = ({ complex }: { complex: ResidentialComplex }) => {
 
         <div className="flex flex-col sm:flex-row gap-3">
           <Button className="h-11 px-6"><Phone className="w-4 h-4 mr-2" /> Позвонить</Button>
-          <Button variant="outline" className="h-11 px-6"><MessageCircle className="w-4 h-4 mr-2" /> Записаться на просмотр</Button>
+          <Button variant="outline" className="h-11 px-6" onClick={() => setOpenViewingForm(true)}>
+            <MessageCircle className="w-4 h-4 mr-2" /> Записаться на просмотр
+          </Button>
         </div>
       </div>
+
+      <Dialog open={openViewingForm} onOpenChange={setOpenViewingForm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Записаться на просмотр</DialogTitle>
+          </DialogHeader>
+          <LeadForm
+            embedded
+            title=""
+            requestType="CONSULTATION"
+            source={`viewing:${complex.slug}`}
+            blockId={blockId}
+            contextFooter={`Запрос с карточки ЖК «${complex.name}»`}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

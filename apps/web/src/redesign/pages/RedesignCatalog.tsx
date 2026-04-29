@@ -12,7 +12,8 @@ import ComplexCard from '@/redesign/components/ComplexCard';
 import ListingCard, { type ApiListingCardRow } from '@/redesign/components/ListingCard';
 import FilterSidebar from '@/redesign/components/FilterSidebar';
 import MapSearch from '@/redesign/components/MapSearch';
-import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
+import ListingsMapSearch, { type ListingMapItem } from '@/redesign/components/ListingsMapSearch';
+import { useDefaultRegionId, type RegionRow } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
 import { defaultFilters, type CatalogFilters, type ObjectType, type MarketType } from '@/redesign/data/types';
 
@@ -42,6 +43,21 @@ const CATALOG_SORT_VALUES = [
   'sales_start_asc',
 ] as const;
 type CatalogSort = (typeof CATALOG_SORT_VALUES)[number];
+
+function normalizeCitySlug(raw: string | null): string {
+  return (raw ?? '').trim().toLowerCase();
+}
+
+function resolveRegionIdByCityParam(rows: RegionRow[] | undefined, cityRaw: string | null): number | null {
+  if (!rows?.length) return null;
+  const city = normalizeCitySlug(cityRaw);
+  if (!city) return null;
+  const byCode = rows.find((r) => (r.code ?? '').trim().toLowerCase() === city);
+  if (byCode) return byCode.id;
+  const byName = rows.find((r) => (r.name ?? '').trim().toLowerCase() === city);
+  if (byName) return byName.id;
+  return null;
+}
 
 function parseCatalogSort(raw: string | null): CatalogSort {
   if (raw && (CATALOG_SORT_VALUES as readonly string[]).includes(raw)) {
@@ -73,17 +89,31 @@ const RedesignCatalog = () => {
   const [filters, setFilters] = useState<CatalogFilters>(initialFilters);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [mapActive, setMapActive] = useState<string | null>(null);
-  const { data: defaultRegionId, setStoredRegionId } = useDefaultRegionId();
+  const [mapActiveListing, setMapActiveListing] = useState<number | null>(null);
+  const { data: defaultRegionId, rows: regionRows, setStoredRegionId } = useDefaultRegionId();
   const urlRegionIdRaw = searchParams.get('region_id');
   const urlRegionId = urlRegionIdRaw ? parseInt(urlRegionIdRaw, 10) : NaN;
+  const cityParam = searchParams.get('city');
+  const cityRegionId = useMemo(
+    () => resolveRegionIdByCityParam(regionRows, cityParam),
+    [regionRows, cityParam],
+  );
   const regionId =
-    Number.isFinite(urlRegionId) && urlRegionId > 0 ? urlRegionId : defaultRegionId;
+    Number.isFinite(urlRegionId) && urlRegionId > 0
+      ? urlRegionId
+      : (cityRegionId ?? defaultRegionId);
 
   useEffect(() => {
     if (Number.isFinite(urlRegionId) && urlRegionId > 0) {
-      setStoredRegionId(urlRegionId);
+      if (defaultRegionId !== urlRegionId) {
+        setStoredRegionId(urlRegionId);
+      }
+      return;
     }
-  }, [urlRegionId, setStoredRegionId]);
+    if (cityRegionId != null && cityRegionId !== defaultRegionId) {
+      setStoredRegionId(cityRegionId);
+    }
+  }, [urlRegionId, cityRegionId, defaultRegionId, setStoredRegionId]);
 
   const geoPreset = searchParams.get('geo_preset') ?? undefined;
   const geoPolygon = searchParams.get('geo_polygon') ?? undefined;
@@ -106,7 +136,7 @@ const RedesignCatalog = () => {
 
   const statusMap: Record<string, string> = { building: 'BUILDING', completed: 'COMPLETED', planned: 'PROJECT' };
   const isApartmentMode = filters.objectType === 'apartments';
-  const listingKind = !isApartmentMode ? OBJECT_TYPE_KIND[filters.objectType] : null;
+  const listingKind = !isApartmentMode ? OBJECT_TYPE_KIND[filters.objectType] : 'APARTMENT';
   const pageTitle = OBJECT_TYPE_TITLE[filters.objectType] ?? OBJECT_TYPE_TITLE.apartments;
 
   const listingsInfinite = useInfiniteQuery({
@@ -119,6 +149,12 @@ const RedesignCatalog = () => {
       deferredSearch,
       filters.priceMin,
       filters.priceMax,
+      filters.rooms,
+      filters.areaMin,
+      filters.areaMax,
+      filters.floorMin,
+      filters.floorMax,
+      filters.district,
     ],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
@@ -132,6 +168,12 @@ const RedesignCatalog = () => {
       if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
       if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
       if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
+      if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
+      if (filters.areaMin) sp.set('area_total_min', String(filters.areaMin));
+      if (filters.areaMax) sp.set('area_total_max', String(filters.areaMax));
+      if (filters.floorMin) sp.set('floor_min', String(filters.floorMin));
+      if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
+      if (filters.district.length) sp.set('district_names', filters.district.join(','));
       return apiGet<{
         data: ApiListingCardRow[];
         meta: { page: number; per_page: number; total: number; total_pages: number };
@@ -142,7 +184,27 @@ const RedesignCatalog = () => {
       if (page >= totalPages) return undefined;
       return page + 1;
     },
-    enabled: !isApartmentMode && regionId != null,
+    enabled: regionId != null,
+  });
+
+  // Flat (non-paginated) query for map view showing individual listings
+  const listingsMapQuery = useQuery({
+    queryKey: ['listings', 'catalog', 'map', regionId, listingKind, filters.priceMin, filters.priceMax, filters.district],
+    queryFn: async () => {
+      const sp = new URLSearchParams();
+      if (regionId != null) sp.set('region_id', String(regionId));
+      if (listingKind) sp.set('kind', listingKind);
+      sp.set('statuses', 'ACTIVE,RESERVED');
+      sp.set('is_published', 'true');
+      sp.set('page', '1');
+      sp.set('per_page', '200');
+      if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
+      if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
+      if (filters.district.length) sp.set('district_names', filters.district.join(','));
+      return apiGet<{ data: ApiListingCardRow[] }>(`/listings?${sp}`);
+    },
+    enabled: regionId != null && view === 'map',
+    staleTime: 2 * 60 * 1000,
   });
 
   const blocksInfinite = useInfiniteQuery({
@@ -160,6 +222,7 @@ const RedesignCatalog = () => {
       filters.district,
       filters.subway,
       filters.builder,
+      filters.rooms,
     ],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
@@ -178,6 +241,7 @@ const RedesignCatalog = () => {
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
       if (filters.subway.length) sp.set('subway_names', filters.subway.join(','));
       if (filters.builder.length) sp.set('builder_names', filters.builder.join(','));
+      if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
       if (geoPreset) sp.set('geo_preset', geoPreset);
       if (geoPolygon) sp.set('geo_polygon', geoPolygon);
       if (geoLat && geoLng && geoRadius) {
@@ -198,9 +262,11 @@ const RedesignCatalog = () => {
     enabled: isApartmentMode && regionId != null,
   });
 
+  // Pass listing kind to districts query so only relevant districts are shown
+  const districtKind = listingKind ?? 'APARTMENT';
   const districtsQuery = useQuery({
-    queryKey: ['districts', regionId],
-    queryFn: () => apiGet<{ name: string }[]>(`/districts?region_id=${regionId}`),
+    queryKey: ['districts', regionId, districtKind],
+    queryFn: () => apiGet<{ name: string }[]>(`/districts?region_id=${regionId}&kind=${districtKind}`),
     enabled: regionId != null,
     select: (r) => r.map((x) => x.name),
   });
@@ -237,6 +303,13 @@ const RedesignCatalog = () => {
     queryFn: () => apiGet<{ name: string }[]>(`/builders?region_id=${regionId}`),
     enabled: regionId != null,
     select: (r) => r.map((x) => x.name),
+  });
+
+  const deadlinesQuery = useQuery({
+    queryKey: ['blocks', 'deadlines', regionId],
+    queryFn: () => apiGet<string[]>(`/blocks/deadlines?region_id=${regionId ?? 1}`),
+    enabled: Boolean(regionId),
+    staleTime: 5 * 60 * 1000,
   });
 
   const rows = useMemo(
@@ -284,18 +357,33 @@ const RedesignCatalog = () => {
     [setSearchParams],
   );
 
-  const totalRemote = isApartmentMode
-    ? blocksInfinite.data?.pages[0]?.meta.total
-    : listingsInfinite.data?.pages[0]?.meta.total;
+  const blocksTotal = blocksInfinite.data?.pages[0]?.meta.total ?? 0;
+  const listingsTotal = listingsInfinite.data?.pages[0]?.meta.total ?? 0;
+  // Если выбран режим «Квартиры», но в регионе нет ЖК — показываем standalone APARTMENT-объявления.
+  const apartmentsAsListings = isApartmentMode && blocksInfinite.isFetched && blocksTotal === 0 && listingsTotal > 0;
+  const showBlocks = isApartmentMode && !apartmentsAsListings;
+
+  const totalRemote = showBlocks ? blocksTotal : listingsTotal;
+
+  function getListingCardPhoto(l: ApiListingCardRow): string | null {
+    const extras = l.apartment?.extraPhotoUrls;
+    if (Array.isArray(extras) && extras.length) return extras[0] as string;
+    if (l.house?.photoUrl) return l.house.photoUrl;
+    const hExtras = l.house?.extraPhotoUrls;
+    if (Array.isArray(hExtras) && hExtras.length) return hExtras[0] as string;
+    if (l.land?.photoUrl) return l.land.photoUrl;
+    if (l.commercial) return null;
+    return null;
+  }
   const loading = regionLoading
-    || (isApartmentMode && regionId != null && blocksInfinite.isPending && !blocksInfinite.data)
-    || (!isApartmentMode && regionId != null && listingsInfinite.isPending && !listingsInfinite.data);
-  const loadError = isApartmentMode ? blocksInfinite.isError : listingsInfinite.isError;
-  const hasMore = isApartmentMode ? Boolean(blocksInfinite.hasNextPage) : Boolean(listingsInfinite.hasNextPage);
-  const fetchingMore = isApartmentMode ? blocksInfinite.isFetchingNextPage : listingsInfinite.isFetchingNextPage;
-  const totalShown = isApartmentMode ? filtered.length : listingRows.length;
+    || (showBlocks && blocksInfinite.isPending && !blocksInfinite.data)
+    || (!showBlocks && listingsInfinite.isPending && !listingsInfinite.data);
+  const loadError = showBlocks ? blocksInfinite.isError : listingsInfinite.isError;
+  const hasMore = showBlocks ? Boolean(blocksInfinite.hasNextPage) : Boolean(listingsInfinite.hasNextPage);
+  const fetchingMore = showBlocks ? blocksInfinite.isFetchingNextPage : listingsInfinite.isFetchingNextPage;
+  const totalShown = showBlocks ? filtered.length : listingRows.length;
   const fetchNext = () => {
-    if (isApartmentMode) void blocksInfinite.fetchNextPage();
+    if (showBlocks) void blocksInfinite.fetchNextPage();
     else void listingsInfinite.fetchNextPage();
   };
 
@@ -391,7 +479,27 @@ const RedesignCatalog = () => {
               <button
                 key={x.type}
                 type="button"
-                onClick={() => handleFiltersChange({ ...filters, objectType: x.type })}
+                onClick={() => {
+                  if (x.type === filters.objectType) return;
+                  handleFiltersChange({
+                    objectType: x.type,
+                    marketType: 'all',
+                    search: filters.search,
+                    priceMin: filters.priceMin,
+                    priceMax: filters.priceMax,
+                    rooms: [],
+                    areaMin: undefined,
+                    areaMax: undefined,
+                    floorMin: undefined,
+                    floorMax: undefined,
+                    deadline: [],
+                    finishing: [],
+                    status: [],
+                    subway: [],
+                    builder: [],
+                    district: [],
+                  });
+                }}
                 className={cn(
                   'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors',
                   filters.objectType === x.type
@@ -416,6 +524,9 @@ const RedesignCatalog = () => {
                 districtOptions={districtsQuery.data}
                 subwayOptions={subwaysQuery.data}
                 builderOptions={buildersQuery.data}
+                deadlineOptions={deadlinesQuery.data}
+                objectTypeOptions={availableKindLinks.length > 0 ? availableKindLinks.map(x => x.type) : undefined}
+                hasBlocks={showBlocks}
               />
             </div>
           </aside>
@@ -424,30 +535,70 @@ const RedesignCatalog = () => {
             {loadError && (
               <p className="text-sm text-destructive mb-4">Не удалось загрузить каталог. Проверьте API и прокси /api.</p>
             )}
+            {apartmentsAsListings && (
+              <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <span className="mt-0.5">ℹ️</span>
+                <span>
+                  В этом регионе пока нет жилых комплексов. Показываем отдельные квартиры от собственников и агентств.
+                </span>
+              </div>
+            )}
             {view === 'grid' && (
               <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {isApartmentMode
+                {showBlocks
                   ? filtered.map((c) => <ComplexCard key={c.id} complex={c} />)
                   : listingRows.map((l) => <ListingCard key={l.id} listing={l} />)}
               </div>
             )}
             {view === 'list' && (
               <div className="space-y-3">
-                {isApartmentMode
+                {showBlocks
                   ? filtered.map((c) => <ComplexCard key={c.id} complex={c} variant="list" />)
                   : listingRows.map((l) => <ListingCard key={l.id} listing={l} variant="list" />)}
               </div>
             )}
-            {view === 'map' && isApartmentMode && (
+            {view === 'map' && showBlocks && (
               <div className="h-[calc(100vh-220px)] min-h-[400px]">
                 <MapSearch complexes={filtered} activeSlug={mapActive} onSelect={setMapActive} compact />
               </div>
             )}
-            {view === 'map' && !isApartmentMode && (
-              <div className="h-[calc(100vh-220px)] min-h-[400px] flex items-center justify-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
-                Карта пока доступна только для жилых комплексов
-              </div>
-            )}
+            {view === 'map' && !showBlocks && (() => {
+              const mapData = listingsMapQuery.data?.data ?? listingRows;
+              const mapItems: ListingMapItem[] = mapData
+                .filter((l) => l.lat != null && l.lng != null)
+                .map((l) => ({
+                  id: l.id,
+                  lat: l.lat!,
+                  lng: l.lng!,
+                  price: l.price,
+                  title: l.title ?? null,
+                  kind: l.kind,
+                  address: l.address ?? null,
+                  photoUrl: getListingCardPhoto(l),
+                }));
+              if (mapItems.length === 0) {
+                return (
+                  <div className="h-[calc(100vh-220px)] min-h-[400px] flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground border border-dashed border-border rounded-xl p-6 text-center">
+                    <span className="text-2xl">🗺️</span>
+                    <p className="font-medium text-foreground">Нет объектов с координатами для отображения на карте</p>
+                    <button onClick={() => setView('grid')} className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+                      Показать плиткой
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div className="h-[calc(100vh-220px)] min-h-[400px]">
+                  <ListingsMapSearch
+                    listings={mapItems}
+                    regionId={regionId}
+                    activeId={mapActiveListing}
+                    onSelect={setMapActiveListing}
+                    compact
+                  />
+                </div>
+              );
+            })()}
             {view !== 'map' && totalShown > 0 && (
               <div className="flex flex-col items-center gap-2 mt-8">
                 {hasMore ? (
@@ -512,6 +663,9 @@ const RedesignCatalog = () => {
               districtOptions={districtsQuery.data}
               subwayOptions={subwaysQuery.data}
               builderOptions={buildersQuery.data}
+              deadlineOptions={deadlinesQuery.data}
+              objectTypeOptions={availableKindLinks.length > 0 ? availableKindLinks.map(x => x.type) : undefined}
+              hasBlocks={showBlocks}
             />
           </div>
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-border">

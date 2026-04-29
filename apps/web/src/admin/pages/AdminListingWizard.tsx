@@ -102,6 +102,7 @@ function makeEmptyDraft(): DraftState {
     status: 'DRAFT',
     isPublished: false,
     apartment: {
+      blockAddress: '',
       areaTotal: '',
       areaKitchen: '',
       floor: '',
@@ -260,6 +261,7 @@ export default function AdminListingWizard() {
           if (draft.planUrl.trim()) apartment.planUrl = draft.planUrl.trim();
           if (draft.mainPhotoUrl.trim()) apartment.finishingPhotoUrl = draft.mainPhotoUrl.trim();
           if (draft.extraPhotoUrls.length) apartment.extraPhotoUrls = draft.extraPhotoUrls;
+          if (apt.blockAddress.trim()) apartment.blockAddress = apt.blockAddress.trim();
           if (apt.buildingName.trim()) apartment.buildingName = apt.buildingName.trim();
           if (apt.number.trim()) apartment.number = apt.number.trim();
           return apiPost('/admin/listings/manual-apartment', { ...common, apartment });
@@ -717,6 +719,10 @@ function CharacteristicsStep({
         set('apartment', { ...a, ...patch });
       return (
         <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1 col-span-2">
+            <Label>Адрес объекта</Label>
+            <Input value={a.blockAddress} onChange={(e) => upd({ blockAddress: e.target.value })} placeholder="г. Москва, ул. ..." />
+          </div>
           <div className="space-y-1 col-span-2">
             <Label>Площадь, м² *</Label>
             <Input value={a.areaTotal} onChange={(e) => upd({ areaTotal: e.target.value })} placeholder="54.2" />

@@ -16,6 +16,13 @@ export class ContentController {
   }
 
   @Public()
+  @Get('contacts')
+  @ApiOperation({ summary: 'Контакты агентства для Telegram бота' })
+  getContacts() {
+    return this.service.getBotContacts();
+  }
+
+  @Public()
   @Get('maps-config')
   @ApiOperation({ summary: 'Yandex Maps: публичный apiKey для загрузки JS API (из site_settings)' })
   getMapsConfig() {

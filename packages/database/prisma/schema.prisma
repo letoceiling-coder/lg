@@ -179,8 +179,28 @@ model User {
   approvedTelegramRecipients TelegramNotifyRecipient[] @relation("ApprovedTelegramRecipients")
   favorites          Favorite[]
   collections      UserCollection[]
+  telegramAuthCodes TelegramAuthCode[]
 
   @@map("users")
+}
+
+
+model TelegramAuthCode {
+  id        Int       @id @default(autoincrement())
+  userId    String    @map("user_id") @db.Uuid
+  code      String    @db.VarChar(6)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([code])
+  @@index([expiresAt])
+  @@index([usedAt])
+  @@map("telegram_auth_codes")
 }
 
 model Session {
@@ -462,6 +482,12 @@ model Listing {
   status     ListingStatus @default(ACTIVE)
   dataSource DataSource    @default(FEED) @map("data_source")
   isPublished Boolean      @default(true) @map("is_published")
+  title       String?       @db.Text
+  address     String?       @db.Text
+  description String?       @db.Text
+  sourceUrl   String?       @map("source_url") @db.Text
+  lat         Decimal?      @db.Decimal(10, 8)
+  lng         Decimal?      @db.Decimal(11, 8)
   createdAt  DateTime      @default(now()) @map("created_at")
   updatedAt  DateTime      @updatedAt @map("updated_at")
 

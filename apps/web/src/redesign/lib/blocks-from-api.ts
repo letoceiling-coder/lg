@@ -19,7 +19,7 @@ export type ApiBlockListRow = {
   builder?: { name: string } | null;
   addresses?: { address: string }[];
   images?: { url: string }[];
-  subways?: { distanceTime: number | null; subway: { name: string } }[];
+  subways?: { distanceTime: number | null; distanceType?: 1 | 2 | null; subway: { name: string } }[];
   infrastructure?: unknown;
   _count?: { listings: number };
   listingPriceMin?: number | null;
@@ -53,6 +53,9 @@ export type ApiListingRow = {
     finishingPhotoUrl?: string | null;
     extraPhotoUrls?: unknown;
     roomType: { name: string } | null;
+    rooms?: number | string | null;
+    section?: number | string | null;
+    number?: string | number | null;
     finishing: { name: string } | null;
     buildingDeadline?: string | null;
     buildingName?: string | null;
@@ -80,7 +83,10 @@ function statusFromApi(s: string): ResidentialComplex['status'] {
   return 'building';
 }
 
-function deadlineLabel(_b: ApiBlockListRow): string {
+function deadlineLabel(b: ApiBlockListRow): string {
+  if (b.status === 'COMPLETED') return 'Сдан';
+  if (b.status === 'BUILDING') return 'Строится';
+  if (b.status === 'PROJECT') return 'Проект';
   return '—';
 }
 
@@ -88,7 +94,8 @@ function quarterLabel(value: string | Date | null | undefined): string | null {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()} Q${Math.ceil((d.getMonth() + 1) / 3)}`;
+  const quarter = Math.ceil((d.getMonth() + 1) / 3);
+  return `${d.getFullYear()} ${quarter} квартал`;
 }
 
 /** Плоский список ЖК (каталог, автодополнение). */
@@ -111,6 +118,14 @@ export function mapApiBlockListRowToResidentialComplex(b: ApiBlockListRow): Resi
     district: b.district?.name ?? '—',
     subway: metro?.subway.name ?? '—',
     subwayDistance: metro?.distanceTime != null ? `${metro.distanceTime} мин` : '—',
+    nearbySubways: (b.subways ?? [])
+      .map((x) => ({
+        name: x.subway?.name ?? '',
+        distanceTime: x.distanceTime ?? null,
+        distanceType: x.distanceType ?? null,
+      }))
+      .filter((x) => x.name.trim().length > 0)
+      .sort((a, z) => (a.distanceTime ?? Number.MAX_SAFE_INTEGER) - (z.distanceTime ?? Number.MAX_SAFE_INTEGER)),
     address: addr || '—',
     deadline: deadlineLabel(b),
     status: statusFromApi(b.status),
@@ -157,13 +172,25 @@ function mapFinishing(name: string | undefined): Apartment['finishing'] {
   return 'чистовая';
 }
 
-function roomsFromRoomTypeName(name: string | undefined): number {
+function roomsFromRoomTypeName(name: string | undefined, fallback?: unknown): number {
   const n = (name ?? '').toLowerCase();
   if (n.includes('студ')) return 0;
   const m = n.match(/(\d)/);
   if (m) {
     const r = parseInt(m[1], 10);
     return r > 4 ? 4 : r;
+  }
+  if (typeof fallback === 'number' && Number.isFinite(fallback)) {
+    return Math.max(0, Math.min(4, Math.trunc(fallback)));
+  }
+  if (typeof fallback === 'string') {
+    const f = fallback.toLowerCase();
+    if (f.includes('студ')) return 0;
+    const mf = f.match(/(\d)/);
+    if (mf) {
+      const r = parseInt(mf[1], 10);
+      return r > 4 ? 4 : r;
+    }
   }
   return 1;
 }
@@ -189,6 +216,11 @@ export function mapListingRowToApartment(
   const kitchen = num(apt.areaKitchen);
   const floor = apt.floor ?? 1;
   const totalFloors = apt.floorsTotal ?? 1;
+  let inferredRooms = roomsFromRoomTypeName(apt.roomType?.name, apt.rooms);
+  // Донор иногда не передаёт roomType для студий: эвристика по нулевой кухне + малой площади.
+  if (!apt.roomType && kitchen <= 0 && area > 0 && area <= 35) {
+    inferredRooms = 0;
+  }
   const gallery =
     Array.isArray(apt.extraPhotoUrls) && apt.extraPhotoUrls.length
       ? apt.extraPhotoUrls.filter((x): x is string => typeof x === 'string')
@@ -201,7 +233,7 @@ export function mapListingRowToApartment(
     id: String(listing.id),
     complexId,
     buildingId: listing.buildingId != null ? String(listing.buildingId) : defaultBuildingId,
-    rooms: roomsFromRoomTypeName(apt.roomType?.name),
+    rooms: inferredRooms,
     area,
     kitchenArea: kitchen > 0 ? kitchen : Math.round(area * 0.15 * 10) / 10,
     floor,
@@ -210,10 +242,17 @@ export function mapListingRowToApartment(
     pricePerMeter: safePrice > 0 ? Math.round(safePrice / area) : 0,
     finishing: mapFinishing(apt.finishing?.name),
     status: listingStatus(listing.status),
-    planImage: apt.planUrl || PLACEHOLDER,
+    planImage:
+      (typeof apt.planUrl === 'string' && apt.planUrl.trim()) ||
+      finishingImg ||
+      (gallery && gallery[0]) ||
+      PLACEHOLDER,
     finishingImage: finishingImg,
     galleryImages: gallery,
-    section: 1,
+    section: Number.isFinite(Number(apt.section)) ? Number(apt.section) : 1,
+    number: apt.number != null ? String(apt.number) : undefined,
+    buildingName: typeof apt.buildingName === 'string' ? apt.buildingName : undefined,
+    buildingQueue: typeof apt.buildingQueue === 'string' ? apt.buildingQueue : undefined,
   };
 }
 
@@ -230,6 +269,7 @@ export function buildLayoutGroupsFromApartments(complexId: string, apartments: A
         complexId,
         rooms: a.rooms,
         area: a.area,
+        apartmentId: a.id,
         priceFrom: a.price,
         planImage: a.planImage,
         availableCount: 0,
@@ -239,6 +279,7 @@ export function buildLayoutGroupsFromApartments(complexId: string, apartments: A
     g.availableCount++;
     if (a.price > 0 && (g.priceFrom <= 0 || a.price < g.priceFrom)) {
       g.priceFrom = a.price;
+      g.apartmentId = a.id;
     }
   }
   return Array.from(map.values()).sort((x, y) => x.rooms - y.rooms || x.area - y.area);
@@ -247,7 +288,7 @@ export function buildLayoutGroupsFromApartments(complexId: string, apartments: A
 /** Карточка ЖК из ответа GET /blocks/:id|slug + опционально квартиры из GET /listings. */
 export function mapApiBlockDetailToResidentialComplex(
   b: ApiBlockDetail,
-  listingRows: ApiListingRow[],
+  listingRows: ApiListingRow[] = [],
 ): ResidentialComplex {
   const base = mapApiBlockListRowToResidentialComplex(b);
   const imgs = (b.images?.length ? b.images.map((i) => i.url) : base.images).slice(0, 12);
@@ -272,7 +313,9 @@ export function mapApiBlockDetailToResidentialComplex(
           deadline: raw.deadline
             ? (() => {
                 const d = new Date(raw.deadline);
-                return Number.isNaN(d.getTime()) ? '—' : `${d.getFullYear()} Q${Math.ceil((d.getMonth() + 1) / 3)}`;
+                if (Number.isNaN(d.getTime())) return '—';
+                const quarter = Math.ceil((d.getMonth() + 1) / 3);
+                return `${d.getFullYear()} ${quarter} квартал`;
               })()
             : base.deadline,
           apartments: aptsForB,

@@ -33,6 +33,7 @@ export default function AdminManualListing() {
   const [planUrl, setPlanUrl] = useState('');
   const [finishingPhotoUrl, setFinishingPhotoUrl] = useState('');
   const [extraPhotoUrls, setExtraPhotoUrls] = useState<string[]>([]);
+  const [blockAddress, setBlockAddress] = useState('');
   const [buildingName, setBuildingName] = useState('');
   const [number, setNumber] = useState('');
   const [formError, setFormError] = useState('');
@@ -109,6 +110,7 @@ export default function AdminManualListing() {
       } else {
         setExtraPhotoUrls([]);
       }
+      setBlockAddress(typeof apt.blockAddress === 'string' ? apt.blockAddress : '');
       setBuildingName(typeof apt.buildingName === 'string' ? apt.buildingName : '');
       setNumber(typeof apt.number === 'string' ? apt.number : '');
     }
@@ -141,6 +143,7 @@ export default function AdminManualListing() {
       if (extraPhotoUrls.length) apartment.extraPhotoUrls = extraPhotoUrls;
       else if (!isNew) apartment.extraPhotoUrls = [];
 
+      if (blockAddress.trim()) apartment.blockAddress = blockAddress.trim();
       if (buildingName.trim()) apartment.buildingName = buildingName.trim();
       if (number.trim()) apartment.number = number.trim();
 
@@ -379,6 +382,10 @@ export default function AdminManualListing() {
           </Button>
         </div>
 
+        <div className="space-y-1">
+          <Label>Адрес объекта</Label>
+          <Input value={blockAddress} onChange={(e) => setBlockAddress(e.target.value)} placeholder="г. Москва, ул. ..." />
+        </div>
         <div className="space-y-1">
           <Label>Корпус / литер (текст)</Label>
           <Input value={buildingName} onChange={(e) => setBuildingName(e.target.value)} />

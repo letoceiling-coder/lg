@@ -343,6 +343,74 @@ export class AuthService {
     return v && v.length > 0 ? v : null;
   }
 
+
+
+  async createTelegramCode(dto: LoginDto): Promise<{ code: string; expiresAt: string }> {
+    const email = dto.email?.trim();
+    const phoneRaw = dto.phone?.trim();
+    if (!email && !phoneRaw) {
+      throw new BadRequestException('Укажите email или телефон');
+    }
+    if (email && phoneRaw) {
+      throw new BadRequestException('Укажите только email или только телефон');
+    }
+
+    let user =
+      email != null && email.length > 0
+        ? await this.prisma.user.findUnique({ where: { email } })
+        : null;
+
+    if (!user && phoneRaw) {
+      const variants = phoneLookupVariants(phoneRaw);
+      if (variants.length === 0) {
+        throw new BadRequestException('Неверный формат телефона');
+      }
+      user = await this.prisma.user.findFirst({ where: { phone: { in: variants } } });
+    }
+
+    if (!user || !user.passwordHash || !user.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+
+    await this.prisma.telegramAuthCode.updateMany({
+      where: { userId: user.id, usedAt: null, expiresAt: { gt: now } },
+      data: { usedAt: now },
+    });
+
+    await this.prisma.telegramAuthCode.create({
+      data: { userId: user.id, code, expiresAt },
+    });
+
+    return { code, expiresAt: expiresAt.toISOString() };
+  }
+
+  async refreshTelegramToken(telegramId: number, secretHeader?: string): Promise<TokensDto> {
+    const secret = await this.getSiteSettingValue('telegram_bot_internal_secret');
+    if (!secret || !secretHeader || secretHeader !== secret) {
+      throw new UnauthorizedException('Нет доступа');
+    }
+    const user = await this.prisma.user.findFirst({
+      where: { telegramId: BigInt(telegramId), isActive: true },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Пользователь не найден');
+    }
+
+    await this.prisma.session.deleteMany({ where: { userId: user.id } });
+    return this.issueTokensForUser(user.id);
+  }
+
   async refresh(refreshToken: string): Promise<TokensDto> {
     let payload: JwtPayload;
     try {

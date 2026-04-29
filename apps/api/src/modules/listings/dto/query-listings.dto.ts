@@ -39,6 +39,7 @@ export class QueryListingsDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) block_id?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) builder_id?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) district_id?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() district_names?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) subway_id?: number;
 
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;

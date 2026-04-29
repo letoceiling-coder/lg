@@ -26,6 +26,7 @@ import { apiGet } from '@/lib/api';
 import { formatPrice } from '@/redesign/data/mock-data';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
+import ListingLocationMap from '@/redesign/components/ListingLocationMap';
 import { useFavorites } from '@/shared/hooks/useFavorites';
 import { shareCurrentPage } from '@/lib/share-page';
 import { toast } from '@/components/ui/sonner';
@@ -38,6 +39,10 @@ type ApiListingDetailUniversal = {
   blockId: number | null;
   status: string;
   price: string | number | null;
+  title: string | null;
+  address: string | null;
+  description: string | null;
+  sourceUrl: string | null;
   region: { id: number; code?: string; name?: string } | null;
   block: { id: number; slug: string; name: string; addresses?: { address: string }[] } | null;
   builder: { name: string } | null;
@@ -242,6 +247,7 @@ function buildAttributes(l: ApiListingDetailUniversal): { label: string; value: 
 
 function pickAddress(l: ApiListingDetailUniversal): string | null {
   return (
+    l.address ||
     l.apartment?.blockAddress ||
     l.block?.addresses?.[0]?.address ||
     null
@@ -301,7 +307,10 @@ const RedesignListingDetail = () => {
 
   const photos = buildPhotos(data);
   const attributes = buildAttributes(data);
-  const title = buildTitle(data);
+  const computedTitle = buildTitle(data);
+  const donorTitle = data.title?.trim() || null;
+  const title = donorTitle ?? computedTitle;
+  const description = data.description?.trim() || null;
   const KindIcon = KIND_ICON[data.kind] ?? BuildingIcon;
   const price = num(data.price);
   const address = pickAddress(data);
@@ -438,6 +447,26 @@ const RedesignListingDetail = () => {
               </div>
             ) : null}
 
+            {/* Description */}
+            {description ? (
+              <div className="rounded-2xl border border-border bg-card p-6">
+                <h3 className="font-semibold mb-3">Описание</h3>
+                <p className="text-sm text-foreground/90 whitespace-pre-line leading-relaxed">
+                  {description}
+                </p>
+                {data.sourceUrl ? (
+                  <a
+                    href={data.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 inline-flex items-center text-xs text-primary hover:underline"
+                  >
+                    Источник объявления →
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+
             {/* Location */}
             {(address || regionName) ? (
               <div className="rounded-2xl border border-border bg-card p-6">
@@ -445,9 +474,12 @@ const RedesignListingDetail = () => {
                   <MapPin className="w-4 h-4 text-primary" />
                   Расположение
                 </h3>
-                <p className="text-sm">
+                <p className="text-sm mb-4">
                   {[regionName, address].filter(Boolean).join(', ')}
                 </p>
+                {address ? (
+                  <ListingLocationMap address={address} regionName={regionName} height="280px" />
+                ) : null}
               </div>
             ) : null}
           </div>

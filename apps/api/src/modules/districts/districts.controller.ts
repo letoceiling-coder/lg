@@ -12,7 +12,8 @@ export class DistrictsController {
   @Get()
   @ApiOperation({ summary: 'List districts' })
   @ApiQuery({ name: 'region_id', required: false, type: Number })
-  findAll(@Query('region_id') regionId?: number) {
-    return this.service.findAll(regionId ? +regionId : undefined);
+  @ApiQuery({ name: 'kind', required: false, type: String, description: 'Filter districts by listing kind: APARTMENT|HOUSE|LAND|COMMERCIAL' })
+  findAll(@Query('region_id') regionId?: number, @Query('kind') kind?: string) {
+    return this.service.findAll(regionId ? +regionId : undefined, kind);
   }
 }

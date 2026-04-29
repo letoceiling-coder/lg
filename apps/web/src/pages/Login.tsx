@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/shared/hooks/useAuth';
 import type { UserRole } from '@/shared/types';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
+import { apiPost } from '@/lib/api';
 
 const ADMIN_ROLES: UserRole[] = ['admin', 'editor', 'manager', 'agent'];
 
@@ -35,6 +36,9 @@ const Login = () => {
   const [error, setError] = useState('');
   const [tgError, setTgError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [tgCode, setTgCode] = useState('');
+  const [tgCodeMessage, setTgCodeMessage] = useState('');
+  const [tgCodeLoading, setTgCodeLoading] = useState(false);
 
   const target = useMemo(
     () => pickRedirectTarget(location.search, location.state, user?.role ?? null),
@@ -52,6 +56,32 @@ const Login = () => {
       navigate(target, { replace: true });
     }
   }, [isAuthenticated, loading, navigate, target]);
+
+
+  const requestTelegramCode = async () => {
+    setTgCode('');
+    setTgCodeMessage('');
+    const trimmed = loginId.trim();
+    if (!trimmed || !password.trim()) {
+      setTgCodeMessage('Укажите email/телефон и пароль, затем запросите код.');
+      return;
+    }
+
+    const body = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)
+      ? { email: trimmed, password }
+      : { phone: trimmed, password };
+
+    try {
+      setTgCodeLoading(true);
+      const response = await apiPost<{ code: string; expiresAt: string }>('/auth/telegram/code', body);
+      setTgCode(response.code);
+      setTgCodeMessage(`Код действует 10 минут. Введите в боте: /auth ${response.code}`);
+    } catch (err: unknown) {
+      setTgCodeMessage(err instanceof Error ? err.message : 'Не удалось получить код');
+    } finally {
+      setTgCodeLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,6 +174,26 @@ const Login = () => {
           {tgError && (
             <p className="text-sm text-destructive text-center">{tgError}</p>
           )}
+
+          <Button
+            variant="outline"
+            className="w-full rounded-full"
+            onClick={requestTelegramCode}
+            disabled={tgCodeLoading}
+          >
+            {tgCodeLoading ? 'Запрос кода…' : 'Получить код для Telegram-бота'}
+          </Button>
+
+          {tgCode ? (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center">
+              <p className="text-xs text-muted-foreground">Код для команды /auth:</p>
+              <p className="text-2xl font-bold tracking-[0.3em]">{tgCode}</p>
+            </div>
+          ) : null}
+
+          {tgCodeMessage ? (
+            <p className="text-xs text-muted-foreground text-center">{tgCodeMessage}</p>
+          ) : null}
           <TelegramLoginButton
             className="w-full"
             onSuccess={() => {

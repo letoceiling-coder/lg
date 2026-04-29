@@ -34,6 +34,15 @@ export class BlocksController {
     return this.service.countCatalog(publicCatalogQuery(query));
   }
 
+
+
+  @Public()
+  @Get('deadlines')
+  @ApiOperation({ summary: 'List distinct deadline tokens for filters' })
+  listDeadlines(@Query('region_id') regionIdRaw: string) {
+    const regionId = Number.parseInt(regionIdRaw, 10);
+    return this.service.listDeadlines(Number.isFinite(regionId) ? regionId : 1);
+  }
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get block details by ID or slug' })

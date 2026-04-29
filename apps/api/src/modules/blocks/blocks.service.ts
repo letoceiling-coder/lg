@@ -24,6 +24,34 @@ function intersectBlockIdFilter(current: Prisma.BlockWhereInput['id'], ids: numb
   return existing.filter((id) => s.has(id));
 }
 
+
+
+function parseDeadlineFilterTokens(deadlineRaw: string): Array<{ kind: 'year' | 'month' | 'quarter' | 'completed' | 'exact'; value: string }> {
+  return deadlineRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((v) => {
+      const low = v.toLowerCase();
+      if (low === 'сдан') return { kind: 'completed' as const, value: v };
+      if (/^\d{4}$/.test(v)) return { kind: 'year' as const, value: v };
+      if (/^\d{4}\s+\d{2}$/.test(v)) return { kind: 'month' as const, value: v };
+      if (/^Q[1-4]\s+\d{4}$/i.test(v)) return { kind: 'quarter' as const, value: v.toUpperCase() };
+      if (/^\d{4}\s+Q[1-4]$/i.test(v)) {
+        const parts = v.toUpperCase().split(/\s+/);
+        return { kind: 'quarter' as const, value: `${parts[1]} ${parts[0]}` };
+      }
+      if (/^[кk][1-4]\s+\d{4}$/i.test(v)) {
+        const parts = v.toUpperCase().replace('К','K').split(/\s+/);
+        return { kind: 'quarter' as const, value: `${parts[0].replace('K','Q')} ${parts[1]}` };
+      }
+      if (/^\d{4}\s+[кk][1-4]$/i.test(v)) {
+        const parts = v.toUpperCase().replace('К','K').split(/\s+/);
+        return { kind: 'quarter' as const, value: `${parts[1].replace('K','Q')} ${parts[0]}` };
+      }
+      return { kind: 'exact' as const, value: v };
+    });
+}
 @Injectable()
 export class BlocksService {
   private readonly logger = new Logger(BlocksService.name);
@@ -36,6 +64,61 @@ export class BlocksService {
     private readonly catalogSearch: CatalogMeilisearchService,
   ) {}
 
+
+  private buildDeadlineWhere(deadlineRaw: string): Prisma.BlockWhereInput | null {
+    const tokens = parseDeadlineFilterTokens(deadlineRaw);
+    if (tokens.length === 0) return null;
+
+    const ors: Prisma.BlockWhereInput[] = [];
+
+    for (const t of tokens) {
+      if (t.kind === 'completed') {
+        ors.push({ status: BlockStatus.COMPLETED });
+        continue;
+      }
+      if (t.kind === 'year') {
+        const y = Number.parseInt(t.value, 10);
+        if (Number.isFinite(y)) {
+          const from = new Date(Date.UTC(y, 0, 1, 0, 0, 0));
+          const to = new Date(Date.UTC(y + 1, 0, 1, 0, 0, 0));
+          ors.push({ buildings: { some: { deadlineKey: { gte: from, lt: to } } } });
+        }
+        continue;
+      }
+      if (t.kind === 'month') {
+        const m = t.value.match(/^(\d{4})\s+(\d{2})$/);
+        if (m) {
+          const y = Number.parseInt(m[1], 10);
+          const mm = Number.parseInt(m[2], 10);
+          if (mm >= 1 && mm <= 12) {
+            const from = new Date(Date.UTC(y, mm - 1, 1, 0, 0, 0));
+            const to = new Date(Date.UTC(mm === 12 ? y + 1 : y, mm === 12 ? 0 : mm, 1, 0, 0, 0));
+            ors.push({ buildings: { some: { deadlineKey: { gte: from, lt: to } } } });
+          }
+        }
+        continue;
+      }
+      if (t.kind === 'quarter') {
+        const m = t.value.match(/^Q([1-4])\s+(\d{4})$/);
+        if (m) {
+          const q = Number.parseInt(m[1], 10);
+          const y = Number.parseInt(m[2], 10);
+          const startMonth = (q - 1) * 3;
+          const from = new Date(Date.UTC(y, startMonth, 1, 0, 0, 0));
+          const to = new Date(Date.UTC(startMonth + 3 >= 12 ? y + 1 : y, (startMonth + 3) % 12, 1, 0, 0, 0));
+          ors.push({ buildings: { some: { deadlineKey: { gte: from, lt: to } } } });
+        }
+        continue;
+      }
+      // exact: match computed deadline label stored on block? fallback to building.deadlineKey string equality not possible.
+      // We treat exact as a raw string match against buildings.deadlineKey formatted in UI elsewhere isn't stored.
+      // Keep for future, currently ignored.
+    }
+
+    if (ors.length === 0) return null;
+    return { OR: ors };
+  }
+
   /**
    * Shared block filters for catalog list, counts, and stats.
    * Returns `noMatch: true` when price filter excludes all blocks.
@@ -47,9 +130,12 @@ export class BlocksService {
     const {
       region_id, district_id, builder_id, subway_id, status, search,
       price_min, price_max,
+      area_min, area_max, floor_min, floor_max,
       district_names, subway_names, builder_names,
       is_promoted, sales_start_from, sales_start_to, block_slugs, require_active_listings,
       geo_lat, geo_lng, geo_radius_m, geo_polygon, geo_preset,
+      rooms,
+      deadline,
     } = query;
 
     const where: Prisma.BlockWhereInput = {};
@@ -89,11 +175,11 @@ export class BlocksService {
         where.id = { in: merged };
       } else {
         where.OR = [
-          { name: { contains: q, mode: 'insensitive' } },
-          { addresses: { some: { address: { contains: q, mode: 'insensitive' } } } },
-          { district: { name: { contains: q, mode: 'insensitive' } } },
-          { builder: { name: { contains: q, mode: 'insensitive' } } },
-          { subways: { some: { subway: { name: { contains: q, mode: 'insensitive' } } } } },
+          { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { addresses: { some: { address: { contains: q, mode: Prisma.QueryMode.insensitive } } } },
+          { district: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+          { builder: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+          { subways: { some: { subway: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } } } },
         ];
       }
     }
@@ -104,19 +190,28 @@ export class BlocksService {
     if (district_names) {
       const names = district_names.split(',').map((n) => n.trim()).filter(Boolean);
       if (names.length) {
-        where.district = { name: { in: names } };
+        const clause: Prisma.BlockWhereInput = {
+          OR: names.map((name) => ({ district: { name: { contains: name, mode: Prisma.QueryMode.insensitive } } })),
+        };
+        where.AND = Array.isArray(where.AND) ? [...where.AND, clause] : [clause];
       }
     }
     if (builder_names) {
       const names = builder_names.split(',').map((n) => n.trim()).filter(Boolean);
       if (names.length) {
-        where.builder = { name: { in: names } };
+        const clause: Prisma.BlockWhereInput = {
+          OR: names.map((name) => ({ builder: { name: { contains: name, mode: Prisma.QueryMode.insensitive } } })),
+        };
+        where.AND = Array.isArray(where.AND) ? [...where.AND, clause] : [clause];
       }
     }
     if (subway_names) {
       const names = subway_names.split(',').map((n) => n.trim()).filter(Boolean);
       if (names.length) {
-        where.subways = { some: { subway: { name: { in: names } } } };
+        const clause: Prisma.BlockWhereInput = {
+          OR: names.map((name) => ({ subways: { some: { subway: { name: { contains: name, mode: Prisma.QueryMode.insensitive } } } } })),
+        };
+        where.AND = Array.isArray(where.AND) ? [...where.AND, clause] : [clause];
       }
     }
 
@@ -147,6 +242,13 @@ export class BlocksService {
       where.salesStartDate = range;
     }
 
+    if (deadline && deadline.trim()) {
+      const dw = this.buildDeadlineWhere(deadline);
+      if (dw) {
+        where.AND = Array.isArray(where.AND) ? [...where.AND, dw] : [dw];
+      }
+    }
+
     if (require_active_listings === true) {
       where.listings = {
         some: {
@@ -157,8 +259,42 @@ export class BlocksService {
       };
     }
 
+
+    const roomCategories = this.parseRoomCategories(rooms);
+    if (roomCategories.length) {
+      const roomTypeIds = await this.resolveRoomTypeIdsByCategories(roomCategories);
+      if (roomTypeIds.length === 0) {
+        return { where, noMatch: true };
+      }
+      const listingWhere: Prisma.ListingWhereInput = {
+        status: { in: [ListingStatus.ACTIVE, ListingStatus.RESERVED] },
+        kind: ListingKind.APARTMENT,
+        isPublished: true,
+        apartment: {
+          is: {
+            roomTypeId: { in: roomTypeIds },
+          },
+        },
+      };
+      if (region_id) {
+        listingWhere.regionId = region_id;
+      }
+      const grouped = await this.prisma.listing.groupBy({
+        by: ['blockId'],
+        where: listingWhere,
+      });
+      const blockIds = grouped.map((g) => g.blockId).filter((id): id is number => id != null);
+      if (blockIds.length === 0) {
+        return { where, noMatch: true };
+      }
+      where.id = { in: intersectBlockIdFilter(where.id, blockIds) };
+      if ((where.id as { in?: number[] } | undefined)?.in?.length === 0) {
+        return { where, noMatch: true };
+      }
+    }
+
     if (price_min != null || price_max != null) {
-      const priceFilter: Prisma.DecimalNullableFilter = { not: null };
+      const priceFilter: Prisma.DecimalNullableFilter = { not: null, gt: 0 };
       if (price_min != null) priceFilter.gte = price_min;
       if (price_max != null) priceFilter.lte = price_max;
       const priceWhere: Prisma.ListingWhereInput = {
@@ -190,6 +326,53 @@ export class BlocksService {
         return { where, noMatch: true };
       }
       where.id = { in: priceFilteredBlockIds };
+    }
+
+
+    if (area_min != null || area_max != null) {
+      const areaWhere: Prisma.ListingWhereInput = {
+        status: ListingStatus.ACTIVE,
+        kind: ListingKind.APARTMENT,
+        isPublished: true,
+        apartment: {
+          is: {
+            areaTotal: {
+              not: null,
+              ...(area_min != null ? { gte: area_min } : {}),
+              ...(area_max != null ? { lte: area_max } : {}),
+            } as Prisma.DecimalNullableFilter,
+          },
+        },
+        ...(region_id ? { block: { regionId: region_id } } : {}),
+      };
+      const areaRows = await this.prisma.listing.groupBy({ by: ['blockId'], where: areaWhere });
+      const areaIds = areaRows.map((r) => r.blockId).filter((id): id is number => id != null);
+      if (areaIds.length === 0) return { where, noMatch: true };
+      where.id = { in: intersectBlockIdFilter(where.id, areaIds) };
+      if ((where.id as { in?: number[] } | undefined)?.in?.length === 0) return { where, noMatch: true };
+    }
+
+    if (floor_min != null || floor_max != null) {
+      const floorWhere: Prisma.ListingWhereInput = {
+        status: ListingStatus.ACTIVE,
+        kind: ListingKind.APARTMENT,
+        isPublished: true,
+        apartment: {
+          is: {
+            floor: {
+              not: null,
+              ...(floor_min != null ? { gte: floor_min } : {}),
+              ...(floor_max != null ? { lte: floor_max } : {}),
+            } as Prisma.IntNullableFilter,
+          },
+        },
+        ...(region_id ? { block: { regionId: region_id } } : {}),
+      };
+      const floorRows = await this.prisma.listing.groupBy({ by: ['blockId'], where: floorWhere });
+      const floorIds = floorRows.map((r) => r.blockId).filter((id): id is number => id != null);
+      if (floorIds.length === 0) return { where, noMatch: true };
+      where.id = { in: intersectBlockIdFilter(where.id, floorIds) };
+      if ((where.id as { in?: number[] } | undefined)?.in?.length === 0) return { where, noMatch: true };
     }
 
     return { where, noMatch: false };
@@ -499,6 +682,46 @@ export class BlocksService {
     return this.catalogMvAvailable;
   }
 
+
+
+  private parseRoomCategories(raw?: string): number[] {
+    if (!raw) return [];
+    return Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((s) => Number.parseInt(s.trim(), 10))
+          .filter((n) => Number.isFinite(n) && n >= 0 && n <= 4),
+      ),
+    );
+  }
+
+  private roomCategoryFromName(name?: string | null): number | null {
+    const n = (name ?? '').toLowerCase();
+    if (!n) return null;
+    if (n.includes('студ')) return 0;
+    const m = n.match(/(\d)/);
+    if (m) {
+      const r = Number.parseInt(m[1], 10);
+      return r > 4 ? 4 : r;
+    }
+    return null;
+  }
+
+  private async resolveRoomTypeIdsByCategories(categories: number[]): Promise<number[]> {
+    if (categories.length === 0) return [];
+    const roomTypes = await this.prisma.roomType.findMany({
+      select: { id: true, name: true, nameOne: true },
+    });
+    const wanted = new Set(categories);
+    const ids: number[] = [];
+    for (const rt of roomTypes) {
+      const cat = this.roomCategoryFromName(rt.nameOne ?? rt.name);
+      if (cat != null && wanted.has(cat)) ids.push(rt.id);
+    }
+    return Array.from(new Set(ids));
+  }
+
   async invalidateCatalogCache() {
     await this.cache.delByPrefix('api:catalog:');
   }
@@ -659,4 +882,56 @@ export class BlocksService {
       default: return { name: 'asc' as const };
     }
   }
+
+  async listDeadlines(regionId: number): Promise<string[]> {
+    // Distinct deadline tokens for UI filters: `YYYY Qn` plus optional `Сдан`.
+    const buildings = await this.prisma.building.findMany({
+      where: {
+        block: { regionId },
+        OR: [{ deadlineKey: { not: null } }, { deadline: { not: null } }],
+      },
+      select: { deadlineKey: true, deadline: true },
+    });
+
+    const tokenSet = new Set<string>();
+
+    for (const b of buildings) {
+      const raw = (b.deadlineKey ?? b.deadline) as unknown;
+      if (!raw) continue;
+      const dt = raw instanceof Date ? raw : new Date(String(raw));
+      if (Number.isNaN(dt.getTime())) continue;
+      const q = Math.ceil((dt.getMonth() + 1) / 3);
+      const y = dt.getFullYear();
+      const nowY = new Date().getFullYear();
+      // Guard against trash years from bad sources.
+      if (y < nowY - 1 || y > nowY + 15) continue;
+      tokenSet.add(`${y} Q${q}`);
+    }
+
+    const hasCompleted = await this.prisma.block.count({ where: { regionId, status: BlockStatus.COMPLETED } });
+    if (hasCompleted > 0) tokenSet.add('Сдан');
+
+    const toks = Array.from(tokenSet);
+    toks.sort((a, b) => {
+      const la = a.toLowerCase();
+      const lb = b.toLowerCase();
+      if (la === 'сдан' && lb === 'сдан') return 0;
+      if (la === 'сдан') return 1;
+      if (lb === 'сдан') return -1;
+      const ma = a.match(/^(\d{4})\s+Q([1-4])$/i);
+      const mb = b.match(/^(\d{4})\s+Q([1-4])$/i);
+      if (ma && mb) {
+        const ya = Number(ma[1]);
+        const yb = Number(mb[1]);
+        if (ya !== yb) return ya - yb;
+        return Number(ma[2]) - Number(mb[2]);
+      }
+      if (ma) return -1;
+      if (mb) return 1;
+      return a.localeCompare(b, 'ru');
+    });
+
+    return toks;
+  }
+
 }

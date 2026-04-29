@@ -82,15 +82,23 @@ const PropertyGridSection = ({ title, type }: Props) => {
     staleTime: 60_000,
     queryFn: async () => {
       const { from, to } = startDateRange(windowDays);
-      const sp = new URLSearchParams();
-      sp.set('region_id', String(regionId));
-      sp.set('per_page', String(startPer));
-      sp.set('page', '1');
-      sp.set('require_active_listings', 'true');
-      sp.set('sort', 'sales_start_asc');
-      sp.set('sales_start_from', from);
-      sp.set('sales_start_to', to);
-      return apiGet<{ data: ApiBlockListRow[] }>(`/blocks?${sp}`);
+      const base = new URLSearchParams();
+      base.set('region_id', String(regionId));
+      base.set('per_page', String(startPer));
+      base.set('page', '1');
+      base.set('require_active_listings', 'true');
+
+      const withSales = new URLSearchParams(base);
+      withSales.set('sort', 'sales_start_asc');
+      withSales.set('sales_start_from', from);
+      withSales.set('sales_start_to', to);
+      const primary = await apiGet<{ data: ApiBlockListRow[] }>(`/blocks?${withSales}`);
+      if ((primary.data?.length ?? 0) > 0) return primary;
+
+      // Fallback: если в окне дат нет стартов, не скрываем секцию — показываем актуальные ЖК.
+      const fallback = new URLSearchParams(base);
+      fallback.set('sort', 'created_desc');
+      return apiGet<{ data: ApiBlockListRow[] }>(`/blocks?${fallback}`);
     },
   });
 

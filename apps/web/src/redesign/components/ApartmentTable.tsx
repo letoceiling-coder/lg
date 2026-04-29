@@ -1,7 +1,6 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { ArrowUpDown, Eye } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Eye, Plus } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { Apartment, SortField, SortDir } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
@@ -12,63 +11,285 @@ interface Props {
   onSort: (field: SortField) => void;
 }
 
-const statusLabels: Record<string, { label: string; className: string }> = {
-  available: { label: 'Свободна', className: 'text-green-600' },
-  reserved: { label: 'Бронь', className: 'text-amber-500' },
-  sold: { label: 'Продана', className: 'text-muted-foreground line-through' },
+type AptStatus = Apartment['status'];
+
+const STATUS_LABEL: Record<AptStatus, string> = {
+  available: 'Свободна',
+  reserved: 'Бронь',
+  sold: 'Продана',
 };
 
-const ApartmentTable = ({ apartments, sort, onSort }: Props) => {
-  const SortBtn = ({ field, label }: { field: SortField; label: string }) => (
-    <button className="flex items-center gap-1 hover:text-foreground transition-colors group" onClick={() => onSort(field)}>
-      {label}
-      <ArrowUpDown className={cn('w-3.5 h-3.5 transition-colors', sort.field === field ? 'text-primary' : 'text-muted-foreground/40 group-hover:text-muted-foreground')} />
-    </button>
+const STATUS_CLASS: Record<AptStatus, string> = {
+  available: 'text-green-700',
+  reserved: 'text-amber-600',
+  sold: 'text-muted-foreground',
+};
+
+type GroupRow = {
+  key: string;
+  buildingKey: string;
+  buildingLabel: string;
+  roomCategory: number;
+  apartments: Apartment[];
+  areaMin: number;
+  areaMax: number;
+  priceMin: number;
+  priceMax: number;
+};
+
+function roomLabel(roomCategory: number): string {
+  if (roomCategory === 0) return 'Студия';
+  return `${roomCategory}-к.кв`;
+}
+
+function formatAreaRange(min: number, max: number): string {
+  if (Math.abs(min - max) < 0.001) return `${min.toLocaleString('ru-RU')} м²`;
+  return `${min.toLocaleString('ru-RU')} м² - ${max.toLocaleString('ru-RU')} м²`;
+}
+
+function formatPriceRange(min: number, max: number): string {
+  if (Math.abs(min - max) < 1) return formatPrice(min);
+  return `${formatPrice(min)} - ${formatPrice(max)}`;
+}
+
+function buildingCaption(a: Apartment): string {
+  const queue = a.buildingQueue?.trim();
+  const name = a.buildingName?.trim();
+  if (queue && name) return `${queue} очередь · ${name}`;
+  if (queue) return `${queue} очередь`;
+  if (name) return name;
+  return `Корпус ${a.buildingId}`;
+}
+
+function hasPlanPreview(url: string | undefined): boolean {
+  if (!url) return false;
+  return !url.endsWith('/placeholder.svg');
+}
+
+type PreviewState = {
+  url: string;
+  x: number;
+  y: number;
+};
+
+function getPreviewPosition(rect: DOMRect): { x: number; y: number } {
+  const previewWidth = 220;
+  const previewHeight = 300;
+  const gap = 14;
+  const pad = 10;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let x = rect.right + gap;
+  if (x + previewWidth > vw - pad) x = rect.left - previewWidth - gap;
+  if (x < pad) x = Math.max(pad, vw - previewWidth - pad);
+
+  let y = rect.top - 8;
+  if (y + previewHeight > vh - pad) y = vh - previewHeight - pad;
+  if (y < pad) y = pad;
+
+  return { x, y };
+}
+
+const ApartmentTable = ({ apartments }: Props) => {
+  const navigate = useNavigate();
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const grouped = useMemo<GroupRow[]>(() => {
+    const groups = new Map<string, GroupRow>();
+    for (const a of apartments) {
+      const bKey = a.buildingId || 'unknown';
+      const bLabel = buildingCaption(a);
+      const rKey = `${bKey}:${a.rooms}`;
+      const existing = groups.get(rKey);
+      if (!existing) {
+        groups.set(rKey, {
+          key: rKey,
+          buildingKey: bKey,
+          buildingLabel: bLabel,
+          roomCategory: a.rooms,
+          apartments: [a],
+          areaMin: a.area,
+          areaMax: a.area,
+          priceMin: a.price,
+          priceMax: a.price,
+        });
+        continue;
+      }
+      existing.apartments.push(a);
+      existing.areaMin = Math.min(existing.areaMin, a.area);
+      existing.areaMax = Math.max(existing.areaMax, a.area);
+      if (a.price > 0) {
+        existing.priceMin = existing.priceMin > 0 ? Math.min(existing.priceMin, a.price) : a.price;
+        existing.priceMax = Math.max(existing.priceMax, a.price);
+      }
+    }
+    const rows = Array.from(groups.values());
+    rows.forEach((g) => {
+      g.apartments.sort((x, y) => {
+        if (x.section !== y.section) return x.section - y.section;
+        if (x.floor !== y.floor) return x.floor - y.floor;
+        return (Number(x.number ?? 0) || 0) - (Number(y.number ?? 0) || 0);
+      });
+    });
+    rows.sort((x, y) => {
+      if (x.buildingLabel !== y.buildingLabel) return x.buildingLabel.localeCompare(y.buildingLabel, 'ru');
+      return x.roomCategory - y.roomCategory;
+    });
+    return rows;
+  }, [apartments]);
+
+  const [openKeys, setOpenKeys] = useState<Set<string>>(
+    () => new Set(grouped.length ? [grouped[0].key] : []),
   );
 
+  const toggle = (k: string) => {
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
+
+  if (!grouped.length) {
+    return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Квартиры не найдены</div>;
+  }
+
   return (
-    <div className="rounded-xl border border-border overflow-hidden bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="w-20 font-semibold"><SortBtn field="rooms" label="Комн." /></TableHead>
-            <TableHead className="font-semibold"><SortBtn field="area" label="Площадь" /></TableHead>
-            <TableHead className="font-semibold">Кухня</TableHead>
-            <TableHead className="font-semibold"><SortBtn field="floor" label="Этаж" /></TableHead>
-            <TableHead className="font-semibold"><SortBtn field="price" label="Цена" /></TableHead>
-            <TableHead className="font-semibold">₽/м²</TableHead>
-            <TableHead className="font-semibold">Отделка</TableHead>
-            <TableHead className="font-semibold">Статус</TableHead>
-            <TableHead className="w-16"></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {apartments.map(a => {
-            const st = statusLabels[a.status];
-            return (
-              <TableRow key={a.id} className="group hover:bg-accent/30">
-                <TableCell className="font-medium">{a.rooms === 0 ? 'Ст' : `${a.rooms}к`}</TableCell>
-                <TableCell className="font-medium">{a.area} м²</TableCell>
-                <TableCell className="text-muted-foreground">{a.kitchenArea} м²</TableCell>
-                <TableCell>{a.floor}/{a.totalFloors}</TableCell>
-                <TableCell className="font-semibold">{formatPrice(a.price)}</TableCell>
-                <TableCell className="text-muted-foreground text-xs">{a.pricePerMeter.toLocaleString('ru-RU')} ₽</TableCell>
-                <TableCell className="text-muted-foreground capitalize text-xs">{a.finishing}</TableCell>
-                <TableCell className={st.className}>{st.label}</TableCell>
-                <TableCell>
-                  {a.status !== 'sold' && (
-                    <Link to={`/apartment/${a.id}`}>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </Link>
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+    <div className="space-y-3">
+      {grouped.map((g) => {
+        const isOpen = openKeys.has(g.key);
+        return (
+          <div key={g.key} className="rounded-xl border border-border bg-card overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggle(g.key)}
+              className="w-full grid grid-cols-[1.3fr_1.2fr_1.6fr_auto] gap-3 px-4 py-3 text-left items-center hover:bg-muted/30 transition-colors"
+            >
+              <div className="font-medium text-sm">
+                <div>{g.buildingLabel}</div>
+                <div className="text-xs text-muted-foreground">{roomLabel(g.roomCategory)}</div>
+              </div>
+              <div className="text-sm">{formatAreaRange(g.areaMin, g.areaMax)}</div>
+              <div className="text-sm font-medium">{formatPriceRange(g.priceMin, g.priceMax)}</div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{g.apartments.length} квартир</span>
+                {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </button>
+
+            {isOpen ? (
+              <div className="border-t border-border overflow-x-auto">
+                <table className="min-w-[1180px] w-full text-sm">
+                  <thead className="bg-muted/40 text-muted-foreground text-xs">
+                    <tr>
+                      <th className="px-2 py-2 text-left w-20">План</th>
+                      <th className="px-2 py-2 text-left">Корп.</th>
+                      <th className="px-2 py-2 text-left">Секц.</th>
+                      <th className="px-2 py-2 text-left">Эт.</th>
+                      <th className="px-2 py-2 text-left">№ кв.</th>
+                      <th className="px-2 py-2 text-left">S прив.</th>
+                      <th className="px-2 py-2 text-left">S кухни</th>
+                      <th className="px-2 py-2 text-left">Отделка</th>
+                      <th className="px-2 py-2 text-left">Базовая</th>
+                      <th className="px-2 py-2 text-left">При 100%</th>
+                      <th className="px-2 py-2 text-left">За м²</th>
+                      <th className="px-2 py-2 text-left">Экскл.</th>
+                      <th className="px-2 py-2 text-left">Статус</th>
+                      <th className="px-2 py-2 text-left">Вид</th>
+                      <th className="px-2 py-2 text-left w-14"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.apartments.map((a) => {
+                      const canOpen = a.status !== 'sold';
+                      return (
+                        <tr
+                          key={a.id}
+                          className={cn('border-t border-border/70 hover:bg-muted/20', canOpen && 'cursor-pointer')}
+                          onClick={() => {
+                            if (canOpen) navigate(`/apartment/${a.id}`);
+                          }}
+                        >
+                          <td className="px-2 py-2">
+                            {hasPlanPreview(a.planImage) ? (
+                              <button
+                                type="button"
+                                className="w-14 h-14 rounded border bg-background hover:border-primary/40 transition-colors overflow-hidden"
+                                onMouseEnter={(e) => {
+                                  const pos = getPreviewPosition(e.currentTarget.getBoundingClientRect());
+                                  setPreview({ url: a.planImage!, x: pos.x, y: pos.y });
+                                }}
+                                onMouseLeave={() => setPreview((prev) => (prev?.url === a.planImage ? null : prev))}
+                                onFocus={(e) => {
+                                  const pos = getPreviewPosition(e.currentTarget.getBoundingClientRect());
+                                  setPreview({ url: a.planImage!, x: pos.x, y: pos.y });
+                                }}
+                                onBlur={() => setPreview((prev) => (prev?.url === a.planImage ? null : prev))}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <img src={a.planImage} alt="Планировка" className="w-full h-full object-contain" loading="lazy" />
+                              </button>
+                            ) : (
+                              <div className="w-14 h-14 rounded border bg-muted/30 text-[10px] text-muted-foreground flex items-center justify-center">нет</div>
+                            )}
+                          </td>
+                          <td className="px-2 py-2">{a.buildingName || a.buildingId}</td>
+                          <td className="px-2 py-2">{a.section}</td>
+                          <td className="px-2 py-2">{a.floor}</td>
+                          <td className="px-2 py-2">{a.number || '—'}</td>
+                          <td className="px-2 py-2">{a.area} м²</td>
+                          <td className="px-2 py-2">{a.kitchenArea} м²</td>
+                          <td className="px-2 py-2 capitalize">{a.finishing}</td>
+                          <td className="px-2 py-2">{formatPrice(a.price)}</td>
+                          <td className="px-2 py-2 font-medium">{formatPrice(a.price)}</td>
+                          <td className="px-2 py-2">{a.pricePerMeter.toLocaleString('ru-RU')} ₽/м²</td>
+                          <td className="px-2 py-2">—</td>
+                          <td className={cn('px-2 py-2', STATUS_CLASS[a.status])}>{STATUS_LABEL[a.status]}</td>
+                          <td className="px-2 py-2">
+                            {canOpen ? (
+                              <Link
+                                to={`/apartment/${a.id}`}
+                                className="inline-flex items-center gap-1 text-primary hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Link>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-muted-foreground">
+                            <button type="button" onClick={(e) => e.stopPropagation()} className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted">
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div className="p-3 border-t border-border">
+                  <button type="button" className="w-full rounded-lg border border-border py-2 text-sm hover:bg-muted/30" onClick={() => toggle(g.key)}>
+                    Свернуть
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+
+      {preview ? (
+        <div
+          className="fixed z-50 pointer-events-none transition-all duration-150 ease-out"
+          style={{ left: `${preview.x}px`, top: `${preview.y}px` }}
+        >
+          <div className="w-[220px] h-[300px] rounded-2xl border border-border/80 bg-background/95 shadow-[0_16px_44px_rgba(0,0,0,0.22)] p-2 backdrop-blur-[1px]">
+            <img src={preview.url} alt="Увеличенная планировка" className="w-full h-full object-contain" />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

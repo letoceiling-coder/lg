@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 type Health = { status: string; services?: { database?: string } };
 
@@ -7,12 +8,18 @@ type Health = { status: string; services?: { database?: string } };
  * Тонкая полоска под шапкой: проверка доступности API (Sprint 2 — первый живой запрос).
  */
 export function ApiConnectionStrip() {
+  const { isAuthenticated, user, loading } = useAuth();
+  const canSeeStrip = isAuthenticated && user?.role === 'admin';
+
   const q = useQuery({
     queryKey: ['api', 'health'],
     queryFn: () => apiGet<Health>('/health'),
     staleTime: 60_000,
     retry: 1,
+    enabled: canSeeStrip,
   });
+
+  if (loading || !canSeeStrip) return null;
 
   if (q.isPending) {
     return (

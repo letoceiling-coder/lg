@@ -170,56 +170,59 @@ export class PresentationsService {
   }
 
   async generatePdf(slug: string): Promise<Buffer> {
+    const FONT_REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+    const FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
     const p = await this.getBySlug(slug);
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ size: 'A4', margin: 48 });
+    doc.registerFont('Regular', FONT_REGULAR);
+    doc.registerFont('Bold', FONT_BOLD);
     doc.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
 
-    doc.fontSize(22).text(p.name, { align: 'left' });
+    doc.font('Bold').fontSize(22).text(p.name, { align: 'left' });
     doc.moveDown(0.5);
-    doc.fontSize(11).fillColor('#666666').text('Краткая презентация для клиента');
+    doc.font('Regular').fontSize(11).fillColor('#666666').text('Краткая презентация для клиента');
     doc.moveDown();
 
     doc.fillColor('#000000').fontSize(12);
-    if (p.address) doc.text(`Адрес: ${p.address}`);
-    if (p.builder) doc.text(`Застройщик: ${p.builder}`);
-    if (p.metro) doc.text(`Метро: ${p.metro}`);
-    if (p.deadline) doc.text(`Срок сдачи: ${p.deadline}`);
+    if (p.address) doc.font('Regular').text('Адрес: ' + p.address);
+    if (p.builder) doc.font('Regular').text('Застройщик: ' + p.builder);
+    if (p.metro) doc.font('Regular').text('Метро: ' + p.metro);
+    if (p.deadline) doc.font('Regular').text('Срок сдачи: ' + p.deadline);
     if (p.availableApartments > 0) {
-      doc.text(`Квартир в наличии: ${p.availableApartments}`);
+      doc.font('Regular').text('Квартир в наличии: ' + p.availableApartments);
     }
     if (p.priceFrom != null) {
       const range =
         p.priceTo != null && p.priceTo !== p.priceFrom
-          ? `${new Intl.NumberFormat('ru-RU').format(p.priceFrom)} - ${new Intl.NumberFormat('ru-RU').format(p.priceTo)} ₽`
-          : `${new Intl.NumberFormat('ru-RU').format(p.priceFrom)} ₽`;
-      doc.text(`Диапазон цен: ${range}`);
+          ? `${new Intl.NumberFormat('ru-RU').format(p.priceFrom)} - ${new Intl.NumberFormat('ru-RU').format(p.priceTo)} руб.`
+          : `${new Intl.NumberFormat('ru-RU').format(p.priceFrom)} руб.`;
+      doc.font('Regular').text('Диапазон цен: ' + range);
     }
-    if (p.imageUrl) doc.text(`Изображение: ${p.imageUrl}`);
 
     if (p.description?.trim()) {
       doc.moveDown();
-      doc.fontSize(12).text('Описание:');
+      doc.font('Bold').fontSize(12).fillColor('#000000').text('Описание:');
       doc.moveDown(0.3);
-      doc.fontSize(11).fillColor('#1f1f1f').text(p.description.trim(), { align: 'left' });
+      doc.font('Regular').fontSize(11).fillColor('#1f1f1f').text(p.description.trim(), { align: 'left' });
     }
 
     if (p.roomMix.length > 0) {
       doc.moveDown();
-      doc.fontSize(12).fillColor('#000000').text('Квартиры в наличии:');
+      doc.font('Bold').fontSize(12).fillColor('#000000').text('Квартиры в наличии:');
       doc.moveDown(0.3);
-      doc.fontSize(11).fillColor('#1f1f1f');
+      doc.font('Regular').fontSize(11).fillColor('#1f1f1f');
       for (const row of p.roomMix.slice(0, 8)) {
         const priceText =
           row.priceFrom != null
-            ? `от ${new Intl.NumberFormat('ru-RU').format(row.priceFrom)} ₽`
+            ? `от ${new Intl.NumberFormat('ru-RU').format(row.priceFrom)} руб.`
             : 'цена по запросу';
         doc.text(`- ${row.label}: ${row.count} шт., ${priceText}`);
       }
     }
 
     doc.moveDown();
-    doc.fontSize(9).fillColor('#888888').text(`Сформировано: ${new Date(p.generatedAt).toLocaleString('ru-RU')}`);
+    doc.font('Regular').fontSize(9).fillColor('#888888').text('Сформировано: ' + new Date(p.generatedAt).toLocaleString('ru-RU'));
     doc.end();
 
     return await new Promise<Buffer>((resolve, reject) => {
@@ -228,4 +231,3 @@ export class PresentationsService {
     });
   }
 }
-
