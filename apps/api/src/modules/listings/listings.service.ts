@@ -87,6 +87,7 @@ export class ListingsService {
   ) {}
 
   async findAll(query: QueryListingsDto, actor?: ActorContext) {
+    await this.expireOldPublishedListings();
     const page = query.page ?? 1;
     const per_page = query.per_page ?? 20;
     const where = await this.buildWhere(query);
@@ -133,6 +134,7 @@ export class ListingsService {
   }
 
   async findOne(id: number) {
+    await this.expireOldPublishedListings();
     const listing = await this.prisma.listing.findUnique({
       where: { id },
       include: {
@@ -176,6 +178,34 @@ export class ListingsService {
     });
 
     return { ...listing, mediaFiles: media };
+  }
+
+  private async expireOldPublishedListings() {
+    const publishedBefore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    await this.prisma.listing.updateMany({
+      where: {
+        isPublished: true,
+        publishedAt: { lt: publishedBefore },
+        status: { in: ['ACTIVE', 'RESERVED', 'DRAFT'] },
+      },
+      data: {
+        status: 'INACTIVE',
+        isPublished: false,
+      },
+    });
+  }
+
+  private publicationPatch(status?: $Enums.ListingStatus, isPublished?: boolean) {
+    const patch: Prisma.ListingUpdateInput = {};
+    if (status !== undefined) patch.status = status;
+    if (isPublished !== undefined) {
+      patch.isPublished = isPublished;
+      if (isPublished) patch.publishedAt = new Date();
+    }
+    if (status === 'INACTIVE') {
+      patch.isPublished = false;
+    }
+    return patch;
   }
 
   private async buildWhere(query: QueryListingsDto): Promise<Prisma.ListingWhereInput> {
@@ -548,6 +578,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        publishedAt: dto.isPublished ? new Date() : null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         apartment: {
           create: {
@@ -615,6 +646,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        publishedAt: dto.isPublished ? new Date() : null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         house: {
           create: {
@@ -679,6 +711,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        publishedAt: dto.isPublished ? new Date() : null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         land: {
           create: {
@@ -738,6 +771,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        publishedAt: dto.isPublished ? new Date() : null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         commercial: {
           create: {
@@ -792,6 +826,7 @@ export class ListingsService {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        publishedAt: dto.isPublished ? new Date() : null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         parking: {
           create: {
@@ -829,12 +864,11 @@ export class ListingsService {
       }
     }
 
-    const listingPatch: Prisma.ListingUpdateInput = {};
+    const listingPatch: Prisma.ListingUpdateInput = this.publicationPatch(
+      dto.status as $Enums.ListingStatus | undefined,
+      dto.isPublished,
+    );
     if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
-    if (dto.status !== undefined) {
-      listingPatch.status = dto.status as $Enums.ListingStatus;
-    }
-    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
     if (dto.blockId !== undefined) {
       if (dto.blockId === null) {
         listingPatch.block = { disconnect: true };
@@ -922,12 +956,11 @@ export class ListingsService {
       }
     }
 
-    const listingPatch: Prisma.ListingUpdateInput = {};
+    const listingPatch: Prisma.ListingUpdateInput = this.publicationPatch(
+      dto.status as $Enums.ListingStatus | undefined,
+      dto.isPublished,
+    );
     if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
-    if (dto.status !== undefined) {
-      listingPatch.status = dto.status as $Enums.ListingStatus;
-    }
-    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
     if (dto.blockId !== undefined) {
       if (dto.blockId === null) {
         listingPatch.block = { disconnect: true };
@@ -1008,12 +1041,11 @@ export class ListingsService {
       }
     }
 
-    const listingPatch: Prisma.ListingUpdateInput = {};
+    const listingPatch: Prisma.ListingUpdateInput = this.publicationPatch(
+      dto.status as $Enums.ListingStatus | undefined,
+      dto.isPublished,
+    );
     if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
-    if (dto.status !== undefined) {
-      listingPatch.status = dto.status as $Enums.ListingStatus;
-    }
-    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
     if (dto.blockId !== undefined) {
       if (dto.blockId === null) {
         listingPatch.block = { disconnect: true };
@@ -1085,12 +1117,11 @@ export class ListingsService {
       }
     }
 
-    const listingPatch: Prisma.ListingUpdateInput = {};
+    const listingPatch: Prisma.ListingUpdateInput = this.publicationPatch(
+      dto.status as $Enums.ListingStatus | undefined,
+      dto.isPublished,
+    );
     if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
-    if (dto.status !== undefined) {
-      listingPatch.status = dto.status as $Enums.ListingStatus;
-    }
-    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
     if (dto.blockId !== undefined) {
       if (dto.blockId === null) {
         listingPatch.block = { disconnect: true };
@@ -1157,12 +1188,11 @@ export class ListingsService {
       }
     }
 
-    const listingPatch: Prisma.ListingUpdateInput = {};
+    const listingPatch: Prisma.ListingUpdateInput = this.publicationPatch(
+      dto.status as $Enums.ListingStatus | undefined,
+      dto.isPublished,
+    );
     if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
-    if (dto.status !== undefined) {
-      listingPatch.status = dto.status as $Enums.ListingStatus;
-    }
-    if (dto.isPublished !== undefined) listingPatch.isPublished = dto.isPublished;
     if (dto.blockId !== undefined) {
       if (dto.blockId === null) {
         listingPatch.block = { disconnect: true };
@@ -1214,22 +1244,24 @@ export class ListingsService {
 
   async updateAdminListing(
     id: number,
-    dto: { status?: 'DRAFT' | 'ACTIVE' | 'SOLD' | 'RESERVED'; isPublished?: boolean },
+    dto: { status?: 'DRAFT' | 'ACTIVE' | 'SOLD' | 'RESERVED' | 'INACTIVE'; isPublished?: boolean },
   ) {
     if (dto.status === undefined && dto.isPublished === undefined) {
       throw new BadRequestException('Укажите хотя бы одно поле: status или isPublished');
     }
     const exists = await this.prisma.listing.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!exists) throw new NotFoundException('Объявление не найдено');
+    const nextStatus = dto.isPublished === true && dto.status === undefined && exists.status === 'INACTIVE'
+      ? 'ACTIVE'
+      : dto.status;
 
     return this.prisma.listing.update({
       where: { id },
       data: {
-        ...(dto.status !== undefined ? { status: dto.status } : {}),
-        ...(dto.isPublished !== undefined ? { isPublished: dto.isPublished } : {}),
+        ...this.publicationPatch(nextStatus, dto.isPublished),
       },
       include: {
         apartment: { include: { roomType: true, finishing: true } },
@@ -1269,3 +1301,4 @@ export class ListingsService {
     return row;
   }
 }
+

@@ -3,4 +3,5 @@ export enum ListingStatus {
   SOLD = 'SOLD',
   RESERVED = 'RESERVED',
   DRAFT = 'DRAFT',
+  INACTIVE = 'INACTIVE',
 }

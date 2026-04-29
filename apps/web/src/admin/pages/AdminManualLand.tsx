@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ImageIcon, Loader2, Plus, Save, X } from 'lucide-react';
@@ -14,6 +14,7 @@ import SellerFields, {
   type ApiSeller,
   type SellerForm,
 } from '@/admin/components/SellerFields';
+import { listingStatusOptions, type ListingStatus } from '@/admin/lib/listingStatus';
 
 type RegionRow = { id: number; code: string; name: string };
 type BlockRow = { id: number; name: string };
@@ -31,13 +32,12 @@ type ListingDetail = {
   regionId: number;
   blockId: number | null;
   price: string | number | null;
-  status: 'ACTIVE' | 'DRAFT' | 'RESERVED' | 'SOLD';
+  status: ListingStatus;
   isPublished: boolean;
   land: ListingLand | null;
   seller?: ApiSeller;
 };
 
-const statusOptions = ['DRAFT', 'ACTIVE', 'RESERVED', 'SOLD'] as const;
 
 function parseError(e: unknown, fallback: string): string {
   if (e instanceof ApiError) {
@@ -80,7 +80,7 @@ export default function AdminManualLand() {
   const [regionId, setRegionId] = useState<number>(0);
   const [blockId, setBlockId] = useState<number | ''>('');
   const [price, setPrice] = useState('');
-  const [status, setStatus] = useState<(typeof statusOptions)[number]>('DRAFT');
+  const [status, setStatus] = useState<ListingStatus>('DRAFT');
   const [isPublished, setIsPublished] = useState(false);
   const [areaSotki, setAreaSotki] = useState('');
   const [landCategory, setLandCategory] = useState('');
@@ -228,12 +228,10 @@ export default function AdminManualLand() {
           <select
             className="h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={status}
-            onChange={(e) => setStatus(e.target.value as (typeof statusOptions)[number])}
+            onChange={(e) => setStatus(e.target.value as ListingStatus)}
           >
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+            {listingStatusOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
         </div>
@@ -332,3 +330,4 @@ export default function AdminManualLand() {
     </div>
   );
 }
+

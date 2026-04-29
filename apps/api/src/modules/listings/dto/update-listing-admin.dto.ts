@@ -3,12 +3,12 @@ import { IsBoolean, IsIn, IsOptional } from 'class-validator';
 
 export class UpdateListingAdminDto {
   @ApiPropertyOptional({
-    enum: ['DRAFT', 'ACTIVE', 'SOLD', 'RESERVED'],
+    enum: ['DRAFT', 'ACTIVE', 'SOLD', 'RESERVED', 'INACTIVE'],
     description: 'Новый статус объявления',
   })
   @IsOptional()
-  @IsIn(['DRAFT', 'ACTIVE', 'SOLD', 'RESERVED'])
-  status?: 'DRAFT' | 'ACTIVE' | 'SOLD' | 'RESERVED';
+  @IsIn(['DRAFT', 'ACTIVE', 'SOLD', 'RESERVED', 'INACTIVE'])
+  status?: 'DRAFT' | 'ACTIVE' | 'SOLD' | 'RESERVED' | 'INACTIVE';
 
   @ApiPropertyOptional({ description: 'Публикация на сайте' })
   @IsOptional()

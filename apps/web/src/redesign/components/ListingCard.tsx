@@ -132,6 +132,7 @@ const STATUS_LABEL: Record<string, string> = {
   RESERVED: 'Бронь',
   SOLD: 'Продано',
   DRAFT: 'Черновик',
+  INACTIVE: 'Снято с публикации',
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -139,6 +140,7 @@ const STATUS_TONE: Record<string, string> = {
   RESERVED: 'bg-amber-100 text-amber-800',
   SOLD: 'bg-muted text-muted-foreground',
   DRAFT: 'bg-muted text-muted-foreground',
+  INACTIVE: 'bg-red-100 text-red-800',
 };
 
 const ListingCard = ({ listing, variant = 'grid' }: Props) => {

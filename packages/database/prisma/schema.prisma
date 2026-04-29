@@ -42,6 +42,7 @@ enum ListingStatus {
   SOLD
   RESERVED
   DRAFT
+  INACTIVE
 }
 
 enum BlockStatus {
@@ -484,6 +485,7 @@ model Listing {
   status     ListingStatus @default(ACTIVE)
   dataSource DataSource    @default(FEED) @map("data_source")
   isPublished Boolean      @default(true) @map("is_published")
+  publishedAt DateTime?    @map("published_at")
   title       String?       @db.Text
   address     String?       @db.Text
   description String?       @db.Text

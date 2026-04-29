@@ -12,6 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { toast } from '@/components/ui/sonner';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { listingStatusClass, listingStatusLabel, listingStatusOptions, type ListingStatus } from '@/admin/lib/listingStatus';
 
 type Kind = 'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING';
 type Source = 'all' | 'feed' | 'manual';
@@ -39,8 +40,6 @@ type Paginated = {
 };
 
 type RegionRow = { id: number; code: string; name: string };
-type ListingStatus = 'DRAFT' | 'ACTIVE' | 'SOLD' | 'RESERVED';
-
 const KIND_TABS: { key: Kind; label: string; icon: typeof Building; manualPath: string }[] = [
   { key: 'APARTMENT',  label: 'Квартиры',     icon: Building,      manualPath: '/admin/listings/manual/new' },
   { key: 'HOUSE',      label: 'Дома',          icon: TreePine,      manualPath: '/admin/listings/manual-house/new' },
@@ -202,10 +201,9 @@ export default function AdminListings() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Все статусы</SelectItem>
-              <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-              <SelectItem value="RESERVED">RESERVED</SelectItem>
-              <SelectItem value="SOLD">SOLD</SelectItem>
-              <SelectItem value="DRAFT">DRAFT</SelectItem>
+              {listingStatusOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -345,8 +343,9 @@ export default function AdminListings() {
                     : kind === 'COMMERCIAL' ? Number(r.commercial?.area ?? NaN)
                     : Number(r.parking?.area ?? NaN);
                   const isManual = (r.dataSource ?? '').toUpperCase() === 'MANUAL';
+                  const inactive = r.status === 'INACTIVE' || !r.isPublished;
                   return (
-                    <tr key={r.id} className="hover:bg-muted/40">
+                    <tr key={r.id} className={cn('hover:bg-muted/40', inactive && 'bg-red-50/40')}>
                       <td className="px-4 py-2 text-muted-foreground text-xs">{r.id}</td>
                       <td className="px-4 py-2 text-xs">{r.region?.name ?? '—'}</td>
                       <td className="px-4 py-2 text-xs">{r.dataSource ?? '—'}</td>
@@ -369,18 +368,22 @@ export default function AdminListings() {
                       </td>
                       <td className="px-4 py-2">
                         <select
-                          className="h-8 rounded-md border bg-background px-2 text-xs"
+                          className={cn('h-8 rounded-md border px-2 text-xs font-medium', listingStatusClass(r.status))}
                           value={(r.status ?? 'DRAFT') as ListingStatus}
                           disabled={updateMutation.isPending || !canManageManual}
                           onChange={(e) =>
                             updateMutation.mutate({ id: r.id, patch: { status: e.target.value as ListingStatus } })
                           }
                         >
-                          <option value="DRAFT">DRAFT</option>
-                          <option value="ACTIVE">ACTIVE</option>
-                          <option value="SOLD">SOLD</option>
-                          <option value="RESERVED">RESERVED</option>
+                          {listingStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
                         </select>
+                        {inactive ? (
+                          <div className="mt-1 text-[10px] text-red-700">
+                            {r.status === 'INACTIVE' ? listingStatusLabel('INACTIVE') : 'Не опубликовано'}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2 text-center">
                         <input

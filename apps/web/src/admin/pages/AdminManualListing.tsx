@@ -14,6 +14,7 @@ import SellerFields, {
   type ApiSeller,
   type SellerForm,
 } from '@/admin/components/SellerFields';
+import { listingStatusOptions, type ListingStatus } from '@/admin/lib/listingStatus';
 
 type RegionRow = { id: number; code: string; name: string };
 type RefOpt = { id: number; name: string };
@@ -29,7 +30,7 @@ export default function AdminManualListing() {
   const [regionId, setRegionId] = useState<number | ''>('');
   const [blockId, setBlockId] = useState('');
   const [price, setPrice] = useState('');
-  const [status, setStatus] = useState<'ACTIVE' | 'DRAFT'>('DRAFT');
+  const [status, setStatus] = useState<ListingStatus>('DRAFT');
   const [isPublished, setIsPublished] = useState(false);
   const [areaTotal, setAreaTotal] = useState('');
   const [areaKitchen, setAreaKitchen] = useState('');
@@ -91,7 +92,7 @@ export default function AdminManualListing() {
     setRegionId(Number(editListing.regionId) || regionIdDefault || '');
     setBlockId(editListing.blockId != null ? String(editListing.blockId) : '');
     setPrice(editListing.price != null ? String(editListing.price) : '');
-    setStatus((editListing.status as 'ACTIVE' | 'DRAFT') || 'DRAFT');
+    setStatus((editListing.status as ListingStatus) || 'DRAFT');
     setIsPublished(Boolean(editListing.isPublished));
     setSeller(sellerFormFromApi(editListing.seller as ApiSeller));
     if (apt) {
@@ -269,10 +270,11 @@ export default function AdminManualListing() {
             <select
               className="w-full border rounded-lg px-3 py-2 text-sm bg-background h-10"
               value={status}
-              onChange={(e) => setStatus(e.target.value as 'ACTIVE' | 'DRAFT')}
+              onChange={(e) => setStatus(e.target.value as ListingStatus)}
             >
-              <option value="DRAFT">Черновик (DRAFT)</option>
-              <option value="ACTIVE">Активно (ACTIVE)</option>
+              {listingStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </div>
         </div>

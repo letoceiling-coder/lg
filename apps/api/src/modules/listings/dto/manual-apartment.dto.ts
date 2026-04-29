@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -103,9 +103,9 @@ export class CreateManualApartmentDto {
   @Min(1)
   price: number;
 
-  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'] })
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'] })
   @IsOptional()
-  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'])
+  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'])
   status?: string;
 
   @ApiPropertyOptional({ default: false })
@@ -210,9 +210,9 @@ export class UpdateManualApartmentDto {
   @Min(1)
   price?: number;
 
-  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'] })
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'] })
   @IsOptional()
-  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'])
+  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'])
   status?: string;
 
   @ApiPropertyOptional()
@@ -232,3 +232,5 @@ export class UpdateManualApartmentDto {
   @Type(() => ManualApartmentPatchDto)
   apartment?: ManualApartmentPatchDto;
 }
+
+

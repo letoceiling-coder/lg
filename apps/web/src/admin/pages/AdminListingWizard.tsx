@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import MediaPickerDialog from '@/admin/components/MediaPickerDialog';
+import { listingStatusLabel, listingStatusOptions, type ListingStatus } from '@/admin/lib/listingStatus';
 
 type Kind = 'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING';
 
@@ -48,7 +49,7 @@ type DraftState = {
   regionId: number | null;
   blockId: string;
   price: string;
-  status: 'ACTIVE' | 'DRAFT';
+  status: ListingStatus;
   isPublished: boolean;
   apartment: {
     areaTotal: string;
@@ -517,10 +518,11 @@ export default function AdminListingWizard() {
                 <select
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-background h-10"
                   value={draft.status}
-                  onChange={(e) => update({ status: e.target.value as 'ACTIVE' | 'DRAFT' })}
+                  onChange={(e) => update({ status: e.target.value as ListingStatus })}
                 >
-                  <option value="DRAFT">Черновик</option>
-                  <option value="ACTIVE">Активно</option>
+                  {listingStatusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -955,7 +957,7 @@ function ReviewStep({ draft, regions }: { draft: DraftState; regions: RegionRow[
         label="Цена"
         value={draft.price ? `${Number(draft.price.replace(/\s/g, '').replace(',', '.')).toLocaleString('ru-RU')} ₽` : '—'}
       />
-      <Row label="Статус" value={draft.status === 'ACTIVE' ? 'Активно' : 'Черновик'} />
+      <Row label="Статус" value={listingStatusLabel(draft.status)} />
       <Row label="Публикация" value={draft.isPublished ? 'Да' : 'Нет'} />
       <Row label="Главное фото" value={draft.mainPhotoUrl ? draft.mainPhotoUrl : '—'} />
       <Row label="Галерея" value={`${draft.extraPhotoUrls.length} шт.`} />

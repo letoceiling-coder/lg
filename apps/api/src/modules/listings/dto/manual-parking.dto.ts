@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -55,9 +55,9 @@ export class CreateManualParkingDto {
   @Min(1)
   price: number;
 
-  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'] })
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'] })
   @IsOptional()
-  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'])
+  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'])
   status?: string;
 
   @ApiPropertyOptional({ default: false })
@@ -113,9 +113,9 @@ export class UpdateManualParkingDto {
   @Min(1)
   price?: number;
 
-  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'] })
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'] })
   @IsOptional()
-  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD'])
+  @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'])
   status?: string;
 
   @ApiPropertyOptional()
@@ -135,3 +135,5 @@ export class UpdateManualParkingDto {
   @Type(() => ManualParkingPatchDto)
   parking?: ManualParkingPatchDto;
 }
+
+
