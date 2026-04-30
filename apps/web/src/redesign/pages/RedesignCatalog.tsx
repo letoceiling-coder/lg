@@ -581,7 +581,7 @@ const RedesignCatalog = () => {
               </div>
             )}
             {view === 'grid' && (
-              <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
                 {showBlocks
                   ? filtered.map((c) => <ComplexCard key={c.id} complex={c} />)
                   : listingRows.map((l) => <ListingCard key={l.id} listing={l} />)}

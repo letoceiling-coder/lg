@@ -144,7 +144,7 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
   return (
     <Link
       to={`/complex/${complex.slug}`}
-      className="group flex flex-col h-[390px] rounded-xl overflow-hidden bg-card border border-border transition-all duration-200 hover:shadow-md hover:-translate-y-px"
+      className="group flex flex-col rounded-xl overflow-hidden bg-card border border-border transition-all duration-200 hover:shadow-md hover:-translate-y-px"
     >
       {/* Image */}
       <div className="relative shrink-0 overflow-hidden h-[160px]">
@@ -191,8 +191,7 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
         )}
       </div>
 
-      {/* Info */}
-      <div className="p-3 flex-1 flex flex-col gap-1.5">
+      <div className="p-3 flex flex-col gap-2">
         <div className="flex justify-between items-start gap-2">
           <h3 className="font-semibold text-[16px] leading-tight truncate">{complex.name}</h3>
           <span className="font-bold text-sm shrink-0 text-primary">
@@ -210,7 +209,7 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
         {hasBuilder ? (
           <p className="text-[11px] text-muted-foreground truncate">Застройщик: {complex.builder}</p>
         ) : null}
-        <div className="pt-2 mt-auto border-t border-border/70 space-y-1">
+        <div className="mt-1 border-t border-border/70 pt-2 space-y-1">
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground">Квартир</span>
             <span className="font-medium">{totalApts}</span>

@@ -71,7 +71,7 @@ const RedesignIndex = () => {
         </div>
 
         {/* Mobile: horizontal scroll, Tablet: 3, Desktop: 4 */}
-        <div className="hidden sm:grid md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="hidden sm:grid md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 items-start">
           {featured.map(c => <ComplexCard key={c.id} complex={c} />)}
         </div>
 

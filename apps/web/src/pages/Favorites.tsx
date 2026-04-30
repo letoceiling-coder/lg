@@ -181,7 +181,7 @@ const Favorites = () => {
             <Link to="/catalog" className="text-primary font-medium hover:underline">Перейти в каталог</Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
             {rows.map((row) => {
               const block = row.block;
               const listing = row.listing as unknown as ApiListingCardRow | null;
