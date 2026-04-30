@@ -13,6 +13,7 @@ import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 import { useSiteSettings, setting } from '@/redesign/hooks/useSiteSettings';
 import type { ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
 import { mapApiBlockToHomeHotCard, mapApiBlockToHomeStartCard } from '@/redesign/lib/home-blocks-map';
+import ListingCard, { type ApiListingCardRow } from '@/redesign/components/ListingCard';
 
 interface Props {
   title: string;
@@ -102,6 +103,26 @@ const PropertyGridSection = ({ title, type }: Props) => {
     },
   });
 
+  const shouldLoadListingFallback =
+    isHot && regionId != null && hotQuery.isFetched && (hotQuery.data?.data.length ?? 0) === 0;
+
+  const listingFallbackQuery = useQuery({
+    queryKey: ['listings', 'home', 'hot-fallback', regionId, hotPer],
+    enabled: shouldLoadListingFallback,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const sp = new URLSearchParams();
+      sp.set('region_id', String(regionId));
+      sp.set('kind', 'APARTMENT');
+      sp.set('statuses', 'ACTIVE,RESERVED');
+      sp.set('is_published', 'true');
+      sp.set('per_page', String(hotPer));
+      sp.set('page', '1');
+      sp.set('sort', 'created_desc');
+      return apiGet<{ data: ApiListingCardRow[] }>(`/listings?${sp}`);
+    },
+  });
+
   const hotCards: PropertyData[] = useMemo(() => {
     const rows = hotQuery.data?.data ?? [];
     return rows.map((b) => mapApiBlockToHomeHotCard(b, hotBadge));
@@ -112,14 +133,20 @@ const PropertyGridSection = ({ title, type }: Props) => {
     return rows.map((b) => mapApiBlockToHomeStartCard(b, startBadge));
   }, [startQuery.data, startBadge]);
 
-  const loading = isHot ? hotQuery.isLoading : startQuery.isLoading;
-  const empty = !loading && (isHot ? hotCards.length === 0 : startCards.length === 0);
+  const listingFallbackCards = listingFallbackQuery.data?.data ?? [];
+  const loading = isHot
+    ? hotQuery.isLoading || (shouldLoadListingFallback && listingFallbackQuery.isLoading)
+    : startQuery.isLoading;
+  const empty = !loading && (isHot ? hotCards.length === 0 && listingFallbackCards.length === 0 : startCards.length === 0);
+  const showListingFallback = isHot && hotCards.length === 0 && listingFallbackCards.length > 0;
 
   const scroll = (dir: 'left' | 'right') => {
     if (!scrollRef.current) return;
     const amount = scrollRef.current.offsetWidth * 0.75;
     scrollRef.current.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
   };
+
+  if (isStart && empty) return null;
 
   return (
     <section className={cn('py-8 sm:py-12', isHot && 'bg-accent/30')}>
@@ -196,7 +223,13 @@ const PropertyGridSection = ({ title, type }: Props) => {
             ref={scrollRef}
             className="flex lg:grid lg:grid-cols-4 gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory scrollbar-hide -mx-4 px-4 lg:mx-0 lg:px-0"
           >
-            {isStart
+            {showListingFallback
+              ? listingFallbackCards.map((listing) => (
+                  <div key={listing.id} className="min-w-[260px] sm:min-w-[280px] lg:min-w-0 snap-start shrink-0">
+                    <ListingCard listing={listing} />
+                  </div>
+                ))
+              : isStart
               ? startCards.map((p) => (
                   <div key={p.slug ?? p.title} className="min-w-[260px] sm:min-w-[280px] lg:min-w-0 snap-start shrink-0">
                     <StartSaleCard data={p} />
