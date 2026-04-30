@@ -340,6 +340,9 @@ const RedesignListingDetail = () => {
   const statusTone = STATUS_TONE[data.status] ?? 'bg-muted text-muted-foreground';
   const statusLabel = STATUS_LABEL[data.status] ?? data.status;
 
+  const heroSrc = photos[photoIdx];
+  const heroIsPlan = Boolean(heroSrc && isListingPlanImage(data, heroSrc));
+
   const liked = isListingFavorite(data.id);
   const handleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
