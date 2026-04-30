@@ -199,6 +199,16 @@ function buildPhotos(l: ApiListingDetailUniversal): string[] {
   return list;
 }
 
+/** Планировки нельзя растягивать на весь блок — только вписать с отступами */
+function isListingPlanImage(l: ApiListingDetailUniversal, src: string): boolean {
+  if (!src) return false;
+  if (l.kind === 'APARTMENT') {
+    const plan = l.apartment?.planUrl?.trim();
+    if (plan && plan === src) return true;
+  }
+  return (l.mediaFiles ?? []).some((m) => m.kind === 'PLAN' && m.url === src);
+}
+
 function buildAttributes(l: ApiListingDetailUniversal): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = [];
   switch (l.kind) {
@@ -393,6 +403,15 @@ const RedesignListingDetail = () => {
                       className="max-h-[48%] max-w-[58%] object-contain opacity-45"
                     />
                   </div>
+                ) : heroIsPlan ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted/40 p-6 sm:p-8 md:p-10">
+                    <img
+                      src={photos[photoIdx]!}
+                      alt={title}
+                      className="max-h-full max-w-full object-contain"
+                      onError={() => setHeroFailed(true)}
+                    />
+                  </div>
                 ) : (
                   <img
                     src={photos[photoIdx]!}
@@ -441,11 +460,19 @@ const RedesignListingDetail = () => {
                       key={`${src}-${i}`}
                       onClick={() => setPhotoIdx(i)}
                       className={cn(
-                        'shrink-0 w-20 h-16 rounded-lg overflow-hidden border-2 transition-colors',
+                        'shrink-0 w-20 h-16 rounded-lg overflow-hidden border-2 transition-colors flex items-center justify-center bg-muted/30',
                         i === photoIdx ? 'border-primary' : 'border-transparent hover:border-border',
                       )}
                     >
-                      <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      <img
+                        src={src}
+                        alt=""
+                        className={cn(
+                          'w-full h-full',
+                          data && isListingPlanImage(data, src) ? 'object-contain p-1' : 'object-cover',
+                        )}
+                        loading="lazy"
+                      />
                     </button>
                   ))}
                 </div>
