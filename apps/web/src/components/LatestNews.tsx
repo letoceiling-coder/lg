@@ -50,7 +50,7 @@ const LatestNews = () => {
   });
 
   const items = data?.data ?? [];
-  const fallback = !isLoading && items.length === 0;
+  if (!isLoading && items.length === 0) return null;
 
   return (
     <section className="py-8 sm:py-12">
@@ -68,12 +68,6 @@ const LatestNews = () => {
 
         {isLoading && (
           <div className="text-sm text-muted-foreground py-8 text-center">Загрузка новостей…</div>
-        )}
-
-        {fallback && (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            Новостей пока нет — добавьте материалы вручную или импортируйте ленту RSS в админке → «Новости» (настройка «RSS/Atom URL» на главной или URL в запросе импорта).
-          </p>
         )}
 
         {!isLoading && items.length > 0 && (
