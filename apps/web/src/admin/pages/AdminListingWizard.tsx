@@ -48,6 +48,9 @@ type DraftState = {
   kind: Kind | null;
   regionId: number | null;
   blockId: string;
+  address: string;
+  lat: string;
+  lng: string;
   price: string;
   status: ListingStatus;
   isPublished: boolean;
@@ -99,6 +102,9 @@ function makeEmptyDraft(): DraftState {
     kind: null,
     regionId: null,
     blockId: '',
+    address: '',
+    lat: '',
+    lng: '',
     price: '',
     status: 'DRAFT',
     isPublished: false,
@@ -238,12 +244,17 @@ export default function AdminListingWizard() {
       const rid = draft.regionId!;
       const price = num(draft.price)!;
       const bid = intNum(draft.blockId);
+      const lat = num(draft.lat);
+      const lng = num(draft.lng);
       const common = {
         regionId: rid,
         price,
         status: draft.status,
         isPublished: draft.isPublished,
         ...(bid != null ? { blockId: bid } : {}),
+        ...(draft.address.trim() ? { seller: { address: draft.address.trim() } } : {}),
+        ...(lat != null ? { lat } : {}),
+        ...(lng != null ? { lng } : {}),
       };
       switch (draft.kind) {
         case 'APARTMENT': {
@@ -263,6 +274,7 @@ export default function AdminListingWizard() {
           if (draft.mainPhotoUrl.trim()) apartment.finishingPhotoUrl = draft.mainPhotoUrl.trim();
           if (draft.extraPhotoUrls.length) apartment.extraPhotoUrls = draft.extraPhotoUrls;
           if (apt.blockAddress.trim()) apartment.blockAddress = apt.blockAddress.trim();
+          else if (draft.address.trim()) apartment.blockAddress = draft.address.trim();
           if (apt.buildingName.trim()) apartment.buildingName = apt.buildingName.trim();
           if (apt.number.trim()) apartment.number = apt.number.trim();
           return apiPost('/admin/listings/manual-apartment', { ...common, apartment });
@@ -502,6 +514,42 @@ export default function AdminListingWizard() {
               {!draft.regionId ? (
                 <p className="text-xs text-muted-foreground">Сначала выберите регион</p>
               ) : null}
+            </div>
+            <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+              <div className="space-y-1">
+                <Label>Адрес для карточки и карты</Label>
+                <Input
+                  value={draft.address}
+                  onChange={(e) => update({ address: e.target.value })}
+                  placeholder="Белгород, ул. Щорса, 45"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Для квартир адрес также подставится в поле адреса корпуса, если оно не заполнено на следующем шаге.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Широта</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={draft.lat}
+                    onChange={(e) => update({ lat: e.target.value })}
+                    placeholder="50.595414"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Долгота</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={draft.lng}
+                    onChange={(e) => update({ lng: e.target.value })}
+                    placeholder="36.587277"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Координаты обязательны, если объект должен появиться на карте без привязки к ЖК.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

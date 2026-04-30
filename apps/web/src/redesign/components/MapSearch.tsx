@@ -22,6 +22,7 @@ const REGION_CENTERS: Record<number, [number, number]> = {
   7: [50.595414, 36.587277], // Белгород
 };
 const DEFAULT_ZOOM = 11;
+const PLACEHOLDER = '/placeholder.svg';
 
 interface Props {
   complexes: ResidentialComplex[];
@@ -164,7 +165,14 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
               <X className="w-3.5 h-3.5" />
             </button>
             <Link to={`/complex/${activeComplex.slug}`} className="block">
-              <img src={activeComplex.images[0]} alt="" className="w-full h-[120px] object-cover" />
+              <img
+                src={activeComplex.images[0] || PLACEHOLDER}
+                alt=""
+                className="w-full h-[120px] object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = PLACEHOLDER;
+                }}
+              />
               <div className="p-3">
                 <div className="flex justify-between items-start gap-2">
                   <h3 className="font-semibold text-sm truncate">{activeComplex.name}</h3>

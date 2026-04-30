@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, Roles } from '../../auth/decorators';
 import { AuditService } from '../audit/audit.service';
@@ -16,6 +16,8 @@ import {
   UpdateManualCommercialDto,
 } from './dto/manual-commercial.dto';
 import { CreateManualParkingDto, UpdateManualParkingDto } from './dto/manual-parking.dto';
+
+type TransferListingDto = { targetUserId?: string };
 
 @ApiTags('Admin / Listings')
 @ApiBearerAuth()
@@ -35,6 +37,13 @@ export class ListingsAdminController {
     @CurrentUser('role') role: string,
   ) {
     return this.service.findAll(query, { userId, role });
+  }
+
+  @Get('agents')
+  @Roles('agent')
+  @ApiOperation({ summary: 'Сотрудники, которым можно передать ручной объект' })
+  listAssignableAgents() {
+    return this.service.listAssignableAgents();
   }
 
   @Post('manual-apartment')
@@ -187,6 +196,24 @@ export class ListingsAdminController {
   ) {
     const oldData = await this.service.findOne(id);
     const updated = await this.service.updateAdminListing(id, dto);
+    await this.audit.log(userId, 'listing', id, 'UPDATE', oldData, updated);
+    return updated;
+  }
+
+  @Patch(':id/transfer')
+  @Roles('agent')
+  @ApiOperation({ summary: 'Передать ручное объявление другому сотруднику' })
+  async transferManualListing(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: TransferListingDto,
+    @CurrentUser('sub') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    if (!dto.targetUserId) {
+      throw new BadRequestException('targetUserId is required');
+    }
+    const oldData = await this.service.findOne(id);
+    const updated = await this.service.transferManualListing(id, dto.targetUserId, userId, role);
     await this.audit.log(userId, 'listing', id, 'UPDATE', oldData, updated);
     return updated;
   }

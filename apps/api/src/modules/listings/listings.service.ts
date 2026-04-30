@@ -609,6 +609,9 @@ export class ListingsService implements OnModuleInit {
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
         publishedAt: dto.isPublished ? new Date() : null,
+        address: dto.address?.trim() || dto.seller?.address?.trim() || null,
+        lat: dto.lat ?? null,
+        lng: dto.lng ?? null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         apartment: {
           create: {
@@ -677,6 +680,9 @@ export class ListingsService implements OnModuleInit {
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
         publishedAt: dto.isPublished ? new Date() : null,
+        address: dto.address?.trim() || dto.seller?.address?.trim() || null,
+        lat: dto.lat ?? null,
+        lng: dto.lng ?? null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         house: {
           create: {
@@ -742,6 +748,9 @@ export class ListingsService implements OnModuleInit {
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
         publishedAt: dto.isPublished ? new Date() : null,
+        address: dto.address?.trim() || dto.seller?.address?.trim() || null,
+        lat: dto.lat ?? null,
+        lng: dto.lng ?? null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         land: {
           create: {
@@ -802,6 +811,9 @@ export class ListingsService implements OnModuleInit {
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
         publishedAt: dto.isPublished ? new Date() : null,
+        address: dto.address?.trim() || dto.seller?.address?.trim() || null,
+        lat: dto.lat ?? null,
+        lng: dto.lng ?? null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         commercial: {
           create: {
@@ -857,6 +869,9 @@ export class ListingsService implements OnModuleInit {
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
         publishedAt: dto.isPublished ? new Date() : null,
+        address: dto.address?.trim() || dto.seller?.address?.trim() || null,
+        lat: dto.lat ?? null,
+        lng: dto.lng ?? null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         parking: {
           create: {
@@ -1293,6 +1308,51 @@ export class ListingsService implements OnModuleInit {
       data: {
         ...this.publicationPatch(nextStatus, dto.isPublished),
       },
+      include: {
+        apartment: { include: { roomType: true, finishing: true } },
+        house: true,
+        land: true,
+        commercial: true,
+        parking: true,
+        block: { select: { id: true, name: true, slug: true } },
+        region: { select: { id: true, code: true, name: true } },
+      },
+    });
+  }
+
+  async listAssignableAgents() {
+    return this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: { in: ['agent', 'manager', 'editor', 'admin'] },
+      },
+      orderBy: [{ role: 'asc' }, { fullName: 'asc' }, { email: 'asc' }],
+      select: { id: true, fullName: true, email: true, role: true },
+    });
+  }
+
+  async transferManualListing(
+    id: number,
+    targetUserId: string,
+    actorUserId?: string,
+    actorRole?: string,
+  ) {
+    const row = await this.requireManualListing(id, actorUserId, actorRole);
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, role: true, isActive: true },
+    });
+    if (!target || !target.isActive || !['agent', 'manager', 'editor', 'admin'].includes(target.role)) {
+      throw new BadRequestException('Выбранный сотрудник не может получить объект');
+    }
+
+    const previousExternalId = row.externalId ?? `listing-${id}`;
+    const stripped = previousExternalId.replace(/^manual-[0-9a-f-]{36}-/i, '');
+    const externalId = `${this.agentExternalIdPrefix(target.id)}${stripped || `listing-${id}`}`;
+
+    return this.prisma.listing.update({
+      where: { id },
+      data: { externalId },
       include: {
         apartment: { include: { roomType: true, finishing: true } },
         house: true,

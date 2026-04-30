@@ -33,9 +33,9 @@ export interface ListingMapItem {
 }
 
 function formatPriceShort(price: string | number | null): string {
-  if (!price) return '—';
+  if (!price) return 'Цена по запросу';
   const n = typeof price === 'string' ? parseFloat(price) : price;
-  if (isNaN(n) || n <= 0) return '—';
+  if (isNaN(n) || n <= 0) return 'Цена по запросу';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')} млн`;
   if (n >= 1_000) return `${Math.round(n / 1_000)} тыс`;
   return String(n);
@@ -195,14 +195,14 @@ const ListingsMapSearch = ({ listings, regionId, activeId, onSelect, height = '7
                   </div>
                 )}
                 <p className="text-sm font-bold text-primary mt-1">
-                  {formatPriceShort(active.price)} ₽
+                  {formatPriceShort(active.price)}
                 </p>
                 <span className="text-primary text-[11px] font-medium mt-1 inline-block">Подробнее →</span>
               </Link>
             ) : (
               <Link to={`/listing/${active.id}`} className="block p-3">
                 <p className="font-semibold text-sm">{active.title ?? active.address}</p>
-                <p className="text-sm font-bold text-primary mt-1">{formatPriceShort(active.price)} ₽</p>
+                <p className="text-sm font-bold text-primary mt-1">{formatPriceShort(active.price)}</p>
                 <span className="text-primary text-[11px] font-medium">Подробнее →</span>
               </Link>
             )}

@@ -40,6 +40,15 @@ type Paginated = {
 };
 
 type RegionRow = { id: number; code: string; name: string };
+type AgentRow = { id: string; fullName: string | null; email: string | null; role: string };
+type StatusGroup = 'all' | 'active' | 'inactive' | 'archive';
+
+const STATUS_GROUPS: Array<{ key: StatusGroup; label: string; statuses?: ListingStatus[] }> = [
+  { key: 'all', label: 'Все' },
+  { key: 'active', label: 'Активные', statuses: ['ACTIVE', 'RESERVED'] },
+  { key: 'inactive', label: 'Снятые с публикации', statuses: ['INACTIVE'] },
+  { key: 'archive', label: 'Архив', statuses: ['SOLD', 'DRAFT'] },
+];
 const KIND_TABS: { key: Kind; label: string; icon: typeof Building; manualPath: string }[] = [
   { key: 'APARTMENT',  label: 'Квартиры',     icon: Building,      manualPath: '/admin/listings/manual/new' },
   { key: 'HOUSE',      label: 'Дома',          icon: TreePine,      manualPath: '/admin/listings/manual-house/new' },
@@ -91,6 +100,7 @@ export default function AdminListings() {
 
   const [kind, setKind] = useState<Kind>('APARTMENT');
   const [source, setSource] = useState<Source>('all');
+  const [statusGroup, setStatusGroup] = useState<StatusGroup>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | ListingStatus>('all');
   const [regionId, setRegionId] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
@@ -103,9 +113,16 @@ export default function AdminListings() {
     staleTime: 60 * 60 * 1000,
   });
 
+  const { data: agents } = useQuery({
+    queryKey: ['admin', 'listings', 'agents'],
+    queryFn: () => apiGet<AgentRow[]>('/admin/listings/agents'),
+    enabled: canManageManual,
+    staleTime: 60_000,
+  });
+
   const queryKey = useMemo(
-    () => ['admin', 'listings', regionId, page, source, kind, statusFilter, search.trim()],
-    [regionId, page, source, kind, statusFilter, search],
+    () => ['admin', 'listings', regionId, page, source, kind, statusGroup, statusFilter, search.trim()],
+    [regionId, page, source, kind, statusGroup, statusFilter, search],
   );
 
   const queryString = useMemo(() => {
@@ -117,10 +134,15 @@ export default function AdminListings() {
     if (regionId !== 'all') sp.set('region_id', String(regionId));
     if (source === 'feed') sp.set('data_source', 'FEED');
     if (source === 'manual') sp.set('data_source', 'MANUAL');
-    if (statusFilter !== 'all') sp.set('status', statusFilter);
+    if (statusFilter !== 'all') {
+      sp.set('status', statusFilter);
+    } else {
+      const group = STATUS_GROUPS.find((x) => x.key === statusGroup);
+      if (group?.statuses?.length) sp.set('statuses', group.statuses.join(','));
+    }
     if (search.trim()) sp.set('search', search.trim());
     return sp.toString();
-  }, [page, perPage, kind, regionId, source, statusFilter, search]);
+  }, [page, perPage, kind, regionId, source, statusGroup, statusFilter, search]);
 
   const { data, isLoading } = useQuery({
     queryKey,
@@ -158,6 +180,16 @@ export default function AdminListings() {
     onError: (e: unknown) => toast.error(parseApiErrorMessage(e, 'Ошибка обновления')),
   });
 
+  const transferMutation = useMutation({
+    mutationFn: ({ id, targetUserId }: { id: number; targetUserId: string }) =>
+      apiPatch(`/admin/listings/${id}/transfer`, { targetUserId }),
+    onSuccess: async () => {
+      toast.success('Объект передан сотруднику');
+      await qc.invalidateQueries({ queryKey: ['admin', 'listings'] });
+    },
+    onError: (e: unknown) => toast.error(parseApiErrorMessage(e, 'Ошибка передачи объекта')),
+  });
+
   const rows = data?.data ?? [];
   const meta = data?.meta;
 
@@ -166,6 +198,11 @@ export default function AdminListings() {
 
   const setKindAndReset = (k: Kind) => { setKind(k); setPage(1); };
   const setSourceAndReset = (s: Source) => { setSource(s); setPage(1); };
+  const setStatusGroupAndReset = (g: StatusGroup) => {
+    setStatusGroup(g);
+    setStatusFilter('all');
+    setPage(1);
+  };
 
   return (
     <div className="p-6 max-w-7xl">
@@ -195,7 +232,7 @@ export default function AdminListings() {
             </SelectContent>
           </Select>
 
-          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as 'all' | ListingStatus); setPage(1); }}>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as 'all' | ListingStatus); setStatusGroup('all'); setPage(1); }}>
             <SelectTrigger className="h-9 w-[160px] text-xs">
               <SelectValue placeholder="Статус" />
             </SelectTrigger>
@@ -206,6 +243,24 @@ export default function AdminListings() {
               ))}
             </SelectContent>
           </Select>
+
+          <div className="flex flex-wrap gap-1">
+            {STATUS_GROUPS.map((group) => (
+              <button
+                key={group.key}
+                type="button"
+                onClick={() => setStatusGroupAndReset(group.key)}
+                className={cn(
+                  'h-9 rounded-lg border px-3 text-xs font-medium transition-colors',
+                  statusGroup === group.key && statusFilter === 'all'
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                )}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
 
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -396,7 +451,7 @@ export default function AdminListings() {
                         />
                       </td>
                       <td className="px-4 py-2 text-right font-medium">
-                        {priceN > 0 ? `${(priceN / 1_000_000).toFixed(1)} млн` : '—'}
+                        {priceN > 0 ? `${(priceN / 1_000_000).toFixed(1)} млн` : 'Цена по запросу'}
                       </td>
                       <td className="px-4 py-2 text-center">
                         <Link
@@ -430,6 +485,31 @@ export default function AdminListings() {
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
+                            {(agents?.length ?? 0) > 0 ? (
+                              <select
+                                className="ml-1 h-7 max-w-[150px] rounded-lg border bg-background px-1.5 text-[11px]"
+                                defaultValue=""
+                                disabled={transferMutation.isPending}
+                                title="Передать объект другому сотруднику"
+                                onChange={(e) => {
+                                  const targetUserId = e.target.value;
+                                  e.currentTarget.value = '';
+                                  if (!targetUserId) return;
+                                  const target = agents?.find((a) => a.id === targetUserId);
+                                  const label = target?.fullName || target?.email || 'сотруднику';
+                                  if (window.confirm(`Передать объявление #${r.id} сотруднику ${label}?`)) {
+                                    transferMutation.mutate({ id: r.id, targetUserId });
+                                  }
+                                }}
+                              >
+                                <option value="">Передать…</option>
+                                {(agents ?? []).map((agent) => (
+                                  <option key={agent.id} value={agent.id}>
+                                    {agent.fullName || agent.email || agent.role}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
                           </>
                         ) : (
                           <span className="text-xs text-muted-foreground">Из фида</span>

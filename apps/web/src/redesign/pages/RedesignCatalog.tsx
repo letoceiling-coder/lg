@@ -136,6 +136,7 @@ const RedesignCatalog = () => {
 
   const statusMap: Record<string, string> = { building: 'BUILDING', completed: 'COMPLETED', planned: 'PROJECT' };
   const isApartmentMode = filters.objectType === 'apartments';
+  const useBlocksCatalog = isApartmentMode && filters.marketType !== 'secondary';
   const listingKind = !isApartmentMode ? OBJECT_TYPE_KIND[filters.objectType] : 'APARTMENT';
   const pageTitle = OBJECT_TYPE_TITLE[filters.objectType] ?? OBJECT_TYPE_TITLE.apartments;
 
@@ -155,6 +156,7 @@ const RedesignCatalog = () => {
       filters.floorMin,
       filters.floorMax,
       filters.district,
+      filters.marketType,
     ],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
@@ -189,7 +191,7 @@ const RedesignCatalog = () => {
 
   // Flat (non-paginated) query for map view showing individual listings
   const listingsMapQuery = useQuery({
-    queryKey: ['listings', 'catalog', 'map', regionId, listingKind, filters.priceMin, filters.priceMax, filters.district],
+    queryKey: ['listings', 'catalog', 'map', regionId, listingKind, deferredSearch, filters.priceMin, filters.priceMax, filters.rooms, filters.district, filters.marketType],
     queryFn: async () => {
       const sp = new URLSearchParams();
       if (regionId != null) sp.set('region_id', String(regionId));
@@ -198,8 +200,10 @@ const RedesignCatalog = () => {
       sp.set('is_published', 'true');
       sp.set('page', '1');
       sp.set('per_page', '200');
+      if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
       if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
       if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
+      if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
       return apiGet<{ data: ApiListingCardRow[] }>(`/listings?${sp}`);
     },
@@ -219,6 +223,7 @@ const RedesignCatalog = () => {
       filters.priceMax,
       filters.status,
       filters.objectType,
+      filters.marketType,
       filters.district,
       filters.subway,
       filters.builder,
@@ -234,7 +239,9 @@ const RedesignCatalog = () => {
       sp.set('sort', catalogSort);
       if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
       if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
-      if (filters.status.length === 1) {
+      if (filters.marketType === 'new') {
+        sp.set('status', 'BUILDING');
+      } else if (filters.status.length === 1) {
         const apiStatus = statusMap[filters.status[0]];
         if (apiStatus) sp.set('status', apiStatus);
       }
@@ -259,7 +266,7 @@ const RedesignCatalog = () => {
       if (page >= totalPages) return undefined;
       return page + 1;
     },
-    enabled: isApartmentMode && regionId != null,
+    enabled: useBlocksCatalog && regionId != null,
   });
 
   // Pass listing kind to districts query so only relevant districts are shown
@@ -360,8 +367,8 @@ const RedesignCatalog = () => {
   const blocksTotal = blocksInfinite.data?.pages[0]?.meta.total ?? 0;
   const listingsTotal = listingsInfinite.data?.pages[0]?.meta.total ?? 0;
   // Если выбран режим «Квартиры», но в регионе нет ЖК — показываем standalone APARTMENT-объявления.
-  const apartmentsAsListings = isApartmentMode && blocksInfinite.isFetched && blocksTotal === 0 && listingsTotal > 0;
-  const showBlocks = isApartmentMode && !apartmentsAsListings;
+  const apartmentsAsListings = isApartmentMode && (!useBlocksCatalog || (blocksInfinite.isFetched && blocksTotal === 0 && listingsTotal > 0));
+  const showBlocks = useBlocksCatalog && !apartmentsAsListings;
 
   const totalRemote = showBlocks ? blocksTotal : listingsTotal;
 

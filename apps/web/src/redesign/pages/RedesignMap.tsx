@@ -7,8 +7,9 @@ import ListingsMapSearch, { type ListingMapItem } from '@/redesign/components/Li
 import FilterSidebar from '@/redesign/components/FilterSidebar';
 import { apiGet } from '@/lib/api';
 import { defaultFilters, type CatalogFilters, type ObjectType } from '@/redesign/data/types';
-import { SlidersHorizontal, X } from 'lucide-react';
+import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
 import { formatPrice } from '@/redesign/data/mock-data';
@@ -81,6 +82,7 @@ const RedesignMap = () => {
 
   const deferredSearch = useDeferredValue(filters.search);
   const objectType = filters.objectType;
+  const useBlocksForApartments = objectType === 'apartments' && filters.marketType !== 'secondary';
 
   // Kind counts – drives the type switcher
   const kindCountsQuery = useQuery({
@@ -139,7 +141,7 @@ const RedesignMap = () => {
       'blocks', 'map', regionId, filters.marketType, deferredSearch,
       filters.priceMin, filters.priceMax, filters.rooms,
       filters.areaMin, filters.areaMax, filters.floorMin, filters.floorMax,
-      filters.status, filters.district, filters.subway, filters.builder,
+      filters.marketType, filters.status, filters.district, filters.subway, filters.builder,
       filters.deadline, geoPreset, geoPolygon, geoLat, geoLng, geoRadius,
     ],
     queryFn: async () => {
@@ -158,7 +160,6 @@ const RedesignMap = () => {
       if (filters.floorMin) sp.set('floor_min', String(filters.floorMin));
       if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
       if (filters.marketType === 'new') sp.set('status', 'BUILDING');
-      else if (filters.marketType === 'secondary') sp.set('status', 'COMPLETED');
       else if (filters.status.length === 1) {
         const s = statusMap[filters.status[0]];
         if (s) sp.set('status', s);
@@ -176,7 +177,7 @@ const RedesignMap = () => {
       }
       return apiGet<{ data: ApiBlockListRow[] }>(`/blocks?${sp}`);
     },
-    enabled: regionId != null && objectType === 'apartments',
+    enabled: regionId != null && useBlocksForApartments,
   });
 
   const blocks = useMemo(
@@ -187,15 +188,16 @@ const RedesignMap = () => {
   // Listings query – used when:
   //   1. objectType is not apartments, OR
   //   2. objectType is apartments but no blocks found
-  const needListings = objectType !== 'apartments' || (blocksQuery.isFetched && blocks.length === 0);
+  const needListings = !useBlocksForApartments || (blocksQuery.isFetched && blocks.length === 0);
 
   const listingsQuery = useQuery({
     queryKey: [
       'listings', 'map', regionId, objectType,
+      deferredSearch,
       filters.priceMin, filters.priceMax,
       filters.areaMin, filters.areaMax,
       filters.floorMin, filters.floorMax,
-      filters.rooms, filters.district,
+      filters.rooms, filters.district, filters.marketType,
     ],
     queryFn: async () => {
       const sp = new URLSearchParams();
@@ -203,7 +205,9 @@ const RedesignMap = () => {
       sp.set('per_page', String(PER_PAGE));
       sp.set('page', '1');
       sp.set('kind', KIND_BY_TYPE[objectType]);
-      sp.set('status', 'ACTIVE');
+      sp.set('statuses', 'ACTIVE,RESERVED');
+      sp.set('is_published', 'true');
+      if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
       if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
       if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
       if (filters.areaMin) sp.set('area_total_min', String(filters.areaMin));
@@ -233,7 +237,7 @@ const RedesignMap = () => {
   }, [listingsQuery.data]);
 
   // Decide what to show on map: blocks (for new-build apartments) or individual listings
-  const useBlocksMap = objectType === 'apartments' && blocks.length > 0;
+  const useBlocksMap = useBlocksForApartments && blocks.length > 0;
 
   const loading =
     regionLoading ||
@@ -273,8 +277,17 @@ const RedesignMap = () => {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           {/* Map */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:min-w-0">
-            <div className="mb-2 flex shrink-0 items-center justify-between lg:mb-3">
-              <span className="text-sm font-semibold">{subtitle}</span>
+            <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:mb-3">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={filters.search}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  placeholder="Поиск по ЖК, адресу, району"
+                  className="h-9 bg-background pl-9 text-sm"
+                />
+              </div>
+              <span className="text-sm font-semibold sm:ml-auto">{subtitle}</span>
               <Button variant="outline" size="sm" className="h-9 lg:hidden" onClick={() => setShowFilters(true)}>
                 <SlidersHorizontal className="w-4 h-4 mr-1.5" /> Фильтры
               </Button>

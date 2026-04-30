@@ -18,7 +18,7 @@ interface Props {
   deadlineOptions?: string[];
   objectTypeOptions?: ObjectType[];
   /** Whether the current region/query has residential complexes (blocks).
-   *  When false, hide new-build-specific filters (Отделка, Статус, Застройщик, Новостройки/Вторичка). */
+   *  When false, hide new-build-specific filters (Отделка, Статус, Застройщик). */
   hasBlocks?: boolean;
 }
 
@@ -302,8 +302,8 @@ const FilterSidebar = ({
             </button>
           ))}
         </div>
-        {/* Sub-filter: Новостройки / Вторичка — only if region has new builds */}
-        {isApartments && hasBlocks && (
+        {/* Sub-filter: Новостройки / Вторичка */}
+        {isApartments && (
           <div className="flex gap-1 mt-2 pt-2 border-t border-border/50">
             {marketTypes.map(t => (
               <button
