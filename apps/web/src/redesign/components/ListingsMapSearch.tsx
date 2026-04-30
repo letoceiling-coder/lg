@@ -3,21 +3,13 @@ import { useYandexMapsReady } from '@/shared/hooks/useYandexMapsReady';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { MapPin, X } from 'lucide-react';
+import { formatListingPriceFromApi } from '@/redesign/data/mock-data';
 
 declare global {
   interface Window { ymaps: any; }
 }
 
 const DEFAULT_CENTER = [55.751244, 37.618423];
-const REGION_CENTERS: Record<number, [number, number]> = {
-  1: [55.751244, 37.618423],
-  2: [59.939095, 30.315868],
-  3: [45.035470, 38.975313],
-  4: [56.838002, 60.597295],
-  5: [54.989347, 82.904635],
-  6: [55.796127, 49.106405],
-  7: [50.595414, 36.587277],
-};
 const DEFAULT_ZOOM = 11;
 
 export interface ListingMapItem {
@@ -32,25 +24,23 @@ export interface ListingMapItem {
   slug?: string;
 }
 
+/** Подпись на метке — без дублирующего «₽» в шаблоне */
 function formatPriceShort(price: string | number | null): string {
-  if (!price) return 'Цена по запросу';
-  const n = typeof price === 'string' ? parseFloat(price) : price;
-  if (isNaN(n) || n <= 0) return 'Цена по запросу';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')} млн`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)} тыс`;
-  return String(n);
+  const s = formatListingPriceFromApi(price);
+  return s === 'Цена по запросу' ? s : s.replace(/\s*₽\s*/g, '').trim();
 }
 
 interface Props {
   listings: ListingMapItem[];
   regionId?: number | null;
+  regionCenter?: [number, number] | null;
   activeId?: number | null;
   onSelect?: (id: number | null) => void;
   height?: string;
   compact?: boolean;
 }
 
-const ListingsMapSearch = ({ listings, regionId, activeId, onSelect, height = '70vh', compact }: Props) => {
+const ListingsMapSearch = ({ listings, regionCenter, activeId, onSelect, height = '70vh', compact }: Props) => {
   const fillParent = Boolean(compact) || height === '100%';
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
@@ -62,13 +52,17 @@ const ListingsMapSearch = ({ listings, regionId, activeId, onSelect, height = '7
   // Init map
   useEffect(() => {
     if (!ready || !mapRef.current || mapInstance.current) return;
-    const regionCenter = (regionId && REGION_CENTERS[regionId]) ?? DEFAULT_CENTER;
     mapInstance.current = new window.ymaps.Map(mapRef.current, {
-      center: regionCenter,
+      center: regionCenter ?? DEFAULT_CENTER,
       zoom: DEFAULT_ZOOM,
       controls: ['zoomControl'],
     });
-  }, [ready, regionId]);
+  }, [ready, regionCenter]);
+
+  useEffect(() => {
+    if (!mapInstance.current || !regionCenter) return;
+    mapInstance.current.setCenter(regionCenter);
+  }, [regionCenter]);
 
   // Render markers
   useEffect(() => {

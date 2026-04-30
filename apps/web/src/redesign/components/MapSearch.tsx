@@ -11,22 +11,13 @@ declare global {
 }
 
 const DEFAULT_CENTER = [55.751244, 37.618423];
-// Known region centers (fallback when no complexes have coords)
-const REGION_CENTERS: Record<number, [number, number]> = {
-  1: [55.751244, 37.618423], // Москва
-  2: [59.939095, 30.315868], // Санкт-Петербург
-  3: [45.035470, 38.975313], // Краснодар
-  4: [56.838002, 60.597295], // Екатеринбург
-  5: [54.989347, 82.904635], // Новосибирск
-  6: [55.796127, 49.106405], // Казань
-  7: [50.595414, 36.587277], // Белгород
-};
 const DEFAULT_ZOOM = 11;
 const PLACEHOLDER = '/placeholder.svg';
 
 interface Props {
   complexes: ResidentialComplex[];
   regionId?: number | null;
+  regionCenter?: [number, number] | null;
   activeSlug?: string | null;
   onSelect?: (slug: string | null) => void;
   height?: string;
@@ -38,7 +29,7 @@ function getAptCount(c: ResidentialComplex) {
   return c.buildings.reduce((s, b) => s + b.apartments.filter(a => a.status === 'available').length, 0);
 }
 
-const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, regionId }: Props) => {
+const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, regionCenter }: Props) => {
   const fillParent = Boolean(compact) || height === '100%';
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
@@ -50,12 +41,16 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
 
   useEffect(() => {
     if (!ready || !mapRef.current || mapInstance.current) return;
-    const regionCenter = (regionId && REGION_CENTERS[regionId]) ?? DEFAULT_CENTER;
     mapInstance.current = new window.ymaps.Map(mapRef.current, {
-      center: regionCenter, zoom: DEFAULT_ZOOM,
+      center: regionCenter ?? DEFAULT_CENTER, zoom: DEFAULT_ZOOM,
       controls: ['zoomControl'],
     });
-  }, [ready]);
+  }, [ready, regionCenter]);
+
+  useEffect(() => {
+    if (!mapInstance.current || !regionCenter) return;
+    mapInstance.current.setCenter(regionCenter);
+  }, [regionCenter]);
 
   // Update markers when complexes change
   useEffect(() => {

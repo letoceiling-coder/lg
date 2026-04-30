@@ -9,7 +9,8 @@ import LeadForm from '@/shared/components/LeadForm';
 import { apiGet } from '@/lib/api';
 import { mapListingRowToApartment, type ApiListingRow } from '@/redesign/lib/blocks-from-api';
 import { mapListingDetailToApartmentPage, type ApiListingDetail } from '@/redesign/lib/listing-page-from-api';
-import { getApartmentById, formatPrice } from '@/redesign/data/mock-data';
+import { getApartmentById, formatPrice, MIN_REASONABLE_PRICE_RUB } from '@/redesign/data/mock-data';
+import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useFavorites } from '@/shared/hooks/useFavorites';
@@ -23,8 +24,6 @@ function parseNumericListingId(id: string | undefined): number | null {
   if (!Number.isFinite(n) || String(n) !== id) return null;
   return n;
 }
-
-const PLACEHOLDER = '/placeholder.svg';
 
 const RedesignApartment = () => {
   const { id: idParam } = useParams<{ id: string }>();
@@ -166,6 +165,11 @@ const RedesignApartment = () => {
     { icon: Train, label: 'Метро', value: `${complex.subway} · ${complex.subwayDistance}` },
   ];
 
+  const totalPriceDisplay = formatPrice(apt.price);
+  const priceNum = typeof apt.price === 'number' ? apt.price : Number(apt.price);
+  const priceOk = Number.isFinite(priceNum) && priceNum >= MIN_REASONABLE_PRICE_RUB;
+  const ppmOk = priceOk && apt.pricePerMeter > 0;
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <RedesignHeader />
@@ -187,7 +191,7 @@ const RedesignApartment = () => {
           {/* Plan & description */}
           <div className="lg:col-span-3 space-y-4">
             <div className="rounded-2xl border border-border bg-card overflow-hidden">
-              <div className="relative aspect-[4/3] bg-muted/50 flex items-center justify-center p-12">
+              <div className="relative min-h-[min(520px,70vh)] sm:min-h-[min(580px,75vh)] bg-muted/50 flex items-center justify-center p-4 sm:p-8">
                 <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-xl border border-border/70 bg-background/90 backdrop-blur-sm px-2 py-1 shadow-sm">
                   <Button
                     type="button"
@@ -225,11 +229,11 @@ const RedesignApartment = () => {
                   </Button>
                 </div>
                 <img
-                  src={apt.planImage || PLACEHOLDER}
+                  src={apt.planImage || LIVEGRID_LOGO_SRC}
                   alt="Планировка"
-                  className="max-w-full max-h-full object-contain"
+                  className="mx-auto max-h-[min(640px,78vh)] w-auto max-w-full object-contain"
                   onError={(e) => {
-                    e.currentTarget.src = PLACEHOLDER;
+                    e.currentTarget.src = LIVEGRID_LOGO_SRC;
                   }}
                 />
               </div>
@@ -246,7 +250,7 @@ const RedesignApartment = () => {
                     alt="Отделка"
                     className="max-w-full max-h-full object-contain"
                     onError={(e) => {
-                      e.currentTarget.src = PLACEHOLDER;
+                      e.currentTarget.src = LIVEGRID_LOGO_SRC;
                     }}
                   />
                 </div>
@@ -260,11 +264,11 @@ const RedesignApartment = () => {
                   {apt.galleryImages.map((src, i) => (
                     <div key={`${src}-${i}`} className="rounded-xl overflow-hidden border border-border bg-muted/30">
                       <img
-                        src={src || PLACEHOLDER}
+                        src={src || LIVEGRID_LOGO_SRC}
                         alt=""
                         className="w-full h-48 object-cover"
                         onError={(e) => {
-                          e.currentTarget.src = PLACEHOLDER;
+                          e.currentTarget.src = LIVEGRID_LOGO_SRC;
                         }}
                       />
                     </div>
@@ -280,7 +284,8 @@ const RedesignApartment = () => {
                 {roomLabel} площадью {apt.area} м² на {apt.floor} этаже {apt.totalFloors}-этажного дома в ЖК «{complex.name}».
                 {apt.finishing !== 'без отделки' ? ` Отделка: ${apt.finishing}.` : ' Без отделки.'}
                 {' '}Район: {complex.district}, метро {complex.subway} ({complex.subwayDistance}).
-                {' '}Кухня {apt.kitchenArea} м². Цена за метр: {apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м².
+                {' '}Кухня {apt.kitchenArea} м².
+                {ppmOk ? ` Цена за метр: ${apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м².` : ''}
               </p>
             </div>
           </div>
@@ -299,8 +304,12 @@ const RedesignApartment = () => {
               </div>
 
               <div className="border-t border-border pt-5 mb-5">
-                <p className="text-3xl font-bold">{formatPrice(apt.price)}</p>
-                <p className="text-sm text-muted-foreground mt-1">{apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м²</p>
+                <p className="text-3xl font-bold">{totalPriceDisplay}</p>
+                {ppmOk ? (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м²
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-3">
@@ -369,8 +378,16 @@ const RedesignApartment = () => {
                   to={`/apartment/${a.id}`}
                   className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-md hover:-translate-y-px transition-all"
                 >
-                  <div className="aspect-square bg-muted/50 flex items-center justify-center p-8">
-                    <img src={a.planImage} alt="План" className="max-w-full max-h-full object-contain opacity-60 group-hover:opacity-100 transition-opacity" />
+                  <div className="aspect-square bg-muted/50 flex items-center justify-center p-6 sm:p-8">
+                    <img
+                      src={a.planImage}
+                      alt="План"
+                      className="max-h-[min(220px,40vw)] w-auto max-w-full object-contain opacity-60 transition-opacity group-hover:opacity-100"
+                      onError={(e) => {
+                        e.currentTarget.src = LIVEGRID_LOGO_SRC;
+                        e.currentTarget.classList.remove('opacity-60');
+                      }}
+                    />
                   </div>
                   <div className="p-3 space-y-1">
                     <h4 className="font-semibold text-sm">{a.rooms === 0 ? 'Студия' : `${a.rooms}-комн`}, {a.area} м²</h4>

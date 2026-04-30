@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateFeedRegionDto {
   @ApiPropertyOptional()
@@ -21,6 +22,22 @@ export class UpdateFeedRegionDto {
   @IsString()
   @MaxLength(500)
   publicSiteUrl?: string | null;
+
+  @ApiPropertyOptional({ description: 'Широта центра карты региона' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  mapCenterLat?: number | null;
+
+  @ApiPropertyOptional({ description: 'Долгота центра карты региона' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  mapCenterLng?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()

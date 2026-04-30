@@ -1,16 +1,41 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Heart, GitCompare } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { ResidentialComplex } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { parseApiBlockId, useFavorites } from '@/shared/hooks/useFavorites';
 import { useCompare } from '@/shared/hooks/useCompare';
+import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
 
 interface Props {
   complex: ResidentialComplex;
   variant?: 'grid' | 'list';
+}
+
+/** Пока нет фото или битая ссылка — логотип на нейтральном фоне */
+function CardCoverImage({
+  src,
+  alt,
+  classNameImg,
+}: {
+  src: string;
+  alt: string;
+  classNameImg: string;
+}) {
+  const [failed, setFailed] = useState(!src);
+  useEffect(() => {
+    setFailed(!src);
+  }, [src]);
+  if (!src || failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-muted p-4">
+        <img src={LIVEGRID_LOGO_SRC} alt="" className="max-h-[55%] max-w-[65%] object-contain opacity-45" />
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} className={classNameImg} onError={() => setFailed(true)} />;
 }
 
 const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
@@ -18,8 +43,6 @@ const statusStyles: Record<string, { bg: string; text: string; label: string }> 
   completed: { bg: 'bg-[#F0FDF4]', text: 'text-[#16A34A]', label: 'Сдан' },
   planned: { bg: 'bg-[#FFF7ED]', text: 'text-[#EA580C]', label: 'Планируется' },
 };
-
-const PLACEHOLDER = '/placeholder.svg';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const s = statusStyles[status];
@@ -72,14 +95,11 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
         to={`/complex/${complex.slug}`}
         className="group flex rounded-xl overflow-hidden bg-card border border-border transition-all duration-200 hover:shadow-md"
       >
-        <div className="relative w-[220px] shrink-0 overflow-hidden bg-muted">
-          <img
-            src={complex.images[0] || PLACEHOLDER}
+        <div className="relative w-[220px] shrink-0 overflow-hidden bg-muted min-h-[160px]">
+          <CardCoverImage
+            src={complex.images[0] ?? ''}
             alt={complex.name}
-            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-            onError={(e) => {
-              e.currentTarget.src = PLACEHOLDER;
-            }}
+            classNameImg="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
           />
           <StatusBadge status={complex.status} />
           <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
@@ -128,13 +148,10 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
     >
       {/* Image */}
       <div className="relative shrink-0 overflow-hidden h-[160px]">
-        <img
-          src={complex.images[currentImageIndex] || complex.images[0] || PLACEHOLDER}
+        <CardCoverImage
+          src={complex.images[currentImageIndex] ?? complex.images[0] ?? ''}
           alt={complex.name}
-          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-          onError={(e) => {
-            e.currentTarget.src = PLACEHOLDER;
-          }}
+          classNameImg="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
         />
         <div className="absolute top-2 left-2">
           <StatusBadge status={complex.status} />

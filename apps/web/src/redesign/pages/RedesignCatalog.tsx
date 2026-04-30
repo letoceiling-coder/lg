@@ -59,6 +59,23 @@ function resolveRegionIdByCityParam(rows: RegionRow[] | undefined, cityRaw: stri
   return null;
 }
 
+function regionCenterFromRow(region?: RegionRow): [number, number] | null {
+  const lat = Number(region?.mapCenterLat);
+  const lng = Number(region?.mapCenterLng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+}
+
+function fallbackCoords(center: [number, number] | null, index: number): [number, number] | null {
+  if (!center) return null;
+  const ring = Math.floor(index / 12) + 1;
+  const angle = (index % 12) * (Math.PI / 6);
+  const radius = 0.018 * ring;
+  return [
+    center[0] + Math.sin(angle) * radius,
+    center[1] + Math.cos(angle) * radius,
+  ];
+}
+
 function parseCatalogSort(raw: string | null): CatalogSort {
   if (raw && (CATALOG_SORT_VALUES as readonly string[]).includes(raw)) {
     return raw as CatalogSort;
@@ -102,6 +119,10 @@ const RedesignCatalog = () => {
     Number.isFinite(urlRegionId) && urlRegionId > 0
       ? urlRegionId
       : (cityRegionId ?? defaultRegionId);
+  const regionCenter = useMemo(
+    () => regionCenterFromRow(regionRows?.find((r) => r.id === regionId)),
+    [regionId, regionRows],
+  );
 
   useEffect(() => {
     if (Number.isFinite(urlRegionId) && urlRegionId > 0) {
@@ -394,6 +415,15 @@ const RedesignCatalog = () => {
     else void listingsInfinite.fetchNextPage();
   };
 
+  const mapHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (regionId != null) params.set('region_id', String(regionId));
+    if (filters.objectType !== 'apartments') params.set('type', filters.objectType);
+    if (filters.marketType !== 'all') params.set('market', filters.marketType);
+    if (filters.search.trim()) params.set('search', filters.search.trim());
+    return `/map${params.toString() ? `?${params.toString()}` : ''}`;
+  }, [filters.marketType, filters.objectType, filters.search, regionId]);
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <RedesignHeader />
@@ -411,7 +441,7 @@ const RedesignCatalog = () => {
               />
             </div>
             <Link
-              to="/map"
+              to={mapHref}
               className="hidden sm:flex items-center gap-1.5 h-10 px-4 rounded-xl border border-border bg-background text-sm font-medium hover:bg-secondary transition-colors shrink-0"
             >
               <MapPin className="w-4 h-4 text-primary" />
@@ -566,23 +596,37 @@ const RedesignCatalog = () => {
             )}
             {view === 'map' && showBlocks && (
               <div className="h-[calc(100vh-220px)] min-h-[400px]">
-                <MapSearch complexes={filtered} activeSlug={mapActive} onSelect={setMapActive} compact />
+                <MapSearch
+                  complexes={filtered}
+                  regionId={regionId}
+                  regionCenter={regionCenter}
+                  activeSlug={mapActive}
+                  onSelect={setMapActive}
+                  compact
+                />
               </div>
             )}
             {view === 'map' && !showBlocks && (() => {
               const mapData = listingsMapQuery.data?.data ?? listingRows;
+              const useApproximateCoords = filters.objectType === 'apartments' && filters.marketType === 'secondary';
               const mapItems: ListingMapItem[] = mapData
-                .filter((l) => l.lat != null && l.lng != null)
-                .map((l) => ({
-                  id: l.id,
-                  lat: l.lat!,
-                  lng: l.lng!,
-                  price: l.price,
-                  title: l.title ?? null,
-                  kind: l.kind,
-                  address: l.address ?? null,
-                  photoUrl: getListingCardPhoto(l),
-                }));
+                .map((l, index) => {
+                  const fallback = useApproximateCoords ? fallbackCoords(regionCenter, index) : null;
+                  const lat = l.lat ?? fallback?.[0] ?? null;
+                  const lng = l.lng ?? fallback?.[1] ?? null;
+                  if (lat == null || lng == null) return null;
+                  return {
+                    id: l.id,
+                    lat,
+                    lng,
+                    price: l.price,
+                    title: l.title ?? null,
+                    kind: l.kind,
+                    address: l.address ?? null,
+                    photoUrl: getListingCardPhoto(l),
+                  };
+                })
+                .filter((l): l is ListingMapItem => l != null);
               if (mapItems.length === 0) {
                 return (
                   <div className="h-[calc(100vh-220px)] min-h-[400px] flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground border border-dashed border-border rounded-xl p-6 text-center">
@@ -599,6 +643,7 @@ const RedesignCatalog = () => {
                   <ListingsMapSearch
                     listings={mapItems}
                     regionId={regionId}
+                    regionCenter={regionCenter}
                     activeId={mapActiveListing}
                     onSelect={setMapActiveListing}
                     compact

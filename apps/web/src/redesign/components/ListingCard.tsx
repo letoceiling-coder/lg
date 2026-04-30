@@ -1,9 +1,9 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatPrice } from '@/redesign/data/mock-data';
-
-const PLACEHOLDER = '/placeholder.svg';
+import { formatListingPriceFromApi } from '@/redesign/data/mock-data';
+import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
 
 export type ApiListingCardRow = {
   id: number;
@@ -84,7 +84,7 @@ function pickImage(l: ApiListingCardRow): string {
     tryUrl(l.apartment?.finishingPhotoUrl) ??
     fromArray(l.apartment?.extraPhotoUrls) ??
     tryUrl(l.apartment?.planUrl) ??
-    PLACEHOLDER
+    null
   );
 }
 
@@ -144,9 +144,10 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 const ListingCard = ({ listing, variant = 'grid' }: Props) => {
-  const price = num(listing.price);
-  const formatted = formatPrice(price);
+  const formatted = formatListingPriceFromApi(listing.price);
   const img = pickImage(listing);
+  const [imgFailed, setImgFailed] = useState(false);
+  const showLogo = !img || imgFailed;
   const title = buildTitle(listing);
   const subtitle = buildSubtitle(listing);
   const statusLabel = STATUS_LABEL[listing.status] ?? listing.status;
@@ -170,13 +171,19 @@ const ListingCard = ({ listing, variant = 'grid' }: Props) => {
           isList ? 'sm:w-56 sm:shrink-0 h-[160px]' : 'h-[160px]',
         )}
       >
-        <img
-          src={img}
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = PLACEHOLDER; }}
-          alt=""
-          loading="lazy"
-          className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-200"
-        />
+        {showLogo ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted/50 p-6">
+            <img src={LIVEGRID_LOGO_SRC} alt="" className="max-h-[56%] max-w-[70%] object-contain opacity-45" />
+          </div>
+        ) : (
+          <img
+            src={img}
+            onError={() => setImgFailed(true)}
+            alt=""
+            loading="lazy"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-200"
+          />
+        )}
         <span
           className={cn(
             'absolute top-2 left-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium',

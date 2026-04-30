@@ -14,6 +14,8 @@ export class RegionsService {
         code: true,
         name: true,
         publicSiteUrl: true,
+        mapCenterLat: true,
+        mapCenterLng: true,
         lastImportedAt: true,
       },
     });
@@ -24,6 +26,8 @@ export class RegionsService {
       code: (r.code ?? '').toUpperCase(),
       name: r.name,
       publicSiteUrl: r.publicSiteUrl,
+      mapCenterLat: r.mapCenterLat == null ? null : Number(r.mapCenterLat),
+      mapCenterLng: r.mapCenterLng == null ? null : Number(r.mapCenterLng),
       lastImportedAt: r.lastImportedAt,
     }));
   }
@@ -36,7 +40,14 @@ export class RegionsService {
 
   async updateAdmin(
     id: number,
-    data: { name?: string; baseUrl?: string | null; publicSiteUrl?: string | null; isEnabled?: boolean },
+    data: {
+      name?: string;
+      baseUrl?: string | null;
+      publicSiteUrl?: string | null;
+      mapCenterLat?: number | null;
+      mapCenterLng?: number | null;
+      isEnabled?: boolean;
+    },
   ) {
     return this.prisma.feedRegion.update({
       where: { id },
@@ -46,6 +57,8 @@ export class RegionsService {
         ...(data.publicSiteUrl !== undefined
           ? { publicSiteUrl: data.publicSiteUrl?.trim() ? data.publicSiteUrl.trim() : null }
           : {}),
+        ...(data.mapCenterLat !== undefined ? { mapCenterLat: data.mapCenterLat } : {}),
+        ...(data.mapCenterLng !== undefined ? { mapCenterLng: data.mapCenterLng } : {}),
         ...(data.isEnabled !== undefined ? { isEnabled: data.isEnabled } : {}),
       },
     });
@@ -56,6 +69,8 @@ export class RegionsService {
     name: string;
     baseUrl?: string | null;
     publicSiteUrl?: string | null;
+    mapCenterLat?: number | null;
+    mapCenterLng?: number | null;
     isEnabled?: boolean;
   }) {
     const code = dto.code.trim().toLowerCase();
@@ -75,6 +90,8 @@ export class RegionsService {
           dto.publicSiteUrl != null && String(dto.publicSiteUrl).trim() !== ''
             ? String(dto.publicSiteUrl).trim()
             : null,
+        mapCenterLat: dto.mapCenterLat ?? null,
+        mapCenterLng: dto.mapCenterLng ?? null,
         isEnabled: dto.isEnabled ?? false,
       },
     });

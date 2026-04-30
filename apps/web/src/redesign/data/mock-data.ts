@@ -187,3 +187,13 @@ export function formatPrice(n: number | null | undefined): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')} млн ₽`;
   return `${Math.round(n / 1000)} тыс ₽`;
 }
+
+/** Цена из API (строка/число/пусто/«0») → единое отображение для карточек и списков */
+export function formatListingPriceFromApi(value: string | number | null | undefined): string {
+  if (value === '' || value == null) return 'Цена по запросу';
+  const n =
+    typeof value === 'number'
+      ? value
+      : Number(String(value).replace(/\s/g, '').replace(',', '.'));
+  return formatPrice(Number.isFinite(n) ? n : NaN);
+}

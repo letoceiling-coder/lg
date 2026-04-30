@@ -89,6 +89,18 @@ function buildMeta(pathname: string): SeoMeta {
       description: 'Условия обработки персональных данных на платформе LiveGrid.',
     };
   }
+  if (pathname === '/about') {
+    return {
+      title: 'О компании',
+      description: 'Платформа LiveGrid: эксперты, сервисы и поддержка клиентов.',
+    };
+  }
+  if (pathname === '/selection') {
+    return {
+      title: 'Подбор объекта',
+      description: 'Онлайн-анкета для индивидуального подбора недвижимости.',
+    };
+  }
   if (
     pathname.startsWith('/admin') ||
     pathname.startsWith('/login') ||

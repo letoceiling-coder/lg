@@ -13,8 +13,8 @@ const navColumns = [
       { label: 'Дома', to: '/catalog?type=houses' },
       { label: 'Участки', to: '/catalog?type=land' },
       { label: 'Коммерция', to: '/catalog?type=commercial' },
-      { label: 'Новостройки', to: '/catalog?status=new' },
-      { label: 'Вторичка', to: '/catalog?status=secondary' },
+      { label: 'Новостройки', to: '/catalog?type=apartments&market=new' },
+      { label: 'Вторичка', to: '/catalog?type=apartments&market=secondary' },
     ],
   },
   {
@@ -53,12 +53,12 @@ const socialsDefs = [
   { label: 'MAX', icon: () => <span className="text-[10px] font-bold leading-none">MX</span>, settingsKey: 'ok_url' },
 ];
 
-const legalLinks = [
-  'Пользовательское соглашение',
-  'Политика конфиденциальности',
-  'Обработка персональных данных (152-ФЗ)',
-  'Согласие на обработку ПД',
-  'Оферта',
+const legalLinks: { label: string; to: string }[] = [
+  { label: 'Пользовательское соглашение', to: '/terms' },
+  { label: 'Политика конфиденциальности', to: '/privacy' },
+  { label: 'Обработка персональных данных (152-ФЗ)', to: '/privacy' },
+  { label: 'Согласие на обработку ПД', to: '/privacy' },
+  { label: 'Оферта', to: '/offer' },
 ];
 
 /* Mobile accordion column */
@@ -249,7 +249,13 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
         {/* Legal links */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-3">
           {legalLinks.map((l) => (
-            <a key={l} href="#" className="text-[10px] sm:text-[11px] opacity-40 hover:opacity-70 transition-opacity">{l}</a>
+            <Link
+              key={l.label}
+              to={l.to}
+              className="text-[10px] sm:text-[11px] opacity-40 hover:opacity-70 transition-opacity"
+            >
+              {l.label}
+            </Link>
           ))}
         </div>
 

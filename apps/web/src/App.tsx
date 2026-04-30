@@ -50,6 +50,12 @@ const Compare = lazy(() => import("./pages/Compare"));
 const Favorites = lazyWithReload(() => import("./pages/Favorites"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 const Privacy = lazy(() => import("./pages/Privacy"));
+const AboutCompany = lazy(() => import("./pages/AboutCompany"));
+const SelectionPage = lazy(() => import("./pages/SelectionPage"));
+const PartnersPage = lazy(() => import("./pages/PartnersPage"));
+const CareerPage = lazy(() => import("./pages/CareerPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const OfferPage = lazy(() => import("./pages/OfferPage"));
 const Profile = lazy(() => import("./pages/Profile"));
 
 // Auth
@@ -131,6 +137,12 @@ const AppRoutes = () => (
     <Route path="/compare" element={<Compare />} />
     <Route path="/favorites" element={<RequireAuth><Favorites /></RequireAuth>} />
     <Route path="/contacts" element={<Contacts />} />
+    <Route path="/about" element={<AboutCompany />} />
+    <Route path="/selection" element={<SelectionPage />} />
+    <Route path="/partners" element={<PartnersPage />} />
+    <Route path="/career" element={<CareerPage />} />
+    <Route path="/terms" element={<TermsPage />} />
+    <Route path="/offer" element={<OfferPage />} />
     <Route path="/privacy" element={<Privacy />} />
 
     {/* Auth */}

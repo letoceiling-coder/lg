@@ -1,4 +1,5 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -170,7 +171,9 @@ const LeadForm = ({
         </Button>
         <p className="text-[10px] text-muted-foreground text-center">
           Нажимая кнопку, вы соглашаетесь с{' '}
-          <a href="/privacy" className="underline hover:text-foreground">политикой конфиденциальности</a>
+          <Link to="/privacy" className="underline hover:text-foreground" target="_blank" rel="noopener noreferrer">
+            политикой конфиденциальности
+          </Link>
         </p>
       </form>
     </>,

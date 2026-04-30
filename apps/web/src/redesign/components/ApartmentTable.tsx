@@ -243,7 +243,11 @@ const ApartmentTable = ({ apartments }: Props) => {
                           <td className="px-2 py-2 capitalize">{a.finishing}</td>
                           <td className="px-2 py-2">{formatPrice(a.price)}</td>
                           <td className="px-2 py-2 font-medium">{formatPrice(a.price)}</td>
-                          <td className="px-2 py-2">{a.pricePerMeter.toLocaleString('ru-RU')} ₽/м²</td>
+                          <td className="px-2 py-2">
+                            {formatPrice(a.price) !== 'Цена по запросу' && a.pricePerMeter > 0
+                              ? `${a.pricePerMeter.toLocaleString('ru-RU')} ₽/м²`
+                              : '—'}
+                          </td>
                           <td className="px-2 py-2">—</td>
                           <td className={cn('px-2 py-2', STATUS_CLASS[a.status])}>{STATUS_LABEL[a.status]}</td>
                           <td className="px-2 py-2">

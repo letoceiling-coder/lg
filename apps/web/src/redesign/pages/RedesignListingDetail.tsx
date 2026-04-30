@@ -1,5 +1,5 @@
 import { useParams, Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   MapPin,
@@ -24,6 +24,7 @@ import FooterSection from '@/components/FooterSection';
 import LeadForm from '@/shared/components/LeadForm';
 import { apiGet } from '@/lib/api';
 import { formatPrice } from '@/redesign/data/mock-data';
+import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
 import ListingLocationMap from '@/redesign/components/ListingLocationMap';
@@ -31,9 +32,6 @@ import { useFavorites } from '@/shared/hooks/useFavorites';
 import { shareCurrentPage } from '@/lib/share-page';
 import { toast } from '@/components/ui/sonner';
 
-const PLACEHOLDER = '/placeholder.svg';
-
-type ApiListingDetailUniversal = {
   id: number;
   kind: 'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING';
   blockId: number | null;
@@ -196,7 +194,7 @@ function buildPhotos(l: ApiListingDetailUniversal): string[] {
     default:
       break;
   }
-  if (!list.length) list.push(PLACEHOLDER);
+  if (!list.length) return [];
   return list;
 }
 
@@ -269,6 +267,7 @@ const RedesignListingDetail = () => {
   }, [idParam]);
 
   const [photoIdx, setPhotoIdx] = useState(0);
+  const [heroFailed, setHeroFailed] = useState(false);
 
   const { data, isPending, isError } = useQuery({
     queryKey: ['listing', 'detail-universal', listingId],
@@ -276,6 +275,16 @@ const RedesignListingDetail = () => {
     enabled: listingId != null,
     retry: false,
   });
+
+  const photos = useMemo(() => {
+    if (!data) return [];
+    if (data.kind === 'APARTMENT' && data.block) return [];
+    return buildPhotos(data);
+  }, [data]);
+
+  useEffect(() => {
+    setHeroFailed(false);
+  }, [photoIdx, listingId, photos.length, photos[0] ?? '']);
 
   if (listingId == null) {
     return <Navigate to="/catalog" replace />;
@@ -307,7 +316,6 @@ const RedesignListingDetail = () => {
     return <Navigate to={`/apartment/${data.id}`} replace />;
   }
 
-  const photos = buildPhotos(data);
   const attributes = buildAttributes(data);
   const computedTitle = buildTitle(data);
   const donorTitle = data.title?.trim() || null;
@@ -315,6 +323,7 @@ const RedesignListingDetail = () => {
   const description = data.description?.trim() || null;
   const KindIcon = KIND_ICON[data.kind] ?? BuildingIcon;
   const price = num(data.price);
+  const priceDisplay = formatPrice(price);
   const address = pickAddress(data);
   const regionName = data.region?.name ?? '';
   const statusTone = STATUS_TONE[data.status] ?? 'bg-muted text-muted-foreground';
@@ -375,11 +384,22 @@ const RedesignListingDetail = () => {
           <div className="lg:col-span-3 space-y-4">
             <div className="rounded-2xl border border-border bg-card overflow-hidden">
               <div className="relative aspect-[4/3] bg-muted/40">
-                <img
-                  src={photos[photoIdx] ?? PLACEHOLDER}
-                  alt={title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
+                {photos.length === 0 || heroFailed ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-muted/50 p-8">
+                    <img
+                      src={LIVEGRID_LOGO_SRC}
+                      alt=""
+                      className="max-h-[48%] max-w-[58%] object-contain opacity-45"
+                    />
+                  </div>
+                ) : (
+                  <img
+                    src={photos[photoIdx]!}
+                    alt={title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={() => setHeroFailed(true)}
+                  />
+                )}
                 <span
                   className={cn(
                     'absolute top-3 left-3 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium',
@@ -509,8 +529,11 @@ const RedesignListingDetail = () => {
               )}
 
               <div className="border-t border-border pt-5 mb-5">
-                <p className="text-3xl font-bold">{price > 0 ? formatPrice(price) : 'Цена по запросу'}</p>
-                {data.kind === 'APARTMENT' && data.apartment?.areaTotal && num(data.apartment.areaTotal) > 0 && price > 0 ? (
+                <p className="text-3xl font-bold">{priceDisplay}</p>
+                {data.kind === 'APARTMENT' &&
+                data.apartment?.areaTotal &&
+                num(data.apartment.areaTotal) > 0 &&
+                priceDisplay !== 'Цена по запросу' ? (
                   <p className="text-sm text-muted-foreground mt-1">
                     {Math.round(price / num(data.apartment.areaTotal)).toLocaleString('ru-RU')} ₽/м²
                   </p>

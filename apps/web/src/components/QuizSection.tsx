@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -222,7 +223,11 @@ const QuizSection = () => {
                       className="mt-0.5 w-4 h-4 rounded border-border accent-primary"
                     />
                     <span className="text-[11px] text-muted-foreground leading-tight">
-                      Согласен на обработку персональных данных
+                      Соглашаюсь с обработкой персональных данных и с{' '}
+                      <Link to="/privacy" className="text-primary underline hover:text-primary/90" target="_blank" rel="noopener noreferrer">
+                        политикой
+                      </Link>{' '}
+                      конфиденциальности
                     </span>
                   </label>
                 </div>

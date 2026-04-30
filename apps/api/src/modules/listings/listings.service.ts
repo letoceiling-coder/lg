@@ -277,6 +277,10 @@ export class ListingsService implements OnModuleInit {
     if (query.is_published !== undefined) {
       where.isPublished = query.is_published;
     }
+    if (query.has_geo) {
+      where.lat = { not: null };
+      where.lng = { not: null };
+    }
     if (query.data_source) where.dataSource = query.data_source as $Enums.DataSource;
     if (query.builder_id != null) where.builderId = query.builder_id;
     if (query.district_id != null) where.districtId = query.district_id;

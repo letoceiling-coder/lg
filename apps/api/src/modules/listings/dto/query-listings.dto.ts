@@ -20,6 +20,11 @@ export class QueryListingsDto {
   })
   is_published?: boolean;
 
+  @ApiPropertyOptional({ description: 'Only listings with explicit lat/lng coordinates (true/false).' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  has_geo?: boolean;
+
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) price_min?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) price_max?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) area_total_min?: number;

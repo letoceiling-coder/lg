@@ -229,6 +229,8 @@ model FeedRegion {
   baseUrl        String?   @map("base_url")
   /// Публичный URL витрины для региона (поддомен/отдельный домен); иначе используется глобальный PUBLIC_SITE_URL
   publicSiteUrl  String?   @map("public_site_url")
+  mapCenterLat   Decimal?  @map("map_center_lat") @db.Decimal(10, 8)
+  mapCenterLng   Decimal?  @map("map_center_lng") @db.Decimal(11, 8)
   isEnabled      Boolean   @default(false) @map("is_enabled")
   lastImportedAt DateTime? @map("last_imported_at")
   createdAt      DateTime  @default(now()) @map("created_at")

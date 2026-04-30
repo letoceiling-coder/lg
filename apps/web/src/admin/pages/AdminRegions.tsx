@@ -10,6 +10,8 @@ type FeedRegion = {
   name: string;
   baseUrl: string | null;
   publicSiteUrl: string | null;
+  mapCenterLat: number | string | null;
+  mapCenterLng: number | string | null;
   isEnabled: boolean;
   lastImportedAt: string | null;
 };
@@ -51,6 +53,8 @@ export default function AdminRegions() {
   const [newName, setNewName] = useState('');
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [newPublicSiteUrl, setNewPublicSiteUrl] = useState('');
+  const [newMapCenterLat, setNewMapCenterLat] = useState('');
+  const [newMapCenterLng, setNewMapCenterLng] = useState('');
   const [newEnabled, setNewEnabled] = useState(true);
   const [probeByRegion, setProbeByRegion] = useState<Record<number, FeedProbeResult | null>>({});
   const [probingRegionId, setProbingRegionId] = useState<number | null>(null);
@@ -80,6 +84,8 @@ export default function AdminRegions() {
         name: newName.trim(),
         baseUrl: newBaseUrl.trim() || null,
         publicSiteUrl: newPublicSiteUrl.trim() || null,
+        mapCenterLat: newMapCenterLat.trim() ? Number(newMapCenterLat.trim()) : null,
+        mapCenterLng: newMapCenterLng.trim() ? Number(newMapCenterLng.trim()) : null,
         isEnabled: newEnabled,
       }),
     onSuccess: () => {
@@ -89,6 +95,8 @@ export default function AdminRegions() {
       setNewName('');
       setNewBaseUrl('');
       setNewPublicSiteUrl('');
+      setNewMapCenterLat('');
+      setNewMapCenterLng('');
       setNewEnabled(true);
     },
   });
@@ -200,6 +208,32 @@ export default function AdminRegions() {
               disabled={!canManage}
             />
           </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Центр карты, широта
+            </label>
+            <input
+              className="w-full border rounded-lg px-2 py-2 bg-background text-sm"
+              inputMode="decimal"
+              value={newMapCenterLat}
+              onChange={(e) => setNewMapCenterLat(e.target.value)}
+              placeholder="50.595414"
+              disabled={!canManage}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Центр карты, долгота
+            </label>
+            <input
+              className="w-full border rounded-lg px-2 py-2 bg-background text-sm"
+              inputMode="decimal"
+              value={newMapCenterLng}
+              onChange={(e) => setNewMapCenterLng(e.target.value)}
+              placeholder="36.587277"
+              disabled={!canManage}
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -238,6 +272,7 @@ export default function AdminRegions() {
               <th className="text-left p-3 font-medium">Название</th>
               <th className="text-left p-3 font-medium">URL фида</th>
               <th className="text-left p-3 font-medium">Публичный URL</th>
+              <th className="text-left p-3 font-medium whitespace-nowrap">Центр карты</th>
               <th className="text-left p-3 font-medium whitespace-nowrap">Последний импорт</th>
               <th className="text-center p-3 font-medium w-28">Витрина</th>
               <th className="text-right p-3 font-medium w-24"> </th>
@@ -289,6 +324,42 @@ export default function AdminRegions() {
                         }))
                       }
                     />
+                  </td>
+                  <td className="p-3">
+                    <div className="grid grid-cols-1 gap-1 min-w-28">
+                      <input
+                        className="w-full border rounded-lg px-2 py-1.5 bg-background text-xs"
+                        inputMode="decimal"
+                        value={d.mapCenterLat ?? ''}
+                        placeholder="lat"
+                        disabled={!canManage}
+                        onChange={(e) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            [r.id]: {
+                              ...prev[r.id],
+                              mapCenterLat: e.target.value === '' ? null : e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                      <input
+                        className="w-full border rounded-lg px-2 py-1.5 bg-background text-xs"
+                        inputMode="decimal"
+                        value={d.mapCenterLng ?? ''}
+                        placeholder="lng"
+                        disabled={!canManage}
+                        onChange={(e) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            [r.id]: {
+                              ...prev[r.id],
+                              mapCenterLng: e.target.value === '' ? null : e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
                   </td>
                   <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                     {formatDateTime(r.lastImportedAt)}

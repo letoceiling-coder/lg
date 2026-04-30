@@ -6,13 +6,13 @@ import MapSearch from '@/redesign/components/MapSearch';
 import ListingsMapSearch, { type ListingMapItem } from '@/redesign/components/ListingsMapSearch';
 import FilterSidebar from '@/redesign/components/FilterSidebar';
 import { apiGet } from '@/lib/api';
-import { defaultFilters, type CatalogFilters, type ObjectType } from '@/redesign/data/types';
+import { defaultFilters, type CatalogFilters, type MarketType, type ObjectType } from '@/redesign/data/types';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
+import { useDefaultRegionId, type RegionRow } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
-import { formatPrice } from '@/redesign/data/mock-data';
+import { formatPrice, formatListingPriceFromApi } from '@/redesign/data/mock-data';
 import { cn } from '@/lib/utils';
 
 const PER_PAGE = 200;
@@ -47,6 +47,23 @@ function getListingPhoto(l: any): string | null {
   return null;
 }
 
+function regionCenterFromRow(region?: RegionRow): [number, number] | null {
+  const lat = Number(region?.mapCenterLat);
+  const lng = Number(region?.mapCenterLng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+}
+
+function fallbackCoords(center: [number, number] | null, index: number): [number, number] | null {
+  if (!center) return null;
+  const ring = Math.floor(index / 12) + 1;
+  const angle = (index % 12) * (Math.PI / 6);
+  const radius = 0.018 * ring;
+  return [
+    center[0] + Math.sin(angle) * radius,
+    center[1] + Math.cos(angle) * radius,
+  ];
+}
+
 const RedesignMap = () => {
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState<CatalogFilters>({ ...defaultFilters });
@@ -60,11 +77,15 @@ const RedesignMap = () => {
   const geoLng = searchParams.get('geo_lng');
   const geoRadius = searchParams.get('geo_radius_m');
 
-  const { data: defaultRegionId, setStoredRegionId, isLoading: regionLoading } = useDefaultRegionId();
+  const { data: defaultRegionId, rows: regionRows, setStoredRegionId, isLoading: regionLoading } = useDefaultRegionId();
   const urlRegionIdRaw = searchParams.get('region_id');
   const urlRegionId = urlRegionIdRaw ? parseInt(urlRegionIdRaw, 10) : NaN;
   const regionId =
     Number.isFinite(urlRegionId) && urlRegionId > 0 ? urlRegionId : defaultRegionId;
+  const regionCenter = useMemo(
+    () => regionCenterFromRow(regionRows?.find((r) => r.id === regionId)),
+    [regionId, regionRows],
+  );
 
   useEffect(() => {
     if (Number.isFinite(urlRegionId) && urlRegionId > 0) {
@@ -72,13 +93,22 @@ const RedesignMap = () => {
     }
   }, [urlRegionId, setStoredRegionId]);
 
-  // Sync objectType from URL if provided
-  const urlObjectType = searchParams.get('object_type') as ObjectType | null;
+  // Sync catalog filters from URL if provided
+  const urlObjectType = (searchParams.get('object_type') ?? searchParams.get('type')) as ObjectType | null;
+  const urlMarket = searchParams.get('market') as MarketType | null;
+  const urlSearch = searchParams.get('search') ?? '';
   useEffect(() => {
-    if (urlObjectType && urlObjectType !== filters.objectType) {
-      setFilters((prev) => ({ ...prev, objectType: urlObjectType }));
+    const validType = urlObjectType && ['apartments', 'houses', 'land', 'commercial'].includes(urlObjectType);
+    const validMarket = urlMarket && ['all', 'new', 'secondary'].includes(urlMarket);
+    if (validType || validMarket || urlSearch) {
+      setFilters((prev) => ({
+        ...prev,
+        ...(validType ? { objectType: urlObjectType as ObjectType } : {}),
+        ...(validMarket ? { marketType: urlMarket as MarketType } : {}),
+        ...(urlSearch ? { search: urlSearch } : {}),
+      }));
     }
-  }, [urlObjectType]);
+  }, [urlObjectType, urlMarket, urlSearch]);
 
   const deferredSearch = useDeferredValue(filters.search);
   const objectType = filters.objectType;
@@ -222,19 +252,26 @@ const RedesignMap = () => {
   });
 
   const listingItems = useMemo<ListingMapItem[]>(() => {
+    const useApproximateCoords = objectType === 'apartments' && filters.marketType === 'secondary';
     return (listingsQuery.data?.data ?? [])
-      .filter((l: any) => l.lat != null && l.lng != null)
-      .map((l: any) => ({
-        id: l.id,
-        lat: l.lat,
-        lng: l.lng,
-        price: l.price,
-        title: l.title ?? null,
-        kind: l.kind,
-        address: l.address ?? null,
-        photoUrl: getListingPhoto(l),
-      }));
-  }, [listingsQuery.data]);
+      .map((l: any, index: number) => {
+        const fallback = useApproximateCoords ? fallbackCoords(regionCenter, index) : null;
+        const lat = l.lat ?? fallback?.[0] ?? null;
+        const lng = l.lng ?? fallback?.[1] ?? null;
+        if (lat == null || lng == null) return null;
+        return {
+          id: l.id,
+          lat,
+          lng,
+          price: l.price,
+          title: l.title ?? null,
+          kind: l.kind,
+          address: l.address ?? null,
+          photoUrl: getListingPhoto(l),
+        };
+      })
+      .filter((l): l is ListingMapItem => l != null);
+  }, [filters.marketType, listingsQuery.data, objectType, regionCenter]);
 
   // Decide what to show on map: blocks (for new-build apartments) or individual listings
   const useBlocksMap = useBlocksForApartments && blocks.length > 0;
@@ -297,6 +334,7 @@ const RedesignMap = () => {
                 <MapSearch
                   complexes={blocks}
                   regionId={regionId}
+                  regionCenter={regionCenter}
                   activeSlug={activeBlock}
                   onSelect={setActiveBlock}
                   height="100%"
@@ -306,6 +344,7 @@ const RedesignMap = () => {
                 <ListingsMapSearch
                   listings={listingItems}
                   regionId={regionId}
+                  regionCenter={regionCenter}
                   activeId={activeListing}
                   onSelect={setActiveListing}
                   height="100%"
@@ -405,7 +444,7 @@ const RedesignMap = () => {
                           <p className="text-[10px] text-muted-foreground truncate mt-0.5">{l.address}</p>
                         )}
                         <p className="text-[11px] font-semibold text-primary mt-0.5">
-                          {l.price ? `${parseFloat(String(l.price)).toLocaleString('ru-RU')} ₽` : 'Цена по запросу'}
+                          {formatListingPriceFromApi(l.price)}
                         </p>
                       </div>
                     </button>

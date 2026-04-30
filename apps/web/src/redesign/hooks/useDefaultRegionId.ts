@@ -8,6 +8,8 @@ export type RegionRow = {
   name?: string;
   baseUrl?: string | null;
   publicSiteUrl?: string | null;
+  mapCenterLat?: number | string | null;
+  mapCenterLng?: number | string | null;
   lastImportedAt?: string | null;
 };
 
