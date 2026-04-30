@@ -17,6 +17,8 @@ import {
   Trees,
   Building as BuildingIcon,
   ParkingSquare,
+  GitCompare,
+  FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
@@ -30,7 +32,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import ListingLocationMap from '@/redesign/components/ListingLocationMap';
 import { useFavorites } from '@/shared/hooks/useFavorites';
 import { shareCurrentPage } from '@/lib/share-page';
-import { toast } from '@/components/ui/sonner';
+import { useCompare } from '@/shared/hooks/useCompare';
 
 type ApiListingDetailUniversal = {
   id: number;
@@ -256,6 +258,10 @@ function buildAttributes(l: ApiListingDetailUniversal): { label: string; value: 
   return out;
 }
 
+function cmpListingKey(listingId: number): string {
+  return `l:${listingId}`;
+}
+
 function pickAddress(l: ApiListingDetailUniversal): string | null {
   return (
     l.address ||
@@ -271,6 +277,7 @@ const RedesignListingDetail = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { isListingFavorite, toggleListing } = useFavorites();
+  const { isCompared, toggle: toggleCompare, count: compareCount } = useCompare();
 
   const listingId = useMemo(() => {
     const n = Number.parseInt(idParam ?? '', 10);
@@ -355,6 +362,18 @@ const RedesignListingDetail = () => {
     void shareCurrentPage({ title });
   };
 
+  const cmpKey = cmpListingKey(data.id);
+  const inCompare = isCompared(cmpKey);
+  const handleCompare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!inCompare && compareCount >= 3) {
+      toast.error('В сравнении не более 3 объектов');
+      return;
+    }
+    toggleCompare(cmpKey);
+  };
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <RedesignHeader />
@@ -379,14 +398,6 @@ const RedesignListingDetail = () => {
             ) : null}
             <span>/</span>
             <span className="text-foreground font-medium">{title}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={handleFavorite}>
-              <Heart className={cn('w-4 h-4', liked ? 'fill-destructive text-destructive' : 'text-muted-foreground')} />
-            </Button>
-            <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={handleShare}>
-              <Share2 className="w-4 h-4" />
-            </Button>
           </div>
         </div>
 
@@ -429,6 +440,29 @@ const RedesignListingDetail = () => {
                 >
                   {statusLabel}
                 </span>
+                <div className="absolute top-3 right-3 z-20 flex items-center gap-0.5 rounded-xl border border-border/70 bg-background/90 backdrop-blur-sm px-1 py-1 shadow-sm">
+                  <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={handleFavorite}>
+                    <Heart className={cn('w-4 h-4', liked ? 'fill-destructive text-destructive' : 'text-muted-foreground')} />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    title={inCompare ? 'Убрать из сравнения' : 'Добавить в сравнение'}
+                    onClick={handleCompare}
+                  >
+                    <GitCompare className={cn('w-4 h-4', inCompare ? 'text-primary' : 'text-muted-foreground')} />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Презентация (PDF)" asChild>
+                    <Link to={`/presentation/listing/${data.id}`}>
+                      <FileText className="w-4 h-4" />
+                    </Link>
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Поделиться" onClick={handleShare}>
+                    <Share2 className="w-4 h-4" />
+                  </Button>
+                </div>
                 {photos.length > 1 ? (
                   <>
                     <button

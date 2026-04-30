@@ -138,15 +138,16 @@ const RedesignApartment = () => {
     void toggleListing(listingId);
   };
 
-  const inCompare = isCompared(complex.slug);
+  const listingCompareKey = listingId != null ? `l:${listingId}` : complex.slug;
+  const inCompare = isCompared(listingCompareKey);
   const handleCompare = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!inCompare && compareCount >= 3) {
-      toast.error('В сравнении не более 3 ЖК');
+      toast.error('В сравнении не более 3 объектов');
       return;
     }
-    toggleCompare(complex.slug);
+    toggleCompare(listingCompareKey);
   };
 
   const handleShare = (e: React.MouseEvent) => {
@@ -214,16 +215,31 @@ const RedesignApartment = () => {
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0"
-                    title={inCompare ? 'Убрать ЖК из сравнения' : 'Добавить ЖК в сравнение'}
+                    title={
+                      listingId != null
+                        ? inCompare
+                          ? 'Убрать объект из сравнения'
+                          : 'Добавить объект в сравнение'
+                        : inCompare
+                          ? 'Убрать ЖК из сравнения'
+                          : 'Добавить ЖК в сравнение'
+                    }
                     onClick={handleCompare}
                   >
                     <GitCompare className={cn('w-4 h-4', inCompare ? 'text-primary' : 'text-muted-foreground')} />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 px-2" title="Презентация ЖК" asChild>
-                    <Link to={`/presentation/${complex.slug}`}>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 px-2" title="Презентация объекта (фото и планы)" asChild>
+                    <Link to={listingId != null ? `/presentation/listing/${listingId}` : `/presentation/${complex.slug}`}>
                       <FileText className="w-4 h-4" />
                     </Link>
                   </Button>
+                  {listingId != null ? (
+                    <Button variant="ghost" size="sm" className="h-8 w-8 px-2" title="Презентация всего ЖК" asChild>
+                      <Link to={`/presentation/${complex.slug}`}>
+                        <Building2 className="w-4 h-4" />
+                      </Link>
+                    </Button>
+                  ) : null}
                   <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Поделиться" onClick={handleShare}>
                     <Share2 className="w-4 h-4" />
                   </Button>

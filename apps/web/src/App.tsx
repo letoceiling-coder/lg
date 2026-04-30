@@ -46,6 +46,7 @@ const Belgorod = lazy(() => import("./pages/Belgorod"));
 
 // Detail / utility pages
 const Presentation = lazyWithReload(() => import("./pages/Presentation"));
+const ListingPresentation = lazyWithReload(() => import("./pages/ListingPresentation"));
 const Compare = lazy(() => import("./pages/Compare"));
 const Favorites = lazyWithReload(() => import("./pages/Favorites"));
 const Contacts = lazy(() => import("./pages/Contacts"));
@@ -130,6 +131,7 @@ const AppRoutes = () => (
     <Route path="/complex/:slug" element={<RedesignComplex />} />
     <Route path="/apartment/:id" element={<RedesignApartment />} />
     <Route path="/listing/:id" element={<RedesignListingDetail />} />
+    <Route path="/presentation/listing/:listingId" element={<ListingPresentation />} />
     <Route path="/presentation/:slug" element={<Presentation />} />
     <Route path="/layouts/:complex" element={<RedesignLayouts />} />
     <Route path="/map" element={<RedesignMap />} />

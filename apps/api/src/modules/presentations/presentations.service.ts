@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
+import { ListingKind } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type PresentationPayload = {
@@ -17,6 +18,37 @@ export type PresentationPayload = {
   roomMix: Array<{ label: string; count: number; priceFrom: number | null }>;
   generatedAt: string;
 };
+
+export type ListingPresentationPayload = {
+  listingId: number;
+  kind: ListingKind;
+  kindLabel: string;
+  title: string;
+  description: string | null;
+  price: number | null;
+  address: string | null;
+  region: string | null;
+  district: string | null;
+  builder: string | null;
+  blockName: string | null;
+  /** Для кнопки «ЖК»: ссылка на /complex/[slug]. */
+  blockSlug: string | null;
+  subtitle: string | null;
+  photoUrls: string[];
+  planUrls: string[];
+  generatedAt: string;
+};
+
+function listingKindLabel(kind: ListingKind): string {
+  const m: Record<ListingKind, string> = {
+    APARTMENT: 'Квартира',
+    HOUSE: 'Дом',
+    LAND: 'Участок',
+    COMMERCIAL: 'Коммерция',
+    PARKING: 'Машиноместо',
+  };
+  return m[kind] ?? String(kind);
+}
 
 function decodeHtmlEntities(input: string): string {
   return input
@@ -62,6 +94,23 @@ function roomLabel(raw: string | null | undefined): string {
   const m = t.match(/\b(\d)\b/);
   if (m) return `${m[1]}-комн.`;
   return 'Другие';
+}
+
+function extraPhotoUrlsFromJson(j: unknown): string[] {
+  if (!Array.isArray(j)) return [];
+  return j.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+}
+
+function dedupeUrls(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    const k = u.trim();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
+  }
+  return out;
 }
 
 @Injectable()
@@ -223,6 +272,233 @@ export class PresentationsService {
 
     doc.moveDown();
     doc.font('Regular').fontSize(9).fillColor('#888888').text('Сформировано: ' + new Date(p.generatedAt).toLocaleString('ru-RU'));
+    doc.end();
+
+    return await new Promise<Buffer>((resolve, reject) => {
+      doc.once('end', () => resolve(Buffer.concat(chunks)));
+      doc.once('error', reject);
+    });
+  }
+
+  private siteBase(): string {
+    return (process.env.PUBLIC_SITE_URL ?? 'https://livegrid.ru').replace(/\/+$/, '');
+  }
+
+  private toAbsoluteUrl(url: string): string {
+    const u = url.trim();
+    if (!u) return '';
+    if (/^https?:\/\//i.test(u)) return u;
+    return `${this.siteBase()}${u.startsWith('/') ? '' : '/'}${u}`;
+  }
+
+  private async fetchImageBuffer(url: string): Promise<Buffer | null> {
+    try {
+      const abs = this.toAbsoluteUrl(url);
+      const res = await fetch(abs, { redirect: 'follow' });
+      if (!res.ok) return null;
+      return Buffer.from(await res.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+
+  async getListingPresentation(listingId: number): Promise<ListingPresentationPayload> {
+    const row = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      include: {
+        apartment: { include: { roomType: true, finishing: true } },
+        house: true,
+        land: true,
+        commercial: true,
+        parking: true,
+        region: true,
+        district: true,
+        builder: true,
+        block: true,
+      },
+    });
+    if (!row) throw new NotFoundException('Listing not found');
+    if (!row.isPublished || row.status !== 'ACTIVE') {
+      throw new NotFoundException('Listing not available');
+    }
+
+    const media = await this.prisma.mediaFile.findMany({
+      where: { entityType: 'listing', entityId: listingId },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    });
+
+    const rawPhotos: string[] = [];
+    const rawPlans: string[] = [];
+    for (const m of media) {
+      const u = m.url?.trim();
+      if (!u) continue;
+      if (m.kind === 'PLAN') rawPlans.push(u);
+      else if (m.kind === 'PHOTO') rawPhotos.push(u);
+    }
+
+    if (row.kind === 'APARTMENT' && row.apartment) {
+      const a = row.apartment;
+      if (a.planUrl?.trim()) rawPlans.push(a.planUrl.trim());
+      if (a.finishingPhotoUrl?.trim()) rawPhotos.push(a.finishingPhotoUrl.trim());
+      rawPhotos.push(...extraPhotoUrlsFromJson(a.extraPhotoUrls));
+    }
+    if (row.kind === 'HOUSE' && row.house) {
+      const h = row.house;
+      if (h.photoUrl?.trim()) rawPhotos.push(h.photoUrl.trim());
+      rawPhotos.push(...extraPhotoUrlsFromJson(h.extraPhotoUrls));
+    }
+    if (row.kind === 'LAND' && row.land) {
+      const land = row.land;
+      if (land.photoUrl?.trim()) rawPhotos.push(land.photoUrl.trim());
+      rawPhotos.push(...extraPhotoUrlsFromJson(land.extraPhotoUrls));
+    }
+
+    const planUrls = dedupeUrls(rawPlans);
+    const photoUrls = dedupeUrls(rawPhotos.filter((u) => !planUrls.includes(u)));
+
+    const kl = listingKindLabel(row.kind);
+    let subtitle: string | null = null;
+    switch (row.kind) {
+      case 'APARTMENT': {
+        const a = row.apartment;
+        if (a) {
+          const parts: string[] = [];
+          if (a.roomType?.name?.trim()) parts.push(a.roomType.name.trim());
+          if (a.areaTotal != null && Number(a.areaTotal) > 0) parts.push(`${Number(a.areaTotal)} м²`);
+          if (a.floor != null)
+            parts.push(`этаж ${a.floor}${a.floorsTotal != null ? ` из ${a.floorsTotal}` : ''}`);
+          subtitle = parts.length ? parts.join(' · ') : null;
+        }
+        break;
+      }
+      case 'HOUSE': {
+        const h = row.house;
+        if (h?.areaTotal != null && Number(h.areaTotal) > 0) subtitle = `${Number(h.areaTotal)} м²`;
+        break;
+      }
+      case 'LAND': {
+        const land = row.land;
+        if (land?.areaSotki != null && Number(land.areaSotki) > 0)
+          subtitle = `${Number(land.areaSotki)} сот.`;
+        break;
+      }
+      case 'COMMERCIAL': {
+        const c = row.commercial;
+        if (c?.area != null && Number(c.area) > 0) subtitle = `${Number(c.area)} м²`;
+        break;
+      }
+      case 'PARKING': {
+        const pk = row.parking;
+        if (pk?.area != null && Number(pk.area) > 0) subtitle = `${Number(pk.area)} м²`;
+        break;
+      }
+      default:
+        break;
+    }
+
+    const titleFallback = subtitle ? `${kl} · ${subtitle}` : kl;
+    const title = row.title?.trim() || titleFallback;
+
+    const price =
+      row.price != null && Number.isFinite(Number(row.price)) ? Number(row.price) : null;
+
+    return {
+      listingId: row.id,
+      kind: row.kind,
+      kindLabel: kl,
+      title,
+      description: normalizeDescription(row.description),
+      price,
+      address: row.address?.trim() ?? null,
+      region: row.region?.name ?? null,
+      district: row.district?.name ?? null,
+      builder: row.builder?.name ?? null,
+      blockName: row.block?.name ?? null,
+      blockSlug: row.block?.slug ?? null,
+      subtitle,
+      photoUrls,
+      planUrls,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async generateListingPdf(listingId: number): Promise<Buffer> {
+    const FONT_REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+    const FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+    const p = await this.getListingPresentation(listingId);
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ size: 'A4', margin: 48 });
+    doc.registerFont('Regular', FONT_REGULAR);
+    doc.registerFont('Bold', FONT_BOLD);
+    doc.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+
+    doc.font('Bold').fontSize(20).fillColor('#000000').text(p.title, { align: 'left' });
+    doc.moveDown(0.4);
+    doc.font('Regular').fontSize(11).fillColor('#666666').text('Презентация объекта', { align: 'left' });
+    doc.moveDown(0.8);
+    doc.font('Regular').fontSize(11).fillColor('#000000');
+
+    const lines: string[] = [];
+    lines.push(`Тип: ${p.kindLabel}`);
+    if (p.subtitle) lines.push(`Параметры: ${p.subtitle}`);
+    if (p.price != null)
+      lines.push(`Цена: ${new Intl.NumberFormat('ru-RU').format(Math.round(p.price))} ₽`);
+    if (p.region) lines.push(`Регион: ${p.region}`);
+    if (p.district) lines.push(`Район: ${p.district}`);
+    if (p.address) lines.push(`Адрес: ${p.address}`);
+    if (p.builder) lines.push(`Продавец / застройщик: ${p.builder}`);
+    if (p.blockName) lines.push(`ЖК / комплекс: ${p.blockName}`);
+
+    for (const ln of lines) doc.font('Regular').fontSize(11).fillColor('#1f1f1f').text(ln);
+
+    if (p.description?.trim()) {
+      doc.moveDown();
+      doc.font('Bold').fontSize(11).fillColor('#000000').text('Описание');
+      doc.moveDown(0.25);
+      doc.font('Regular').fontSize(10).fillColor('#232323').text(p.description.trim(), { align: 'left' });
+    }
+
+    doc.moveDown();
+    doc.font('Regular').fontSize(9).fillColor('#888888').text('Документ сформатирован: ' + new Date(p.generatedAt).toLocaleString('ru-RU'));
+
+    const fit = { fit: [500, 700] as [number, number] };
+
+    const plans = p.planUrls.slice(0, 10);
+    for (let i = 0; i < plans.length; i++) {
+      const url = plans[i];
+      const buf = await this.fetchImageBuffer(url);
+      doc.addPage();
+      doc.font('Bold').fontSize(13).fillColor('#000000').text(`Планировка (${i + 1}/${plans.length})`);
+      doc.moveDown(0.4);
+      if (buf) {
+        try {
+          doc.image(buf, fit);
+        } catch {
+          doc.font('Regular').fontSize(10).text('Не удалось встроить изображение.');
+        }
+      } else {
+        doc.font('Regular').fontSize(10).text('Изображение недоступно по ссылке.');
+      }
+    }
+
+    const photos = p.photoUrls.slice(0, 14);
+    for (let i = 0; i < photos.length; i++) {
+      const url = photos[i];
+      const buf = await this.fetchImageBuffer(url);
+      doc.addPage();
+      doc.font('Bold').fontSize(13).fillColor('#000000').text(`Фото (${i + 1}/${photos.length})`);
+      doc.moveDown(0.4);
+      if (buf) {
+        try {
+          doc.image(buf, fit);
+        } catch {
+          doc.font('Regular').fontSize(10).text('Не удалось встроить изображение.');
+        }
+      } else {
+        doc.font('Regular').fontSize(10).text('Изображение недоступно по ссылке.');
+      }
+    }
+
     doc.end();
 
     return await new Promise<Buffer>((resolve, reject) => {

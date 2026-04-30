@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react';
 const STORAGE_KEY = 'lg_compare';
 const MAX_ITEMS = 3;
 
-/** В массиве хранятся slug ЖК из каталога (или числовой id как строка — тоже работает с GET /blocks/:id). */
+/** В localStorage: slug ЖК ИЛИ ключ объявления `l:<listingId>`. */
 
 function readStorage(): string[] {
   try {
