@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { useDefaultRegionId, type RegionRow } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
 import { formatPrice, formatListingPriceFromApi } from '@/redesign/data/mock-data';
+import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
 import { cn } from '@/lib/utils';
 
 const PER_PAGE = 200;
@@ -39,12 +40,28 @@ const statusMap: Record<string, string> = {
 };
 
 function getListingPhoto(l: any): string | null {
-  if (l.apartment?.extraPhotoUrls?.length) return l.apartment.extraPhotoUrls[0];
-  if (l.house?.photoUrl) return l.house.photoUrl;
-  if (l.house?.extraPhotoUrls?.length) return l.house.extraPhotoUrls[0];
-  if (l.land?.photoUrl) return l.land.photoUrl;
-  if (l.commercial?.photoUrl) return l.commercial.photoUrl;
-  return null;
+  const tryUrl = (raw: unknown): string | null => {
+    if (typeof raw === 'string' && raw.trim()) return raw;
+    return null;
+  };
+  const fromArray = (arr: unknown): string | null => {
+    if (!Array.isArray(arr)) return null;
+    for (const it of arr) {
+      const u = tryUrl(it);
+      if (u) return u;
+    }
+    return null;
+  };
+  return (
+    tryUrl(l.house?.photoUrl) ??
+    fromArray(l.house?.extraPhotoUrls) ??
+    tryUrl(l.land?.photoUrl) ??
+    fromArray(l.land?.extraPhotoUrls) ??
+    tryUrl(l.apartment?.finishingPhotoUrl) ??
+    fromArray(l.apartment?.extraPhotoUrls) ??
+    tryUrl(l.apartment?.planUrl) ??
+    null
+  );
 }
 
 function regionCenterFromRow(region?: RegionRow): [number, number] | null {
@@ -426,16 +443,25 @@ const RedesignMap = () => {
                           : 'border-border/60 bg-background hover:bg-muted/60',
                       )}
                     >
-                      {l.photoUrl ? (
+                      <div className="flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                         <img
-                          src={l.photoUrl}
+                          src={l.photoUrl || LIVEGRID_LOGO_SRC}
                           alt=""
-                          className="w-14 h-11 rounded-md object-cover shrink-0 bg-muted"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          className={
+                            l.photoUrl
+                              ? 'h-full w-full object-cover'
+                              : 'max-h-[70%] max-w-[70%] object-contain opacity-45'
+                          }
+                          onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            if (el.getAttribute('data-lg-fallback')) return;
+                            el.setAttribute('data-lg-fallback', '1');
+                            el.onerror = null;
+                            el.src = LIVEGRID_LOGO_SRC;
+                            el.className = 'max-h-[70%] max-w-[70%] object-contain opacity-45';
+                          }}
                         />
-                      ) : (
-                        <div className="w-14 h-11 rounded-md bg-muted shrink-0" />
-                      )}
+                      </div>
                       <div className="min-w-0 flex-1 py-0.5">
                         <p className="font-medium text-xs leading-snug line-clamp-2">
                           {l.title ?? l.address ?? `Объект #${l.id}`}
