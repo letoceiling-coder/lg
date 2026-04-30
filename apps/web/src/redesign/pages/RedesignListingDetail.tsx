@@ -403,7 +403,8 @@ const RedesignListingDetail = () => {
                       className="max-h-[48%] max-w-[58%] object-contain opacity-45"
                     />
                   </div>
-                ) : heroIsPlan ? (
+                ) : photos[photoIdx] &&
+                  isListingPlanImage(data, photos[photoIdx]!) ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-muted/40 p-6 sm:p-8 md:p-10">
                     <img
                       src={photos[photoIdx]!}
