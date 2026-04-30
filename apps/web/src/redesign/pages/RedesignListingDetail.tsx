@@ -509,7 +509,7 @@ const RedesignListingDetail = () => {
               )}
 
               <div className="border-t border-border pt-5 mb-5">
-                <p className="text-3xl font-bold">{price > 0 ? formatPrice(price) : '—'}</p>
+                <p className="text-3xl font-bold">{price > 0 ? formatPrice(price) : 'Цена по запросу'}</p>
                 {data.kind === 'APARTMENT' && data.apartment?.areaTotal && num(data.apartment.areaTotal) > 0 && price > 0 ? (
                   <p className="text-sm text-muted-foreground mt-1">
                     {Math.round(price / num(data.apartment.areaTotal)).toLocaleString('ru-RU')} ₽/м²

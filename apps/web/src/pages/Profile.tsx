@@ -83,6 +83,7 @@ const Profile = () => {
   const { count: favoritesCount } = useFavorites();
   const { count: compareCount } = useCompare();
   const qc = useQueryClient();
+  const isStaff = ['agent', 'manager', 'editor', 'admin'].includes(user.role);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [linkEmailErr, setLinkEmailErr] = useState<string | null>(null);
@@ -202,6 +203,13 @@ const Profile = () => {
             <Button variant="outline" size="sm" className="w-full" disabled>
               Редактировать
             </Button>
+            {isStaff ? (
+              <Button asChild size="sm" className="w-full mt-3">
+                <Link to={user.role === 'agent' ? '/admin/listings' : user.role === 'manager' ? '/admin/requests' : '/admin'}>
+                  Рабочий кабинет
+                </Link>
+              </Button>
+            ) : null}
           </div>
           <div className="space-y-6">
             <div className="bg-card border border-border rounded-xl p-6">

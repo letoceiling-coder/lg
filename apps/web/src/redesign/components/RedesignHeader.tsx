@@ -134,9 +134,6 @@ const RedesignHeader = () => {
             <Link to="/catalog?city=belgorod" className="px-3.5 py-2 text-sm rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50">
               Белгород
             </Link>
-            <Link to="/mortgage" className="px-3.5 py-2 text-sm rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50">
-              Ипотека
-            </Link>
             <Link to="#contacts" className="px-3.5 py-2 text-sm rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50">
               Контакты
             </Link>
@@ -279,7 +276,6 @@ const RedesignHeader = () => {
             ))}
             <div className="h-px bg-border my-2" />
             <Link to="/catalog?city=belgorod" onClick={() => setMenuOpen(false)} className="py-3 px-4 rounded-xl text-sm font-medium hover:bg-accent transition-colors">Белгород</Link>
-            <Link to="/mortgage" onClick={() => setMenuOpen(false)} className="py-3 px-4 rounded-xl text-sm font-medium hover:bg-accent transition-colors">Ипотека</Link>
             <Link to="#contacts" onClick={() => setMenuOpen(false)} className="py-3 px-4 rounded-xl text-sm font-medium hover:bg-accent transition-colors">Контакты</Link>
           </nav>
           <div className="mt-auto p-4 border-t border-border space-y-3">

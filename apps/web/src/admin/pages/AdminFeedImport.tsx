@@ -117,6 +117,7 @@ export default function AdminFeedImport() {
 
   const isRunning = progress?.step !== 'idle' && progress?.step !== undefined && progress?.percent < 100;
   const rows = history?.data ?? [];
+  const latest = rows[0];
 
   return (
     <div className="p-6 max-w-5xl">
@@ -217,6 +218,33 @@ export default function AdminFeedImport() {
         </div>
       )}
 
+      {latest ? (
+        <div className="bg-background border rounded-2xl p-4 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">Последний импорт</p>
+            <p className="font-medium">
+              {new Date(latest.startedAt).toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Регион / статус</p>
+            <p className="font-medium">{latest.regionCode.toUpperCase()} · {statusLabel[latest.status] ?? latest.status}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Лог ошибки</p>
+            <p className={latest.errorMessage ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+              {latest.errorMessage ?? 'Ошибок нет'}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* History */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold">История импортов</h2>
@@ -248,7 +276,8 @@ export default function AdminFeedImport() {
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Статус</th>
                   <th className="px-4 py-3 font-medium">Регион</th>
-                  <th className="px-4 py-3 font-medium">Дата</th>
+                  <th className="px-4 py-3 font-medium">Старт</th>
+                  <th className="px-4 py-3 font-medium">Финиш</th>
                   <th className="px-4 py-3 font-medium text-right">ЖК</th>
                   <th className="px-4 py-3 font-medium text-right">Корпуса</th>
                   <th className="px-4 py-3 font-medium text-right">Квартиры</th>
@@ -270,6 +299,11 @@ export default function AdminFeedImport() {
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(r.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {r.finishedAt
+                          ? new Date(r.finishedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                          : '—'}
+                      </td>
                       <td className="px-4 py-3 text-right text-xs">
                         <span className="text-green-600">+{r.blocksCreated}</span> / <span className="text-amber-600">{r.blocksUpdated}</span>
                       </td>
@@ -279,7 +313,7 @@ export default function AdminFeedImport() {
                       <td className="px-4 py-3 text-right text-xs">
                         <span className="text-green-600">+{r.listingsCreated}</span> / <span className="text-amber-600">{r.listingsUpdated}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-destructive max-w-[200px] truncate" title={r.errorMessage ?? ''}>
+                      <td className="px-4 py-3 text-xs text-destructive max-w-[320px] whitespace-pre-wrap break-words" title={r.errorMessage ?? ''}>
                         {r.errorMessage ?? '—'}
                       </td>
                     </tr>

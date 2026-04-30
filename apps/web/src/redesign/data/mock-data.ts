@@ -183,7 +183,7 @@ export const MIN_REASONABLE_PRICE_RUB = 100_000;
  * Большие значения отображаются в миллионах, средние — в тысячах.
  */
 export function formatPrice(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n) || n < MIN_REASONABLE_PRICE_RUB) return '—';
+  if (n == null || !Number.isFinite(n) || n < MIN_REASONABLE_PRICE_RUB) return 'Цена по запросу';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')} млн ₽`;
   return `${Math.round(n / 1000)} тыс ₽`;
 }

@@ -168,7 +168,11 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
               <div className="p-3">
                 <div className="flex justify-between items-start gap-2">
                   <h3 className="font-semibold text-sm truncate">{activeComplex.name}</h3>
-                  <span className="font-bold text-sm text-primary shrink-0">от {formatPrice(activeComplex.priceFrom)}</span>
+                  <span className="font-bold text-sm text-primary shrink-0">
+                    {formatPrice(activeComplex.priceFrom) === 'Цена по запросу'
+                      ? 'Цена по запросу'
+                      : `от ${formatPrice(activeComplex.priceFrom)}`}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
                   <MapPin className="w-3 h-3 shrink-0" />

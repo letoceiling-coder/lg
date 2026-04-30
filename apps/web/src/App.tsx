@@ -27,7 +27,7 @@ function lazyWithReload<T extends React.ComponentType<any>>(
 }
 
 
-import { AuthProvider, useAuthState } from "@/shared/hooks/useAuth";
+import { AuthProvider, useAuth, useAuthState } from "@/shared/hooks/useAuth";
 import { RequireAuth } from "@/shared/components/RequireAuth";
 import SeoRouteMeta from "@/shared/components/SeoRouteMeta";
 
@@ -46,7 +46,6 @@ const Belgorod = lazy(() => import("./pages/Belgorod"));
 
 // Detail / utility pages
 const Presentation = lazyWithReload(() => import("./pages/Presentation"));
-const Mortgage = lazy(() => import("./pages/Mortgage"));
 const Compare = lazy(() => import("./pages/Compare"));
 const Favorites = lazyWithReload(() => import("./pages/Favorites"));
 const Contacts = lazy(() => import("./pages/Contacts"));
@@ -105,6 +104,13 @@ const Loading = () => (
   </div>
 );
 
+const AdminIndexRedirect = () => {
+  const { user } = useAuth();
+  if (user?.role === 'agent') return <Navigate to="/admin/listings" replace />;
+  if (user?.role === 'manager') return <Navigate to="/admin/requests" replace />;
+  return <AdminDashboard />;
+};
+
 const AppRoutes = () => (
   <Routes>
     {/* Main */}
@@ -121,7 +127,7 @@ const AppRoutes = () => (
     <Route path="/presentation/:slug" element={<Presentation />} />
     <Route path="/layouts/:complex" element={<RedesignLayouts />} />
     <Route path="/map" element={<RedesignMap />} />
-    <Route path="/mortgage" element={<Mortgage />} />
+    <Route path="/mortgage" element={<Navigate to="/catalog" replace />} />
     <Route path="/compare" element={<Compare />} />
     <Route path="/favorites" element={<RequireAuth><Favorites /></RequireAuth>} />
     <Route path="/contacts" element={<Contacts />} />
@@ -140,7 +146,7 @@ const AppRoutes = () => (
 
     {/* Admin — protected, requires editor+ role */}
     <Route path="/admin" element={<RequireAuth roles={['admin', 'editor', 'manager', 'agent']}><AdminLayout /></RequireAuth>}>
-      <Route index element={<RequireAuth roles={['admin', 'editor', 'manager']}><AdminDashboard /></RequireAuth>} />
+      <Route index element={<RequireAuth roles={['admin', 'editor', 'manager', 'agent']}><AdminIndexRedirect /></RequireAuth>} />
       <Route path="pages" element={<RequireAuth roles={['admin', 'editor']}><AdminPages /></RequireAuth>} />
       <Route path="page-editor/:slug" element={<RequireAuth roles={['admin', 'editor']}><AdminPageEditor /></RequireAuth>} />
       <Route path="requests" element={<RequireAuth roles={['admin', 'editor', 'manager']}><AdminRequests /></RequireAuth>} />

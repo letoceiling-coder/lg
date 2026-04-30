@@ -346,7 +346,7 @@ const RedesignMap = () => {
                           <p className="font-medium text-xs leading-snug line-clamp-2">{c.name}</p>
                           <p className="text-[10px] text-muted-foreground truncate mt-0.5">{c.district}</p>
                           <p className="text-[11px] font-semibold text-primary mt-0.5">
-                            {c.priceFrom > 0 ? `от ${formatPrice(c.priceFrom)}` : '—'}
+                            {c.priceFrom > 0 ? `от ${formatPrice(c.priceFrom)}` : 'Цена по запросу'}
                           </p>
                         </div>
                       </button>
@@ -392,7 +392,7 @@ const RedesignMap = () => {
                           <p className="text-[10px] text-muted-foreground truncate mt-0.5">{l.address}</p>
                         )}
                         <p className="text-[11px] font-semibold text-primary mt-0.5">
-                          {l.price ? `${parseFloat(String(l.price)).toLocaleString('ru-RU')} ₽` : '—'}
+                          {l.price ? `${parseFloat(String(l.price)).toLocaleString('ru-RU')} ₽` : 'Цена по запросу'}
                         </p>
                       </div>
                     </button>

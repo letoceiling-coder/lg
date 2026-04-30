@@ -1,9 +1,8 @@
 import { useParams, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Calculator, Heart, Share2, GitCompare, FileText } from 'lucide-react';
+import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Heart, Share2, GitCompare, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
 import LeadForm from '@/shared/components/LeadForm';
@@ -24,6 +23,8 @@ function parseNumericListingId(id: string | undefined): number | null {
   if (!Number.isFinite(n) || String(n) !== id) return null;
   return n;
 }
+
+const PLACEHOLDER = '/placeholder.svg';
 
 const RedesignApartment = () => {
   const { id: idParam } = useParams<{ id: string }>();
@@ -86,11 +87,6 @@ const RedesignApartment = () => {
     }
     return similarApiQuery.data ?? [];
   }, [mockResult, similarApiQuery.data]);
-
-  const [showMortgage, setShowMortgage] = useState(false);
-  const [mortgageYears, setMortgageYears] = useState(20);
-  const [mortgageRate, setMortgageRate] = useState(8);
-  const [mortgageDown, setMortgageDown] = useState(20);
 
   const loading = listingId != null && listingQuery.isPending;
   const apiFailed = listingId != null && (listingQuery.isError || (listingQuery.isFetched && !apiPage));
@@ -158,11 +154,6 @@ const RedesignApartment = () => {
     e.preventDefault();
     void shareCurrentPage({ title: `${complex.name} · ${roomLabel}` });
   };
-
-  const loanAmount = apt.price * (1 - mortgageDown / 100);
-  const monthlyRate = mortgageRate / 100 / 12;
-  const months = mortgageYears * 12;
-  const monthlyPayment = Math.round(loanAmount * monthlyRate / (1 - Math.pow(1 + monthlyRate, -months)));
 
   const details = [
     { icon: Layers, label: 'Комнат', value: apt.rooms === 0 ? 'Студия' : `${apt.rooms}` },
@@ -233,7 +224,14 @@ const RedesignApartment = () => {
                     <Share2 className="w-4 h-4" />
                   </Button>
                 </div>
-                <img src={apt.planImage} alt="Планировка" className="max-w-full max-h-full object-contain" />
+                <img
+                  src={apt.planImage || PLACEHOLDER}
+                  alt="Планировка"
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => {
+                    e.currentTarget.src = PLACEHOLDER;
+                  }}
+                />
               </div>
             </div>
 
@@ -243,7 +241,14 @@ const RedesignApartment = () => {
                   <h3 className="font-semibold text-sm">Отделка</h3>
                 </div>
                 <div className="aspect-[4/3] bg-muted/50 flex items-center justify-center p-8">
-                  <img src={apt.finishingImage} alt="Отделка" className="max-w-full max-h-full object-contain" />
+                  <img
+                    src={apt.finishingImage}
+                    alt="Отделка"
+                    className="max-w-full max-h-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.src = PLACEHOLDER;
+                    }}
+                  />
                 </div>
               </div>
             ) : null}
@@ -254,7 +259,14 @@ const RedesignApartment = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {apt.galleryImages.map((src, i) => (
                     <div key={`${src}-${i}`} className="rounded-xl overflow-hidden border border-border bg-muted/30">
-                      <img src={src} alt="" className="w-full h-48 object-cover" />
+                      <img
+                        src={src || PLACEHOLDER}
+                        alt=""
+                        className="w-full h-48 object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = PLACEHOLDER;
+                        }}
+                      />
                     </div>
                   ))}
                 </div>
@@ -270,44 +282,6 @@ const RedesignApartment = () => {
                 {' '}Район: {complex.district}, метро {complex.subway} ({complex.subwayDistance}).
                 {' '}Кухня {apt.kitchenArea} м². Цена за метр: {apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м².
               </p>
-            </div>
-
-            {/* Mortgage calculator */}
-            <div className="rounded-2xl border border-border bg-card p-6">
-              <button className="flex items-center justify-between w-full" onClick={() => setShowMortgage(!showMortgage)}>
-                <h3 className="font-semibold flex items-center gap-2"><Calculator className="w-4 h-4 text-primary" />Ипотечный калькулятор</h3>
-                <span className="text-xs text-muted-foreground">{showMortgage ? 'Скрыть' : 'Развернуть'}</span>
-              </button>
-              {showMortgage && (
-                <div className="mt-5 space-y-5">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Первый взнос</span>
-                      <span className="font-medium">{mortgageDown}% · {formatPrice(Math.round(apt.price * mortgageDown / 100))}</span>
-                    </div>
-                    <Slider value={[mortgageDown]} onValueChange={v => setMortgageDown(v[0])} min={10} max={80} step={5} />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Срок</span>
-                      <span className="font-medium">{mortgageYears} лет</span>
-                    </div>
-                    <Slider value={[mortgageYears]} onValueChange={v => setMortgageYears(v[0])} min={1} max={30} step={1} />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Ставка</span>
-                      <span className="font-medium">{mortgageRate}%</span>
-                    </div>
-                    <Slider value={[mortgageRate]} onValueChange={v => setMortgageRate(v[0])} min={1} max={25} step={0.5} />
-                  </div>
-                  <div className="border-t border-border pt-4">
-                    <p className="text-xs text-muted-foreground mb-1">Ежемесячный платёж</p>
-                    <p className="text-2xl font-bold">{monthlyPayment.toLocaleString('ru-RU')} ₽/мес</p>
-                    <p className="text-xs text-muted-foreground mt-1">Сумма кредита: {formatPrice(Math.round(loanAmount))}</p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -327,7 +301,6 @@ const RedesignApartment = () => {
               <div className="border-t border-border pt-5 mb-5">
                 <p className="text-3xl font-bold">{formatPrice(apt.price)}</p>
                 <p className="text-sm text-muted-foreground mt-1">{apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м²</p>
-                <p className="text-xs text-muted-foreground mt-0.5">~{monthlyPayment.toLocaleString('ru-RU')} ₽/мес в ипотеку</p>
               </div>
 
               <div className="space-y-3">
@@ -358,9 +331,6 @@ const RedesignApartment = () => {
                 onClick={() => toast.info('Оставьте заявку ниже — менеджер согласует время просмотра')}
               >
                 <MessageCircle className="w-4 h-4 mr-2" /> Записаться на просмотр
-              </Button>
-              <Button variant="secondary" className="w-full h-12" onClick={() => setShowMortgage(true)}>
-                <Calculator className="w-4 h-4 mr-2" /> Рассчитать ипотеку
               </Button>
             </div>
 

@@ -1,13 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Calculator, UserSearch, Building2, UserCircle } from 'lucide-react';
+import { UserSearch, Building2, UserCircle } from 'lucide-react';
 
 const tools = [
-  {
-    icon: Calculator,
-    title: 'Ипотечный калькулятор',
-    desc: 'Рассчитайте платёж',
-    to: '/mortgage',
-  },
   {
     icon: UserSearch,
     title: 'Индивидуальный подбор',

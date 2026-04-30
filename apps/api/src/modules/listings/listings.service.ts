@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Prisma, $Enums } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GeoSpatialService } from '../geo/geo-spatial.service';
@@ -80,11 +87,31 @@ function validateManualGalleryMedia(data: {
 }
 
 @Injectable()
-export class ListingsService {
+export class ListingsService implements OnModuleInit {
+  private readonly logger = new Logger(ListingsService.name);
+  private expireTimer?: NodeJS.Timeout;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly geo: GeoSpatialService,
   ) {}
+
+  onModuleInit() {
+    if (process.env.LISTINGS_EXPIRE_DISABLE === 'true') {
+      this.logger.log('Published listings expiration disabled (LISTINGS_EXPIRE_DISABLE)');
+      return;
+    }
+    const intervalMs = Number(process.env.LISTINGS_EXPIRE_INTERVAL_MS ?? 6 * 60 * 60 * 1000);
+    this.expireOldPublishedListings().catch((e) =>
+      this.logger.warn(`Initial published listings expiration failed: ${e instanceof Error ? e.message : String(e)}`),
+    );
+    this.expireTimer = setInterval(() => {
+      this.expireOldPublishedListings().catch((e) =>
+        this.logger.warn(`Scheduled published listings expiration failed: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    }, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 6 * 60 * 60 * 1000);
+    this.expireTimer.unref?.();
+  }
 
   async findAll(query: QueryListingsDto, actor?: ActorContext) {
     await this.expireOldPublishedListings();
@@ -182,7 +209,7 @@ export class ListingsService {
 
   private async expireOldPublishedListings() {
     const publishedBefore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    await this.prisma.listing.updateMany({
+    const result = await this.prisma.listing.updateMany({
       where: {
         isPublished: true,
         publishedAt: { lt: publishedBefore },
@@ -193,6 +220,9 @@ export class ListingsService {
         isPublished: false,
       },
     });
+    if (result.count > 0) {
+      this.logger.log(`Moved ${result.count} expired listings to INACTIVE`);
+    }
   }
 
   private publicationPatch(status?: $Enums.ListingStatus, isPublished?: boolean) {

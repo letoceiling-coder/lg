@@ -30,6 +30,8 @@ import {
   type ApiListingRow,
 } from '@/redesign/lib/blocks-from-api';
 
+const PLACEHOLDER = '/placeholder.svg';
+
 declare global {
   interface Window { ymaps: any; }
 }
@@ -45,7 +47,14 @@ const SimilarComplexCard = ({ complex }: { complex: ResidentialComplex }) => {
   return (
     <Link to={`/complex/${complex.slug}`} className="group flex flex-col rounded-xl overflow-hidden bg-card border border-border hover:shadow-md hover:-translate-y-px transition-all">
       <div className="h-[160px] overflow-hidden bg-muted">
-        <img src={complex.images[0]} alt={complex.name} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
+        <img
+          src={complex.images[0] || PLACEHOLDER}
+          alt={complex.name}
+          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+          onError={(e) => {
+            e.currentTarget.src = PLACEHOLDER;
+          }}
+        />
       </div>
       <div className="p-3 space-y-1">
         <h4 className="font-semibold text-sm">{complex.name}</h4>
@@ -55,7 +64,7 @@ const SimilarComplexCard = ({ complex }: { complex: ResidentialComplex }) => {
         </p>
         <div className="flex items-center justify-between pt-1">
           <span className="font-bold text-sm text-primary">
-            {complex.priceFrom > 0 ? `от ${formatPrice(complex.priceFrom)}` : '—'}
+            {complex.priceFrom > 0 ? `от ${formatPrice(complex.priceFrom)}` : 'Цена по запросу'}
           </span>
           <span className="text-[11px] text-muted-foreground">{totalApts} кв.</span>
         </div>
@@ -415,7 +424,9 @@ const RedesignComplex = () => {
                       ['Метро', `${complex.subway} (${complex.subwayDistance})`],
                       ['Срок сдачи', complex.deadline],
                       ['Корпусов', String(complex.buildings.length)],
-                      ['Цена', `${formatPrice(complex.priceFrom)} — ${formatPrice(complex.priceTo)}`],
+                      ['Цена', complex.priceFrom > 0 && complex.priceTo > 0
+                        ? `${formatPrice(complex.priceFrom)} — ${formatPrice(complex.priceTo)}`
+                        : 'Цена по запросу'],
                     ].map(([label, value]) => (
                       <div key={label} className="space-y-1">
                         <p className="text-xs text-muted-foreground">{label}</p>
@@ -467,7 +478,7 @@ const RedesignComplex = () => {
               <div className="rounded-xl border border-border bg-card p-5 space-y-3">
                 <p className="text-xs text-muted-foreground">Цена квартир</p>
                 <p className="text-xl font-bold">
-                  {complex.priceFrom > 0 ? `от ${formatPrice(complex.priceFrom)}` : 'по запросу'}
+                  {complex.priceFrom > 0 ? `от ${formatPrice(complex.priceFrom)}` : 'Цена по запросу'}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {complex.priceTo > 0 ? `до ${formatPrice(complex.priceTo)}` : ''}

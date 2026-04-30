@@ -45,7 +45,7 @@ export class FeedImportService implements OnModuleInit {
       this.logger.log('Repeatable feed import cron disabled (FEED_IMPORT_DISABLE_REPEAT)');
       return;
     }
-    const pattern = this.config.get<string>('FEED_IMPORT_CRON') || '0 3 * * 2';
+    const pattern = this.config.get<string>('FEED_IMPORT_CRON') || '0 */6 * * *';
     const regionCodes = await this.resolveCronRegionCodes();
     if (!regionCodes.length) {
       this.logger.warn('No valid regions resolved for repeatable import cron registration');

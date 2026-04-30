@@ -20,8 +20,6 @@ const navColumns = [
   {
     title: 'Сервисы',
     links: [
-      { label: 'Ипотека', to: '/mortgage' },
-      { label: 'Калькулятор', to: '/mortgage' },
       { label: 'Подбор объекта', to: '/selection' },
       { label: 'Каталог', to: '/catalog' },
       { label: 'На карте', to: '/map' },

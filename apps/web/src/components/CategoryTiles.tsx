@@ -4,7 +4,6 @@ import catSecondary from '@/assets/cat-secondary.png';
 import catRent from '@/assets/cat-rent.png';
 import catHouses from '@/assets/cat-houses.png';
 import catPlots from '@/assets/cat-plots.png';
-import catMortgage from '@/assets/cat-mortgage.png';
 import catApartments from '@/assets/cat-apartments.png';
 import catParking from '@/assets/cat-parking.png';
 import catCommercial from '@/assets/cat-commercial.png';
@@ -16,7 +15,6 @@ const categories = [
   { name: 'Аренда', image: catRent },
   { name: 'Дома', image: catHouses },
   { name: 'Участки', image: catPlots },
-  { name: 'Ипотека', image: catMortgage },
   { name: 'Квартиры', image: catApartments },
   { name: 'Паркинги', image: catParking },
   { name: 'Коммерческая\nнедвижимость', image: catCommercial },

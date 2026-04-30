@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -12,15 +19,31 @@ const DEFAULT_TELEGRAM_LIMIT_PER_CHANNEL = 20;
 const MEDIA_PUBLIC_PREFIX = '/uploads/media/';
 
 @Injectable()
-export class NewsService {
+export class NewsService implements OnModuleInit {
   private readonly log = new Logger(NewsService.name);
   private readonly mediaRoot: string;
+  private rssTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
     this.mediaRoot = this.config.get<string>('MEDIA_ROOT') ?? join(process.cwd(), 'uploads');
+  }
+
+  onModuleInit() {
+    if (this.config.get<string>('NEWS_RSS_SYNC_DISABLE') === 'true') {
+      this.log.log('RSS news sync disabled (NEWS_RSS_SYNC_DISABLE)');
+      return;
+    }
+    const intervalMs = Number(this.config.get<string>('NEWS_RSS_SYNC_INTERVAL_MS') ?? 6 * 60 * 60 * 1000);
+    const safeInterval = Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 6 * 60 * 60 * 1000;
+    this.rssTimer = setInterval(() => {
+      this.syncFromRss().catch((e) =>
+        this.log.warn(`Scheduled RSS news sync failed: ${e instanceof Error ? e.message : String(e)}`),
+      );
+    }, safeInterval);
+    this.rssTimer.unref?.();
   }
 
   async findAll(page = 1, perPage = 20, publishedOnly = false, regionId?: number | null) {

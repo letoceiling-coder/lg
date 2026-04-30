@@ -93,9 +93,14 @@ export class TelegramNotifyService implements OnModuleInit {
     ].filter(Boolean) as string[];
 
     const text = lines.join('\n');
+    const replyMarkup = {
+      inline_keyboard: [[
+        { text: 'Принять заявку', callback_data: `rq|${row.id}` },
+      ]],
+    };
     let sentCount = 0;
     for (const recipient of recipients) {
-      const ok = await this.sendMessage(token, recipient.telegramChatId, text, 'HTML');
+      const ok = await this.sendMessage(token, recipient.telegramChatId, text, 'HTML', replyMarkup);
       if (ok) {
         sentCount += 1;
       } else {
@@ -468,6 +473,8 @@ export class TelegramNotifyService implements OnModuleInit {
     id: string;
     data: string;
     chatId: bigint;
+    messageId: number;
+    fromId: bigint | null;
   } | null {
     if (!update || typeof update !== 'object') return null;
     const raw = update as Record<string, unknown>;
@@ -477,21 +484,37 @@ export class TelegramNotifyService implements OnModuleInit {
     const data = typeof callback.data === 'string' ? callback.data : '';
     const message = callback.message as Record<string, unknown> | undefined;
     const chat = message?.chat as Record<string, unknown> | undefined;
+    const from = callback.from as Record<string, unknown> | undefined;
     const chatId = this.toBigInt(chat?.id);
+    const fromId = this.toBigInt(from?.id);
+    const messageId = typeof message?.message_id === 'number' ? message.message_id : 0;
     if (!id || !data || !chatId) return null;
-    return { id, data, chatId };
+    return { id, data, chatId, messageId, fromId };
   }
 
   private async handleCallbackQuery(callback: {
     id: string;
     data: string;
     chatId: bigint;
+    messageId: number;
+    fromId: bigint | null;
   }) {
     const token = await this.getCachedBotToken();
     if (!token) return;
-    await this.telegramApi(token, 'answerCallbackQuery', { callback_query_id: callback.id });
 
     const parts = callback.data.split('|');
+    if (parts[0] === 'rq') {
+      const requestId = parseInt(parts[1] ?? '', 10);
+      if (Number.isFinite(requestId) && requestId > 0) {
+        await this.claimRequestFromTelegram(token, callback, requestId);
+      }
+      return;
+    }
+    if (parts[0] === 'rq_done') {
+      await this.answerCallback(token, callback.id, 'Эта заявка уже принята');
+      return;
+    }
+    await this.answerCallback(token, callback.id, '');
     if (parts[0] === 'cat' && parts[1] === 'p') {
       const page = Math.max(1, parseInt(parts[2] ?? '1', 10) || 1);
       await this.sendCatalogPage(token, callback.chatId, page);
@@ -653,6 +676,100 @@ export class TelegramNotifyService implements OnModuleInit {
     }
     this.metrics.recordTelegramSendFailure('sendMessage', lastFailureKind);
     return false;
+  }
+
+  private async claimRequestFromTelegram(
+    token: string,
+    callback: {
+      id: string;
+      chatId: bigint;
+      messageId: number;
+      fromId: bigint | null;
+    },
+    requestId: number,
+  ) {
+    if (!callback.fromId) {
+      await this.answerCallback(token, callback.id, 'Не удалось определить Telegram-пользователя');
+      return;
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        telegramId: callback.fromId,
+        isActive: true,
+        role: { in: ['manager', 'agent', 'editor', 'admin'] },
+      },
+      select: { id: true, fullName: true, email: true, role: true },
+    });
+    if (!user) {
+      await this.answerCallback(token, callback.id, 'Привяжите Telegram к сотруднику LiveGrid');
+      await this.sendMessage(
+        token,
+        callback.chatId,
+        'Заявку может принять только сотрудник с привязанным Telegram.',
+      );
+      return;
+    }
+
+    const request = await this.prisma.request.findUnique({
+      where: { id: requestId },
+      include: { assignedUser: { select: { fullName: true, email: true } } },
+    });
+    if (!request) {
+      await this.answerCallback(token, callback.id, 'Заявка не найдена');
+      return;
+    }
+
+    const managerName = user.fullName || user.email || 'менеджер';
+    if (request.assignedTo && request.assignedTo !== user.id) {
+      const assignedName = request.assignedUser?.fullName || request.assignedUser?.email || 'другой менеджер';
+      await this.answerCallback(token, callback.id, `Уже принято: ${assignedName}`);
+      return;
+    }
+
+    await this.prisma.request.update({
+      where: { id: request.id },
+      data: {
+        assignedTo: user.id,
+        status: RequestStatus.IN_PROGRESS,
+      },
+    });
+
+    await this.answerCallback(token, callback.id, `Принято: ${managerName}`);
+    await this.markRequestMessageClaimed(token, callback.chatId, callback.messageId, request.id, managerName);
+    await this.sendMessage(
+      token,
+      callback.chatId,
+      `Заявка #${request.id} принята: ${escapeHtml(managerName)}`,
+      'HTML',
+    );
+  }
+
+  private async answerCallback(token: string, callbackId: string, text: string) {
+    await this.telegramApi(token, 'answerCallbackQuery', {
+      callback_query_id: callbackId,
+      ...(text ? { text } : {}),
+      show_alert: false,
+    });
+  }
+
+  private async markRequestMessageClaimed(
+    token: string,
+    chatId: bigint,
+    messageId: number,
+    requestId: number,
+    managerName: string,
+  ) {
+    if (!messageId) return;
+    await this.telegramApi(token, 'editMessageReplyMarkup', {
+      chat_id: chatId.toString(),
+      message_id: messageId,
+      reply_markup: {
+        inline_keyboard: [[
+          { text: `Принято ${managerName}`, callback_data: `rq_done|${requestId}` },
+        ]],
+      },
+    });
   }
 
   private async sendPhoto(

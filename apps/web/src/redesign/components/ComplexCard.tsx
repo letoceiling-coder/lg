@@ -16,8 +16,10 @@ interface Props {
 const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
   building: { bg: 'bg-[#EFF6FF]', text: 'text-[#2563EB]', label: 'Строится' },
   completed: { bg: 'bg-[#F0FDF4]', text: 'text-[#16A34A]', label: 'Сдан' },
-  planned: { bg: 'bg-[#FFF7ED]', text: 'text-[#EA580C]', label: 'Проект' },
+  planned: { bg: 'bg-[#FFF7ED]', text: 'text-[#EA580C]', label: 'Планируется' },
 };
+
+const PLACEHOLDER = '/placeholder.svg';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const s = statusStyles[status];
@@ -71,7 +73,14 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
         className="group flex rounded-xl overflow-hidden bg-card border border-border transition-all duration-200 hover:shadow-md"
       >
         <div className="relative w-[220px] shrink-0 overflow-hidden bg-muted">
-          <img src={complex.images[0]} alt={complex.name} className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
+          <img
+            src={complex.images[0] || PLACEHOLDER}
+            alt={complex.name}
+            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            onError={(e) => {
+              e.currentTarget.src = PLACEHOLDER;
+            }}
+          />
           <StatusBadge status={complex.status} />
           <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
             <button
@@ -95,7 +104,9 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
         <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
           <div>
             <h3 className="font-semibold text-sm leading-tight truncate group-hover:text-primary transition-colors">{complex.name}</h3>
-            <p className="text-sm font-bold mt-1">от {formatPrice(complex.priceFrom)}</p>
+            <p className="text-sm font-bold mt-1">
+              {formatPrice(complex.priceFrom) === 'Цена по запросу' ? 'Цена по запросу' : `от ${formatPrice(complex.priceFrom)}`}
+            </p>
             <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1">
               <MapPin className="w-3 h-3 shrink-0" />
               <span className="truncate">{complex.district} · {complex.address}</span>
@@ -118,9 +129,12 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
       {/* Image */}
       <div className="relative shrink-0 overflow-hidden h-[160px]">
         <img
-          src={complex.images[currentImageIndex] || complex.images[0]}
+          src={complex.images[currentImageIndex] || complex.images[0] || PLACEHOLDER}
           alt={complex.name}
           className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+          onError={(e) => {
+            e.currentTarget.src = PLACEHOLDER;
+          }}
         />
         <div className="absolute top-2 left-2">
           <StatusBadge status={complex.status} />
@@ -167,7 +181,7 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
           <span className="font-bold text-sm shrink-0 text-primary">
             {(() => {
               const formatted = formatPrice(complex.priceFrom);
-              return formatted === '—' ? '—' : `от ${formatted}`;
+              return formatted === 'Цена по запросу' ? formatted : `от ${formatted}`;
             })()}
           </span>
         </div>

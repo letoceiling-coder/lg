@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import type { LayoutGroup } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
 
+const PLACEHOLDER = '/placeholder.svg';
+
 interface Props {
   layouts: LayoutGroup[];
   complexSlug: string;
@@ -23,13 +25,22 @@ const LayoutCard = ({ layout }: { layout: LayoutGroup }) => {
       className="rounded-xl border border-border bg-card overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group cursor-pointer"
     >
       <div className="aspect-square bg-muted/50 flex items-center justify-center p-6">
-        <img src={layout.planImage} alt={`${layout.rooms}-комн`} className="max-w-full max-h-full object-contain opacity-60 group-hover:opacity-100 transition-opacity" />
+        <img
+          src={layout.planImage || PLACEHOLDER}
+          alt={`${layout.rooms}-комн`}
+          className="max-w-full max-h-full object-contain opacity-60 group-hover:opacity-100 transition-opacity"
+          onError={(e) => {
+            e.currentTarget.src = PLACEHOLDER;
+          }}
+        />
       </div>
       <div className="p-4 space-y-1.5">
         <h4 className="font-semibold text-sm">{layout.rooms === 0 ? 'Студия' : `${layout.rooms}-комнатная`}</h4>
         <p className="text-xs text-muted-foreground">{layout.area} м²</p>
         <div className="flex items-center justify-between pt-1">
-          <p className="text-sm font-bold">от {formatPrice(layout.priceFrom)}</p>
+          <p className="text-sm font-bold">
+            {formatPrice(layout.priceFrom) === 'Цена по запросу' ? 'Цена по запросу' : `от ${formatPrice(layout.priceFrom)}`}
+          </p>
           <span className="text-xs text-primary font-medium whitespace-nowrap">
             {layout.availableCount} шт.
           </span>

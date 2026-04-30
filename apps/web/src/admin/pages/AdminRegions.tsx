@@ -24,6 +24,17 @@ type FeedProbeResult = {
   warnings: string[];
 };
 
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export default function AdminRegions() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -68,6 +79,7 @@ export default function AdminRegions() {
         code: newCode.trim(),
         name: newName.trim(),
         baseUrl: newBaseUrl.trim() || null,
+        publicSiteUrl: newPublicSiteUrl.trim() || null,
         isEnabled: newEnabled,
       }),
     onSuccess: () => {
@@ -225,6 +237,8 @@ export default function AdminRegions() {
               <th className="text-left p-3 font-medium">Код</th>
               <th className="text-left p-3 font-medium">Название</th>
               <th className="text-left p-3 font-medium">URL фида</th>
+              <th className="text-left p-3 font-medium">Публичный URL</th>
+              <th className="text-left p-3 font-medium whitespace-nowrap">Последний импорт</th>
               <th className="text-center p-3 font-medium w-28">Витрина</th>
               <th className="text-right p-3 font-medium w-24"> </th>
             </tr>
@@ -275,6 +289,9 @@ export default function AdminRegions() {
                         }))
                       }
                     />
+                  </td>
+                  <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDateTime(r.lastImportedAt)}
                   </td>
                   <td className="p-3 text-center">
                     <input
