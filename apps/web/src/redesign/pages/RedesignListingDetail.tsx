@@ -32,6 +32,7 @@ import { useFavorites } from '@/shared/hooks/useFavorites';
 import { shareCurrentPage } from '@/lib/share-page';
 import { toast } from '@/components/ui/sonner';
 
+type ApiListingDetailUniversal = {
   id: number;
   kind: 'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING';
   blockId: number | null;
