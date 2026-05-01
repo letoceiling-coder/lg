@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
 
@@ -14,6 +14,24 @@ export type RegionRow = {
 };
 
 const STORAGE_KEY = 'lg_region_id';
+
+/** Синхронизирует все экземпляры useDefaultRegionId при смене города (sessionStorage). */
+let regionPickRevision = 0;
+const regionPickListeners = new Set<() => void>();
+
+function subscribeRegionPick(listener: () => void) {
+  regionPickListeners.add(listener);
+  return () => regionPickListeners.delete(listener);
+}
+
+function getRegionPickSnapshot() {
+  return regionPickRevision;
+}
+
+function bumpRegionPickRevision() {
+  regionPickRevision += 1;
+  regionPickListeners.forEach((l) => l());
+}
 
 function readStoredId(): number | null {
   try {
@@ -39,10 +57,10 @@ function pickDefaultId(rows: RegionRow[]): number | undefined {
  * `setStoredRegionId(null)` — сброс на Москву по умолчанию.
  */
 export function useDefaultRegionId() {
-  const [storageRev, setStorageRev] = useState(0);
+  const pickRev = useSyncExternalStore(subscribeRegionPick, getRegionPickSnapshot, getRegionPickSnapshot);
 
   const base = useQuery({
-    queryKey: ['regions', storageRev],
+    queryKey: ['regions'],
     queryFn: () => apiGet<RegionRow[]>('/regions'),
     staleTime: 60 * 60 * 1000,
   });
@@ -54,7 +72,7 @@ export function useDefaultRegionId() {
     const stored = readStoredId();
     if (stored != null && rows.some((r) => r.id === stored)) return stored;
     return pickDefaultId(rows);
-  }, [rows, storageRev]);
+  }, [rows, pickRev]);
 
   const setStoredRegionId = useCallback((id: number | null) => {
     try {
@@ -63,7 +81,7 @@ export function useDefaultRegionId() {
     } catch {
       /* ignore */
     }
-    setStorageRev((n) => n + 1);
+    bumpRegionPickRevision();
   }, []);
 
   return { ...base, data, rows, setStoredRegionId };
