@@ -8,7 +8,8 @@ import { apiGet } from '@/lib/api';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useFavorites } from '@/shared/hooks/useFavorites';
-import { useSiteSettings, setting } from '@/redesign/hooks/useSiteSettings';
+import { useSiteSettings, settingOptional } from '@/redesign/hooks/useSiteSettings';
+import { telHref } from '@/lib/contact-links';
 import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 import CatalogSearchHintsDropdown from '@/redesign/components/CatalogSearchHintsDropdown';
 import type { CatalogHints } from '@/redesign/lib/catalog-hints-types';
@@ -26,8 +27,8 @@ const catalogCategories = [
 const RedesignHeader = () => {
   const { data: siteSettings } = useSiteSettings();
   const { data: regionId } = useDefaultRegionId();
-  const phoneMain = setting(siteSettings, 'phone_main', '+7 (904) 539-34-34');
-  const phoneHref = `tel:${phoneMain.replace(/[^\d+]/g, '')}`;
+  const phoneMain = settingOptional(siteSettings, 'phone_main');
+  const phoneHref = phoneMain ? telHref(phoneMain) : undefined;
   const [menuOpen, setMenuOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -155,13 +156,15 @@ const RedesignHeader = () => {
               ) : null}
             </button>
             <div className="w-px h-5 bg-border" />
-            <a
-              href={phoneHref}
-              className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:text-primary hover:bg-muted/50 transition-colors"
-            >
-              <Phone className="w-4 h-4 text-primary shrink-0" />
-              <span>{phoneMain}</span>
-            </a>
+            {phoneMain && phoneHref ? (
+              <a
+                href={phoneHref}
+                className="flex items-center gap-2 px-2 py-2 rounded-lg text-sm hover:text-primary hover:bg-muted/50 transition-colors"
+              >
+                <Phone className="w-4 h-4 text-primary shrink-0" />
+                <span>{phoneMain}</span>
+              </a>
+            ) : null}
 
             {!isAuthenticated ? (
               <button
@@ -279,9 +282,11 @@ const RedesignHeader = () => {
             <Link to="#contacts" onClick={() => setMenuOpen(false)} className="py-3 px-4 rounded-xl text-sm font-medium hover:bg-accent transition-colors">Контакты</Link>
           </nav>
           <div className="mt-auto p-4 border-t border-border space-y-3">
-            <a href={phoneHref} className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Phone className="w-4 h-4" /> {phoneMain}
-            </a>
+            {phoneMain && phoneHref ? (
+              <a href={phoneHref} className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Phone className="w-4 h-4" /> {phoneMain}
+              </a>
+            ) : null}
             {!isAuthenticated ? (
               <button
                 onClick={() => { setMenuOpen(false); setLoginModalOpen(true); }}

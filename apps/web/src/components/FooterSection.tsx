@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Phone, Mail, MapPin, Clock, ChevronDown, Send, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useSiteSettings, setting } from '@/redesign/hooks/useSiteSettings';
+import { useSiteSettings, settingOptional } from '@/redesign/hooks/useSiteSettings';
+import { telHref, yandexMapsHref } from '@/lib/contact-links';
 
 const navColumns = [
   {
@@ -50,7 +51,7 @@ const socialsDefs = [
   { label: 'Telegram', icon: Send, settingsKey: 'telegram_url' },
   { label: 'VK', icon: MessageCircle, settingsKey: 'vk_url' },
   { label: 'YouTube', icon: () => <span className="text-[10px] font-bold leading-none">YT</span>, settingsKey: 'youtube_url' },
-  { label: 'MAX', icon: () => <span className="text-[10px] font-bold leading-none">MX</span>, settingsKey: 'ok_url' },
+  { label: 'Одноклассники', icon: () => <span className="text-[10px] font-bold leading-none">OK</span>, settingsKey: 'ok_url' },
 ];
 
 const legalLinks: { label: string; to: string }[] = [
@@ -89,18 +90,39 @@ const MobileColumn = ({ title, links }: { title: string; links: { label: string;
 const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
   const { data: s } = useSiteSettings();
 
-  const phoneMain = setting(s, 'phone_main', '+7 (4) 333 44 11');
-  const phoneHref = `tel:${phoneMain.replace(/[^\d+]/g, '')}`;
-  const emailVal = setting(s, 'email', 'info@livegrid.ru');
-  const addressVal = setting(s, 'address', 'г. Белгород, ул. Примерная, д. 1');
-  const workHours1 = setting(s, 'work_hours_weekdays', 'Пн–Пт: 9:00–20:00');
-  const workHours2 = setting(s, 'work_hours_weekend', 'Сб–Вс: 10:00–18:00');
-  const companyInfo = setting(s, 'company_info', 'ООО «ЛайвГрид» · ИНН 3123456789 · ОГРН 1023101234567');
+  const phoneMain = settingOptional(s, 'phone_main');
+  const phoneHref = phoneMain ? telHref(phoneMain) : undefined;
+  const emailVal = settingOptional(s, 'email');
+  const addressVal = settingOptional(s, 'address');
+  const officeLat = settingOptional(s, 'office_lat');
+  const officeLng = settingOptional(s, 'office_lng');
+  const mapsUrl =
+    addressVal || (officeLat && officeLng)
+      ? yandexMapsHref({ address: addressVal, officeLat, officeLng })
+      : undefined;
 
-  const socials = socialsDefs.map((d) => ({
-    ...d,
-    href: setting(s, d.settingsKey, '#'),
-  }));
+  const whWeekday = settingOptional(s, 'work_hours_weekdays');
+  const whWeekend = settingOptional(s, 'work_hours_weekend');
+  const whSingle = settingOptional(s, 'work_hours');
+  const hourLines = [whWeekday, whWeekend].filter(Boolean) as string[];
+  if (hourLines.length === 0 && whSingle) hourLines.push(whSingle);
+  const showHours = hourLines.length > 0;
+
+  const companyName = settingOptional(s, 'company_name');
+  const inn = settingOptional(s, 'inn');
+  const ogrn = settingOptional(s, 'ogrn');
+  const companyParts: string[] = [];
+  if (companyName) companyParts.push(companyName);
+  if (inn) companyParts.push(`ИНН ${inn}`);
+  if (ogrn) companyParts.push(`ОГРН ${ogrn}`);
+  const companyLine =
+    companyParts.length > 0 ? companyParts.join(' · ') : settingOptional(s, 'company_info');
+
+  const copyrightYear = settingOptional(s, 'copyright_year') ?? '2026';
+
+  const socials = socialsDefs
+    .map((d) => ({ ...d, href: settingOptional(s, d.settingsKey) }))
+    .filter((x): x is (typeof socialsDefs)[number] & { href: string } => Boolean(x.href));
 
   return (
   <footer ref={ref} className="bg-foreground text-primary-foreground">
@@ -116,13 +138,15 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
           <Button className="rounded-xl h-10 px-5 text-xs sm:text-sm">
             Получить консультацию
           </Button>
-          <a
-            href={phoneHref}
-            className="inline-flex items-center gap-2 h-10 px-5 rounded-xl border border-primary-foreground/20 text-xs sm:text-sm font-medium hover:bg-primary-foreground/10 transition-colors"
-          >
-            <Phone className="w-3.5 h-3.5" />
-            Позвонить
-          </a>
+          {phoneHref ? (
+            <a
+              href={phoneHref}
+              className="inline-flex items-center gap-2 h-10 px-5 rounded-xl border border-primary-foreground/20 text-xs sm:text-sm font-medium hover:bg-primary-foreground/10 transition-colors"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              Позвонить
+            </a>
+          ) : null}
           <Link
             to="/register"
             className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-primary-foreground/10 text-xs sm:text-sm font-medium hover:bg-primary-foreground/20 transition-colors"
@@ -147,33 +171,55 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
           </Link>
 
           <div className="space-y-2.5 text-xs opacity-70">
-            <a href={phoneHref} className="flex items-center gap-2 hover:opacity-100 transition-opacity">
-              <Phone className="w-3.5 h-3.5 shrink-0" />
-              {phoneMain}
-            </a>
-            <a href={`mailto:${emailVal}`} className="flex items-center gap-2 hover:opacity-100 transition-opacity">
-              <Mail className="w-3.5 h-3.5 shrink-0" />
-              {emailVal}
-            </a>
-            <div className="flex items-start gap-2">
-              <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <span>{addressVal}</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <div>
-                <p>{workHours1}</p>
-                <p>{workHours2}</p>
+            {phoneMain && phoneHref ? (
+              <a href={phoneHref} className="flex items-center gap-2 hover:opacity-100 transition-opacity">
+                <Phone className="w-3.5 h-3.5 shrink-0" />
+                {phoneMain}
+              </a>
+            ) : null}
+            {emailVal ? (
+              <a href={`mailto:${emailVal}`} className="flex items-center gap-2 hover:opacity-100 transition-opacity">
+                <Mail className="w-3.5 h-3.5 shrink-0" />
+                {emailVal}
+              </a>
+            ) : null}
+            {addressVal ? (
+              <div className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                {mapsUrl ? (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:opacity-100 transition-opacity underline-offset-2 hover:underline"
+                  >
+                    {addressVal}
+                  </a>
+                ) : (
+                  <span>{addressVal}</span>
+                )}
               </div>
-            </div>
+            ) : null}
+            {showHours ? (
+              <div className="flex items-start gap-2">
+                <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <div>
+                  {hourLines.map((line, i) => (
+                    <p key={`${line}-${i}`}>{line}</p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
-          {/* Socials */}
+          {socials.length > 0 ? (
           <div className="flex items-center gap-2 mt-4">
             {socials.map((s) => (
               <a
                 key={s.label}
                 href={s.href}
+                target="_blank"
+                rel="noopener noreferrer"
                 aria-label={s.label}
                 className="w-8 h-8 rounded-lg bg-primary-foreground/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
               >
@@ -184,6 +230,7 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
               </a>
             ))}
           </div>
+          ) : null}
         </div>
 
         {/* Nav columns */}
@@ -211,12 +258,16 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
 
         {/* Contacts inline */}
         <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs opacity-70 mb-5">
-          <a href={phoneHref} className="flex items-center gap-1.5">
-            <Phone className="w-3.5 h-3.5" /> {phoneMain}
-          </a>
-          <a href={`mailto:${emailVal}`} className="flex items-center gap-1.5">
-            <Mail className="w-3.5 h-3.5" /> {emailVal}
-          </a>
+          {phoneMain && phoneHref ? (
+            <a href={phoneHref} className="flex items-center gap-1.5">
+              <Phone className="w-3.5 h-3.5" /> {phoneMain}
+            </a>
+          ) : null}
+          {emailVal ? (
+            <a href={`mailto:${emailVal}`} className="flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5" /> {emailVal}
+            </a>
+          ) : null}
         </div>
 
         {/* Accordion */}
@@ -224,12 +275,14 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
           <MobileColumn key={col.title} title={col.title} links={col.links} />
         ))}
 
-        {/* Socials */}
+        {socials.length > 0 ? (
         <div className="flex items-center gap-2 mt-5">
           {socials.map((s) => (
             <a
               key={s.label}
               href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
               aria-label={s.label}
               className="w-9 h-9 rounded-lg bg-primary-foreground/10 flex items-center justify-center hover:bg-primary transition-colors"
             >
@@ -240,6 +293,7 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
             </a>
           ))}
         </div>
+        ) : null}
       </div>
     </div>
 
@@ -260,13 +314,15 @@ const FooterSection = React.forwardRef<HTMLElement>((_, ref) => {
         </div>
 
         {/* Company details */}
-        <p className="text-[10px] sm:text-[11px] opacity-30 leading-relaxed mb-2">
-          {companyInfo} · {addressVal}
-        </p>
+        {companyLine || addressVal ? (
+          <p className="text-[10px] sm:text-[11px] opacity-30 leading-relaxed mb-2">
+            {[companyLine, addressVal].filter(Boolean).join(' · ')}
+          </p>
+        ) : null}
 
         {/* Copyright */}
         <p className="text-[10px] sm:text-[11px] opacity-40">
-          © 2026 LiveGrid. Все права защищены.
+          © {copyrightYear} LiveGrid. Все права защищены.
         </p>
       </div>
     </div>
