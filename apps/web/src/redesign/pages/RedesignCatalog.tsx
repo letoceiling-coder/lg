@@ -15,6 +15,12 @@ import MapSearch from '@/redesign/components/MapSearch';
 import ListingsMapSearch, { type ListingMapItem } from '@/redesign/components/ListingsMapSearch';
 import { useDefaultRegionId, type RegionRow } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
+import {
+  catalogFilterUrlSignature,
+  catalogFiltersFromSearchParams,
+  catalogFiltersIntoSearchParams,
+  finishingIdsFromSidebarLabels,
+} from '@/redesign/lib/catalog-url-sync';
 import { defaultFilters, type CatalogFilters, type ObjectType, type MarketType } from '@/redesign/data/types';
 
 const OBJECT_TYPE_TITLE: Record<ObjectType, string> = {
@@ -86,24 +92,8 @@ function parseCatalogSort(raw: string | null): CatalogSort {
 const RedesignCatalog = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const initialFilters = useMemo((): CatalogFilters => {
-    const f = { ...defaultFilters };
-    f.search = searchParams.get('search') || '';
-    const rooms = searchParams.get('rooms');
-    if (rooms) f.rooms = rooms.split(',').map(Number);
-    const type = searchParams.get('type');
-    if (type && ['apartments', 'houses', 'land', 'commercial'].includes(type)) {
-      f.objectType = type as ObjectType;
-    }
-    const market = searchParams.get('market');
-    if (market && ['new', 'secondary'].includes(market)) {
-      f.marketType = market as MarketType;
-    }
-    return f;
-  }, []);
-
   const [view, setView] = useState<ViewMode>('grid');
-  const [filters, setFilters] = useState<CatalogFilters>(initialFilters);
+  const [filters, setFilters] = useState<CatalogFilters>(() => ({ ...defaultFilters }));
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [mapActive, setMapActive] = useState<string | null>(null);
   const [mapActiveListing, setMapActiveListing] = useState<number | null>(null);
@@ -142,14 +132,21 @@ const RedesignCatalog = () => {
   const geoLng = searchParams.get('geo_lng');
   const geoRadius = searchParams.get('geo_radius_m');
 
-  const typeParam = searchParams.get('type');
-  const searchParam = searchParams.get('search');
+  const { data: finishingRows } = useQuery({
+    queryKey: ['reference', 'finishings'],
+    queryFn: () => apiGet<Array<{ id: number; name: string }>>('/reference/finishings'),
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const catalogUrlSig = useMemo(
+    () => catalogFilterUrlSignature(new URLSearchParams(searchParams)),
+    [searchParams.toString()],
+  );
+
   useEffect(() => {
-    if (typeParam && ['apartments', 'houses', 'land', 'commercial'].includes(typeParam)) {
-      setFilters((f) => ({ ...f, objectType: typeParam as ObjectType }));
-    }
-    if (searchParam) setFilters((f) => ({ ...f, search: searchParam }));
-  }, [typeParam, searchParam]);
+    const sp = new URLSearchParams(window.location.search);
+    setFilters(catalogFiltersFromSearchParams(sp, finishingRows ?? undefined));
+  }, [catalogUrlSig, finishingRows]);
 
   const regionLoading = regionId == null;
   const deferredSearch = useDeferredValue(filters.search);
@@ -176,6 +173,7 @@ const RedesignCatalog = () => {
       filters.areaMax,
       filters.floorMin,
       filters.floorMax,
+      filters.finishing,
       filters.district,
       filters.marketType,
     ],
@@ -196,6 +194,10 @@ const RedesignCatalog = () => {
       if (filters.areaMax) sp.set('area_total_max', String(filters.areaMax));
       if (filters.floorMin) sp.set('floor_min', String(filters.floorMin));
       if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
+      if (listingKind === 'APARTMENT' && filters.finishing.length && finishingRows?.length) {
+        const fid = finishingIdsFromSidebarLabels(filters.finishing, finishingRows);
+        if (fid.length) sp.set('finishing', fid.join(','));
+      }
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
       return apiGet<{
         data: ApiListingCardRow[];
@@ -212,7 +214,7 @@ const RedesignCatalog = () => {
 
   // Flat (non-paginated) query for map view showing individual listings
   const listingsMapQuery = useQuery({
-    queryKey: ['listings', 'catalog', 'map', regionId, listingKind, deferredSearch, filters.priceMin, filters.priceMax, filters.rooms, filters.district, filters.marketType],
+    queryKey: ['listings', 'catalog', 'map', regionId, listingKind, deferredSearch, filters.priceMin, filters.priceMax, filters.rooms, filters.areaMin, filters.areaMax, filters.floorMin, filters.floorMax, filters.finishing, filters.district, filters.marketType],
     queryFn: async () => {
       const sp = new URLSearchParams();
       if (regionId != null) sp.set('region_id', String(regionId));
@@ -225,6 +227,14 @@ const RedesignCatalog = () => {
       if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
       if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
       if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
+      if (filters.areaMin) sp.set('area_total_min', String(filters.areaMin));
+      if (filters.areaMax) sp.set('area_total_max', String(filters.areaMax));
+      if (filters.floorMin) sp.set('floor_min', String(filters.floorMin));
+      if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
+      if (listingKind === 'APARTMENT' && filters.finishing.length && finishingRows?.length) {
+        const fid = finishingIdsFromSidebarLabels(filters.finishing, finishingRows);
+        if (fid.length) sp.set('finishing', fid.join(','));
+      }
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
       return apiGet<{ data: ApiListingCardRow[] }>(`/listings?${sp}`);
     },
@@ -242,6 +252,11 @@ const RedesignCatalog = () => {
       catalogSort,
       filters.priceMin,
       filters.priceMax,
+      filters.areaMin,
+      filters.areaMax,
+      filters.floorMin,
+      filters.floorMax,
+      filters.deadline,
       filters.status,
       filters.objectType,
       filters.marketType,
@@ -260,6 +275,11 @@ const RedesignCatalog = () => {
       sp.set('sort', catalogSort);
       if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
       if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
+      if (filters.areaMin != null) sp.set('area_min', String(filters.areaMin));
+      if (filters.areaMax != null) sp.set('area_max', String(filters.areaMax));
+      if (filters.floorMin != null) sp.set('floor_min', String(filters.floorMin));
+      if (filters.floorMax != null) sp.set('floor_max', String(filters.floorMax));
+      if (filters.deadline.length) sp.set('deadline', filters.deadline.join(','));
       if (filters.marketType === 'new') {
         sp.set('status', 'BUILDING');
       } else if (filters.status.length === 1) {
@@ -356,20 +376,12 @@ const RedesignCatalog = () => {
   const handleFiltersChange = useCallback(
     (f: CatalogFilters) => {
       setFilters(f);
-      setSearchParams((prev) => {
-        const params = new URLSearchParams(prev);
-        if (f.search) params.set('search', f.search);
-        else params.delete('search');
-        if (f.rooms.length) params.set('rooms', f.rooms.join(','));
-        else params.delete('rooms');
-        if (f.objectType !== 'apartments') params.set('type', f.objectType);
-        else params.delete('type');
-        if (f.marketType !== 'all') params.set('market', f.marketType);
-        else params.delete('market');
-        return params;
-      }, { replace: true });
+      setSearchParams(
+        (prev) => catalogFiltersIntoSearchParams(prev, f, finishingRows ?? undefined),
+        { replace: true },
+      );
     },
-    [setSearchParams],
+    [setSearchParams, finishingRows],
   );
 
   const handleSortChange = useCallback(

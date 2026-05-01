@@ -3,12 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, MapPin, SlidersHorizontal, ChevronDown, Building2, Home, TreePine, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { apiGet } from '@/lib/api';
 import { useDefaultRegionId } from '@/redesign/hooks/useDefaultRegionId';
 import CatalogSearchHintsDropdown from '@/redesign/components/CatalogSearchHintsDropdown';
 import type { CatalogHints } from '@/redesign/lib/catalog-hints-types';
+import {
+  catalogFiltersIntoSearchParams,
+  roomCategoriesFromHeroLabel,
+  sidebarLabelFromFinishingName,
+} from '@/redesign/lib/catalog-url-sync';
+import type { CatalogFilters, MarketType, ObjectType } from '@/redesign/data/types';
+import { defaultFilters } from '@/redesign/data/types';
 
 type RoomTypeRow = { id: number; name: string };
 
@@ -84,6 +89,12 @@ const HeroSearch = () => {
   const [priceFrom, setPriceFrom] = useState('');
   const [priceTo, setPriceTo] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [areaMin, setAreaMin] = useState('');
+  const [areaMax, setAreaMax] = useState('');
+  const [floorMin, setFloorMin] = useState('');
+  const [floorMax, setFloorMax] = useState('');
+  const [aptMarket, setAptMarket] = useState<'all' | 'new' | 'secondary'>('all');
+  const [heroFinishingId, setHeroFinishingId] = useState('');
   const [debouncedForCounts, setDebouncedForCounts] = useState({
     q: '',
     priceFrom: '',
@@ -111,6 +122,12 @@ const HeroSearch = () => {
   const { data: roomTypes = [] } = useQuery({
     queryKey: ['reference', 'room-types'],
     queryFn: () => apiGet<RoomTypeRow[]>('/reference/room-types'),
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const { data: finishings = [] } = useQuery({
+    queryKey: ['reference', 'finishings'],
+    queryFn: () => apiGet<Array<{ id: number; name: string }>>('/reference/finishings'),
     staleTime: 60 * 60 * 1000,
   });
 
@@ -167,6 +184,20 @@ const HeroSearch = () => {
     }
   }, [visibleObjectTabs, activeTab]);
 
+  /** Сброс полей при смене типа объекта — не смешиваем этаж/отделку квартиры с участком. */
+  useEffect(() => {
+    setPropertyType('Тип квартиры');
+    setDeadline('Срок сдачи');
+    setPtOpen(false);
+    setDlOpen(false);
+    setAreaMin('');
+    setAreaMax('');
+    setFloorMin('');
+    setFloorMax('');
+    setAptMarket('all');
+    setHeroFinishingId('');
+  }, [activeTab]);
+
   const belgorodRegion = useMemo(
     () => regionRows?.find((r) => (r.code ?? '').toLowerCase() === 'belgorod'),
     [regionRows],
@@ -192,16 +223,48 @@ const HeroSearch = () => {
   const dlRef = useRef<HTMLDivElement>(null);
 
   const doSearch = () => {
-    const params = new URLSearchParams();
-    if (q) params.set('search', q);
-    if (activeTab !== 'apartments') params.set('type', activeTab);
-    else params.set('type', 'apartments');
-    if (regionId != null) params.set('region_id', String(regionId));
+    const objectType = activeTab as ObjectType;
+    const f: CatalogFilters = {
+      ...defaultFilters,
+      objectType,
+      marketType: 'all' as MarketType,
+      search: q.trim(),
+    };
 
-    if (propertyType !== 'Тип квартиры') params.set('rooms', propertyType);
-    if (deadline !== 'Срок сдачи') params.set('deadline', deadline);
-    if (priceFrom) params.set('priceFrom', priceFrom);
-    if (priceTo) params.set('priceTo', priceTo);
+    const pMin = priceRubFromHeroInput(priceFrom);
+    const pMax = priceRubFromHeroInput(priceTo);
+    if (pMin != null) f.priceMin = pMin;
+    if (pMax != null) f.priceMax = pMax;
+
+    if (objectType === 'apartments') {
+      f.rooms = roomCategoriesFromHeroLabel(propertyType);
+      if (aptMarket === 'new') f.marketType = 'new';
+      else if (aptMarket === 'secondary') f.marketType = 'secondary';
+      if (deadline !== 'Срок сдачи') {
+        const token = deadline === '2029+' ? '2030' : deadline;
+        f.deadline = [token];
+      }
+      const a1 = parseFloat(areaMin.replace(',', '.'));
+      const a2 = parseFloat(areaMax.replace(',', '.'));
+      if (Number.isFinite(a1)) f.areaMin = a1;
+      if (Number.isFinite(a2)) f.areaMax = a2;
+      const fl1 = parseInt(floorMin.replace(/\D/g, ''), 10);
+      const fl2 = parseInt(floorMax.replace(/\D/g, ''), 10);
+      if (Number.isFinite(fl1)) f.floorMin = fl1;
+      if (Number.isFinite(fl2)) f.floorMax = fl2;
+      if (heroFinishingId) {
+        const row = finishings.find((x) => String(x.id) === heroFinishingId);
+        if (row) f.finishing = [sidebarLabelFromFinishingName(row.name)];
+      }
+    } else {
+      const a1 = parseFloat(areaMin.replace(',', '.'));
+      const a2 = parseFloat(areaMax.replace(',', '.'));
+      if (Number.isFinite(a1)) f.areaMin = a1;
+      if (Number.isFinite(a2)) f.areaMax = a2;
+    }
+
+    const params = catalogFiltersIntoSearchParams(new URLSearchParams(), f, finishings.length ? finishings : undefined);
+    if (regionId != null) params.set('region_id', String(regionId));
     navigate(`/catalog?${params.toString()}`);
   };
 
@@ -259,6 +322,30 @@ const HeroSearch = () => {
     const fromKinds = kindCounts?.APARTMENT ?? 0;
     return fromKinds > 0 ? fromKinds : 62_000;
   }, [catalogStats, kindCounts]);
+
+  const heroSubtitle = useMemo(() => {
+    if (activeTab === 'apartments') {
+      return `${apartmentsHeadlineCount.toLocaleString('ru-RU')}+ квартир по России`;
+    }
+    const tab = objectTabs.find((t) => t.value === activeTab);
+    const k = tab?.kind;
+    const n = k && kindCounts ? (kindCounts[k] ?? 0) : 0;
+    if (activeTab === 'houses') {
+      return n > 0 ? `${n.toLocaleString('ru-RU')} домов и дач в регионе` : 'Дома и дачи в регионе';
+    }
+    if (activeTab === 'land') {
+      return n > 0 ? `${n.toLocaleString('ru-RU')} участков в регионе` : 'Земельные участки';
+    }
+    return n > 0 ? `${n.toLocaleString('ru-RU')} коммерческих объектов` : 'Коммерческая недвижимость';
+  }, [activeTab, apartmentsHeadlineCount, kindCounts]);
+
+  const searchPlaceholder = useMemo(() => {
+    if (activeTab === 'apartments') return 'Метро, район, ЖК, улица, застройщик';
+    if (activeTab === 'land') return 'Район, адрес, кадастровый номер';
+    return 'Район, адрес, название объекта';
+  }, [activeTab]);
+
+  const isAptTab = activeTab === 'apartments';
 
   return (
     <section className="relative bg-background">
@@ -364,7 +451,7 @@ const HeroSearch = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Метро, район, ЖК, улица, застройщик"
+                  placeholder={searchPlaceholder}
                   className="w-full h-[52px] pl-9 pr-3 bg-transparent border-none outline-none text-[15px] placeholder:text-[#94a3b8]"
                   value={q}
                   onFocus={() => setSearchFocused(true)}
@@ -378,66 +465,94 @@ const HeroSearch = () => {
               {/* Desktop inline filters with dividers */}
             <div className="hidden lg:flex items-center">
               <div className="w-px h-6 bg-[#e2e8f0] mx-2" />
-              <div ref={ptRef} className="relative">
-                <button
-                  onClick={() => setPtOpen(!ptOpen)}
-                  className={cn(
-                    'h-[52px] px-3.5 text-sm flex items-center gap-1.5 whitespace-nowrap transition-colors rounded-lg hover:bg-muted/50',
-                    propertyType !== 'Тип квартиры' ? 'text-primary font-medium' : 'text-foreground'
-                  )}
-                >
-                  {propertyType === 'Тип квартиры' ? 'Тип' : propertyType}
-                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', ptOpen && 'rotate-180')} />
-                </button>
-                {ptOpen && (
-                  <ul className="absolute top-full right-0 mt-1 py-2 bg-card border border-border rounded-xl shadow-lg z-50 min-w-[180px] animate-in fade-in-0 zoom-in-95 duration-150">
-                    {propertyTypes.map(t => (
-                      <li key={t}>
-                        <button
-                          onClick={() => { setPropertyType(t); setPtOpen(false); }}
-                          className={cn('w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors', propertyType === t && 'text-primary font-medium')}
-                        >{t}</button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="w-px h-6 bg-[#e2e8f0] mx-2" />
+              {isAptTab && (
+                <>
+                  <div ref={ptRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setPtOpen(!ptOpen)}
+                      className={cn(
+                        'h-[52px] px-3.5 text-sm flex items-center gap-1.5 whitespace-nowrap transition-colors rounded-lg hover:bg-muted/50',
+                        propertyType !== 'Тип квартиры' ? 'text-primary font-medium' : 'text-foreground',
+                      )}
+                    >
+                      {propertyType === 'Тип квартиры' ? 'Тип' : propertyType}
+                      <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', ptOpen && 'rotate-180')} />
+                    </button>
+                    {ptOpen && (
+                      <ul className="absolute top-full right-0 mt-1 py-2 bg-card border border-border rounded-xl shadow-lg z-50 min-w-[180px] animate-in fade-in-0 zoom-in-95 duration-150">
+                        {propertyTypes.map((t) => (
+                          <li key={t}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPropertyType(t);
+                                setPtOpen(false);
+                              }}
+                              className={cn(
+                                'w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors',
+                                propertyType === t && 'text-primary font-medium',
+                              )}
+                            >
+                              {t}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="w-px h-6 bg-[#e2e8f0] mx-2" />
+                </>
+              )}
               <div className="flex items-center h-[52px]">
-                <input type="text" placeholder="Цена от" className="w-[100px] h-full px-3 text-sm bg-transparent outline-none border-none" value={priceFrom} onChange={e => setPriceFrom(e.target.value.replace(/\D/g, ''))} />
+                <input type="text" placeholder="Цена от" className="w-[100px] h-full px-3 text-sm bg-transparent outline-none border-none" value={priceFrom} onChange={(e) => setPriceFrom(e.target.value.replace(/\D/g, ''))} />
                 <span className="text-muted-foreground text-sm">—</span>
-                <input type="text" placeholder="до, ₽" className="w-[100px] h-full px-3 text-sm bg-transparent outline-none border-none" value={priceTo} onChange={e => setPriceTo(e.target.value.replace(/\D/g, ''))} />
+                <input type="text" placeholder="до, ₽" className="w-[100px] h-full px-3 text-sm bg-transparent outline-none border-none" value={priceTo} onChange={(e) => setPriceTo(e.target.value.replace(/\D/g, ''))} />
               </div>
 
-              <div className="w-px h-6 bg-[#e2e8f0] mx-2" />
-              <div ref={dlRef} className="relative">
-                <button
-                  onClick={() => setDlOpen(!dlOpen)}
-                  className={cn(
-                    'h-[52px] px-3.5 text-sm flex items-center gap-1.5 whitespace-nowrap transition-colors rounded-lg hover:bg-muted/50',
-                    deadline !== 'Срок сдачи' ? 'text-primary font-medium' : 'text-foreground'
-                  )}
-                >
-                  {deadline}
-                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', dlOpen && 'rotate-180')} />
-                </button>
-                {dlOpen && (
-                  <ul className="absolute top-full right-0 mt-1 py-2 bg-card border border-border rounded-xl shadow-lg z-50 min-w-[140px] animate-in fade-in-0 zoom-in-95 duration-150">
-                    {deadlines.map(d => (
-                      <li key={d}>
-                        <button
-                          onClick={() => { setDeadline(d); setDlOpen(false); }}
-                          className={cn('w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors', deadline === d && 'text-primary font-medium')}
-                        >{d}</button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              {isAptTab && (
+                <>
+                  <div className="w-px h-6 bg-[#e2e8f0] mx-2" />
+                  <div ref={dlRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setDlOpen(!dlOpen)}
+                      className={cn(
+                        'h-[52px] px-3.5 text-sm flex items-center gap-1.5 whitespace-nowrap transition-colors rounded-lg hover:bg-muted/50',
+                        deadline !== 'Срок сдачи' ? 'text-primary font-medium' : 'text-foreground',
+                      )}
+                    >
+                      {deadline}
+                      <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', dlOpen && 'rotate-180')} />
+                    </button>
+                    {dlOpen && (
+                      <ul className="absolute top-full right-0 mt-1 py-2 bg-card border border-border rounded-xl shadow-lg z-50 min-w-[140px] animate-in fade-in-0 zoom-in-95 duration-150">
+                        {deadlines.map((d) => (
+                          <li key={d}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeadline(d);
+                                setDlOpen(false);
+                              }}
+                              className={cn(
+                                'w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors',
+                                deadline === d && 'text-primary font-medium',
+                              )}
+                            >
+                              {d}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </>
+              )}
 
               <div className="w-px h-6 bg-[#e2e8f0] mx-2" />
               <button
+                type="button"
                 onClick={() => setFiltersOpen(!filtersOpen)}
                 className="h-[52px] px-3.5 text-sm flex items-center gap-1.5 whitespace-nowrap transition-colors rounded-lg hover:bg-muted/50"
               >
@@ -462,67 +577,105 @@ const HeroSearch = () => {
 
           {/* Mobile filters — scrollable pills */}
           <div className="flex lg:hidden gap-1.5 mt-2 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setPtOpen(!ptOpen)}
-              className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] flex items-center gap-1 whitespace-nowrap shrink-0"
-            >
-              {propertyType === 'Тип квартиры' ? 'Тип' : propertyType}
-              <ChevronDown className="w-2.5 h-2.5" />
+            {isAptTab && (
+              <button
+                type="button"
+                onClick={() => setPtOpen(!ptOpen)}
+                className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] flex items-center gap-1 whitespace-nowrap shrink-0"
+              >
+                {propertyType === 'Тип квартиры' ? 'Тип' : propertyType}
+                <ChevronDown className="w-2.5 h-2.5" />
+              </button>
+            )}
+            <button type="button" className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] whitespace-nowrap shrink-0">
+              Цена
             </button>
-            <button className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] whitespace-nowrap shrink-0">Цена</button>
-            <button
-              onClick={() => setDlOpen(!dlOpen)}
-              className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] flex items-center gap-1 whitespace-nowrap shrink-0"
-            >
-              {deadline}
-              <ChevronDown className="w-2.5 h-2.5" />
-            </button>
-            <button
-              onClick={() => setFiltersOpen(!filtersOpen)}
-              className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] flex items-center gap-1 whitespace-nowrap shrink-0"
-            >
-              <SlidersHorizontal className="w-3 h-3" />
-              Ещё
-            </button>
+            {isAptTab && (
+              <button
+                type="button"
+                onClick={() => setDlOpen(!dlOpen)}
+                className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] flex items-center gap-1 whitespace-nowrap shrink-0"
+              >
+                {deadline}
+                <ChevronDown className="w-2.5 h-2.5" />
+              </button>
+            )}
+            {(isAptTab || activeTab === 'houses' || activeTab === 'land' || activeTab === 'commercial') && (
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(!filtersOpen)}
+                className="h-8 px-2.5 rounded-lg border border-[#e2e8f0] bg-white text-[11px] flex items-center gap-1 whitespace-nowrap shrink-0"
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                Ещё
+              </button>
+            )}
           </div>
 
-          {/* Advanced filters panel */}
+          {/* Расширенные фильтры: набор полей зависит от типа объекта (как в каталоге / FilterSidebar). */}
           {filtersOpen && (
             <div className="mt-3 pt-3 border-t border-[#e2e8f0] animate-in slide-in-from-top-1 duration-200">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                <div>
+              {isAptTab ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Площадь, м²</label>
+                    <div className="flex gap-1.5">
+                      <input type="text" placeholder="от" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMin} onChange={(e) => setAreaMin(e.target.value)} />
+                      <input type="text" placeholder="до" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMax} onChange={(e) => setAreaMax(e.target.value)} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Этаж</label>
+                    <div className="flex gap-1.5">
+                      <input type="text" placeholder="от" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={floorMin} onChange={(e) => setFloorMin(e.target.value.replace(/\D/g, ''))} />
+                      <input type="text" placeholder="до" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={floorMax} onChange={(e) => setFloorMax(e.target.value.replace(/\D/g, ''))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Отделка</label>
+                    <select
+                      className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50 text-foreground"
+                      value={heroFinishingId}
+                      onChange={(e) => setHeroFinishingId(e.target.value)}
+                    >
+                      <option value="">Любая</option>
+                      {finishings.map((x) => (
+                        <option key={x.id} value={String(x.id)}>
+                          {x.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Тип жилья</label>
+                    <select
+                      className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50 text-foreground"
+                      value={aptMarket}
+                      onChange={(e) => setAptMarket(e.target.value as typeof aptMarket)}
+                    >
+                      <option value="all">Все</option>
+                      <option value="new">Новостройки</option>
+                      <option value="secondary">Вторичка</option>
+                    </select>
+                  </div>
+                </div>
+              ) : activeTab === 'land' ? (
+                <div className="max-w-md">
+                  <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Площадь участка, сот.</label>
+                  <div className="flex gap-1.5">
+                    <input type="text" placeholder="от" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMin} onChange={(e) => setAreaMin(e.target.value)} />
+                    <input type="text" placeholder="до" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMax} onChange={(e) => setAreaMax(e.target.value)} />
+                  </div>
+                </div>
+              ) : (
+                <div className="max-w-md">
                   <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Площадь, м²</label>
                   <div className="flex gap-1.5">
-                    <input type="text" placeholder="от" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" />
-                    <input type="text" placeholder="до" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" />
+                    <input type="text" placeholder="от" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMin} onChange={(e) => setAreaMin(e.target.value)} />
+                    <input type="text" placeholder="до" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMax} onChange={(e) => setAreaMax(e.target.value)} />
                   </div>
                 </div>
-                <div>
-                  <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Этаж</label>
-                  <div className="flex gap-1.5">
-                    <input type="text" placeholder="от" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" />
-                    <input type="text" placeholder="до" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Отделка</label>
-                  <select className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50 text-foreground">
-                    <option value="">Любая</option>
-                    <option value="without">Без отделки</option>
-                    <option value="rough">Черновая</option>
-                    <option value="clean">Чистовая</option>
-                    <option value="turnkey">Под ключ</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Тип жилья</label>
-                  <select className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50 text-foreground">
-                    <option value="">Любой</option>
-                    <option value="new">Новостройки</option>
-                    <option value="secondary">Вторичка</option>
-                  </select>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
