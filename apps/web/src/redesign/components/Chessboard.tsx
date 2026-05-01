@@ -9,6 +9,7 @@ interface Props {
   floors: number;
   sections: number;
   buildingName: string;
+  roomFilter?: number | null;
 }
 
 type StatusKey = Apartment['status'];
@@ -33,7 +34,12 @@ const SWATCH_BG: Record<StatusKey, string> = {
 
 const STATUS_ORDER: StatusKey[] = ['available', 'reserved', 'sold'];
 
-const Chessboard = ({ apartments, floors, sections, buildingName }: Props) => {
+function apartmentNumber(apt: Apartment): number {
+  const n = Number(apt.number ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+const Chessboard = ({ apartments, floors, sections, buildingName, roomFilter = null }: Props) => {
   const counts = useMemo(() => {
     const c: Record<StatusKey, number> = { available: 0, reserved: 0, sold: 0 };
     for (const a of apartments) {
@@ -59,14 +65,30 @@ const Chessboard = ({ apartments, floors, sections, buildingName }: Props) => {
     });
   };
 
-  const byFloor = useMemo(() => {
-    const m = new Map<number, Apartment[]>();
+  const sectionNumbers = useMemo(() => {
+    const fromApts = apartments
+      .map((a) => Number(a.section ?? 1))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const fromCount = Array.from({ length: Math.max(sections, 1) }, (_, i) => i + 1);
+    return Array.from(new Set([...fromCount, ...fromApts])).sort((a, b) => a - b);
+  }, [apartments, sections]);
+
+  const byFloorSection = useMemo(() => {
+    const m = new Map<number, Map<number, Apartment[]>>();
     for (const a of apartments) {
-      const arr = m.get(a.floor) ?? [];
+      const floor = a.floor || 1;
+      const section = Number(a.section ?? 1) || 1;
+      const bySection = m.get(floor) ?? new Map<number, Apartment[]>();
+      const arr = bySection.get(section) ?? [];
       arr.push(a);
-      m.set(a.floor, arr);
+      bySection.set(section, arr);
+      m.set(floor, bySection);
     }
-    m.forEach((arr) => arr.sort((x, y) => (x.section ?? 1) - (y.section ?? 1)));
+    m.forEach((bySection) => {
+      bySection.forEach((arr) => {
+        arr.sort((x, y) => apartmentNumber(x) - apartmentNumber(y) || x.area - y.area);
+      });
+    });
     return m;
   }, [apartments]);
 
@@ -100,32 +122,61 @@ const Chessboard = ({ apartments, floors, sections, buildingName }: Props) => {
         </div>
       </div>
       <div className="overflow-x-auto rounded-xl border border-border bg-card p-3">
-        <div className="min-w-[760px] space-y-1.5">
+        <div className="min-w-[900px] space-y-1.5">
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: `44px repeat(${Math.max(sectionNumbers.length, 1)}, minmax(160px, 1fr))` }}
+          >
+            <div />
+            {sectionNumbers.map((section) => (
+              <div key={`section-head-${section}`} className="rounded-lg border border-border/40 bg-muted/30 px-2 py-1 text-center text-xs font-medium text-muted-foreground">
+                Секция {section}
+              </div>
+            ))}
+          </div>
           {Array.from({ length: maxFloor }, (_, fi) => {
             const floor = maxFloor - fi;
-            const row = (byFloor.get(floor) ?? []).filter((a) => activeStatuses.has(a.status));
+            const bySection = byFloorSection.get(floor);
             return (
-              <div key={`row-${floor}`} className="grid grid-cols-[44px_1fr] gap-1.5">
+              <div
+                key={`row-${floor}`}
+                className="grid gap-1.5"
+                style={{ gridTemplateColumns: `44px repeat(${Math.max(sectionNumbers.length, 1)}, minmax(160px, 1fr))` }}
+              >
                 <div className="flex items-center justify-center text-xs text-muted-foreground font-medium rounded-lg bg-muted/30 border border-border/40">
                   {floor}
                 </div>
-                <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(row.length, 1)}, minmax(108px, 1fr))` }}>
-                  {row.length === 0 && <div className="h-16 rounded-lg border border-border/40 bg-muted/20" />}
-                  {row.map((apt) => {
-                    const roomLabel = apt.rooms === 0 ? 'Ст' : `${apt.rooms}к`;
-                    const sec = apt.section ?? 1;
-                    const statusLabel = STATUS_LABEL[apt.status];
-                    const card = (
-                      <div className={cn('h-16 rounded-lg border px-2 py-1 text-[10px] leading-tight transition-colors', STATUS_BG[apt.status])}>
-                        <div className="font-semibold">{roomLabel} · {apt.area}м²</div>
-                        <div className="opacity-90">{formatPrice(apt.price)}</div>
-                        <div className="opacity-70">секц. {sec} · {statusLabel}</div>
-                      </div>
-                    );
-                    if (apt.status === 'sold') return <div key={apt.id}>{card}</div>;
-                    return <Link key={apt.id} to={`/apartment/${apt.id}`}>{card}</Link>;
-                  })}
-                </div>
+                {sectionNumbers.map((section) => {
+                  const cells = bySection?.get(section) ?? [];
+                  return (
+                    <div key={`${floor}-${section}`} className="min-h-16 rounded-lg border border-border/40 bg-muted/10 p-1">
+                      {cells.length === 0 ? (
+                        <div className="h-14 rounded-md border border-dashed border-border/50 bg-muted/10" />
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1">
+                          {cells.map((apt) => {
+                            const roomLabel = apt.rooms === 0 ? 'Ст' : `${apt.rooms}к`;
+                            const statusLabel = STATUS_LABEL[apt.status];
+                            const dimmed = !activeStatuses.has(apt.status) || (roomFilter !== null && apt.rooms !== roomFilter);
+                            const card = (
+                              <div className={cn(
+                                'min-h-14 rounded-md border px-2 py-1 text-[10px] leading-tight transition-opacity',
+                                STATUS_BG[apt.status],
+                                dimmed && 'opacity-25',
+                              )}>
+                                <div className="font-semibold">{roomLabel} · {apt.area}м²</div>
+                                <div className="opacity-90">{formatPrice(apt.price)}</div>
+                                <div className="opacity-70">№ {apt.number || apt.id} · {statusLabel}</div>
+                              </div>
+                            );
+                            if (apt.status === 'sold') return <div key={apt.id}>{card}</div>;
+                            return <Link key={apt.id} to={`/apartment/${apt.id}`}>{card}</Link>;
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

@@ -423,7 +423,14 @@ const RedesignComplex = () => {
               {hasChessTab ? (
               <TabsContent id="chess-block" value="chess" className="mt-6 space-y-8 scroll-mt-24">
                 {complex.buildings.map(b => (
-                  <Chessboard key={b.id} apartments={b.apartments} floors={b.floors} sections={b.sections} buildingName={b.name} />
+                  <Chessboard
+                    key={b.id}
+                    apartments={b.apartments}
+                    floors={b.floors}
+                    sections={b.sections}
+                    buildingName={b.name}
+                    roomFilter={roomFilter}
+                  />
                 ))}
               </TabsContent>
               ) : null}
