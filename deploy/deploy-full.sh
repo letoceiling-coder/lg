@@ -49,6 +49,8 @@ pnpm --filter @lg/api build
 
 # ── 5. Build frontend ──
 echo "→ Building frontend..."
+# Remove stale hashed chunks so production checks and clients only see the current build.
+rm -rf apps/web/dist
 # Каноникал и prerender (sitemap, /complex/*/index.html) берут VITE_PUBLIC_SITE_URL или PUBLIC_SITE_URL
 SITE_FOR_WEB="${VITE_PUBLIC_SITE_URL:-${PUBLIC_SITE_URL:-https://livegrid.ru}}"
 SITE_FOR_WEB="${SITE_FOR_WEB%/}"
