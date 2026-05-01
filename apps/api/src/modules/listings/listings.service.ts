@@ -305,6 +305,10 @@ export class ListingsService implements OnModuleInit {
     }
 
     const priceFilter: Prisma.DecimalNullableFilter<'Listing'> = {};
+    if (query.price_min != null || query.price_max != null) {
+      priceFilter.not = null;
+      priceFilter.gt = 0;
+    }
     if (query.price_min != null) priceFilter.gte = query.price_min;
     if (query.price_max != null) priceFilter.lte = query.price_max;
     if (Object.keys(priceFilter).length) where.price = priceFilter;

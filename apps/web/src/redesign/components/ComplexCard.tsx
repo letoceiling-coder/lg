@@ -7,14 +7,14 @@ import { formatPrice } from '@/redesign/data/mock-data';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { parseApiBlockId, useFavorites } from '@/shared/hooks/useFavorites';
 import { useCompare } from '@/shared/hooks/useCompare';
-import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
+import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlaceholder';
 
 interface Props {
   complex: ResidentialComplex;
   variant?: 'grid' | 'list';
 }
 
-/** Пока нет фото или битая ссылка — логотип на нейтральном фоне */
+/** Пока нет фото или битая ссылка — единая заглушка без логотипа. */
 function CardCoverImage({
   src,
   alt,
@@ -29,11 +29,7 @@ function CardCoverImage({
     setFailed(!src);
   }, [src]);
   if (!src || failed) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-muted p-4">
-        <img src={LIVEGRID_LOGO_SRC} alt="" className="max-h-[55%] max-w-[65%] object-contain opacity-45" />
-      </div>
-    );
+    return <MissingPhotoPlaceholder />;
   }
   return <img src={src} alt={alt} className={classNameImg} onError={() => setFailed(true)} />;
 }

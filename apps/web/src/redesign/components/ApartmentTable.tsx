@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { Apartment, SortField, SortDir } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
+import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlaceholder';
 
 interface Props {
   apartments: Apartment[];
@@ -231,7 +232,7 @@ const ApartmentTable = ({ apartments }: Props) => {
                                 <img src={a.planImage} alt="Планировка" className="w-full h-full object-contain" loading="lazy" />
                               </button>
                             ) : (
-                              <div className="w-14 h-14 rounded border bg-muted/30 text-[10px] text-muted-foreground flex items-center justify-center">нет</div>
+                              <MissingPhotoPlaceholder className="h-14 w-14 rounded border text-[9px]" />
                             )}
                           </td>
                           <td className="px-2 py-2">{a.buildingName || a.buildingId}</td>
@@ -241,8 +242,12 @@ const ApartmentTable = ({ apartments }: Props) => {
                           <td className="px-2 py-2">{a.area} м²</td>
                           <td className="px-2 py-2">{a.kitchenArea} м²</td>
                           <td className="px-2 py-2 capitalize">{a.finishing}</td>
-                          <td className="px-2 py-2">{formatPrice(a.price)}</td>
-                          <td className="px-2 py-2 font-medium">{formatPrice(a.price)}</td>
+                          <td className={cn('px-2 py-2', formatPrice(a.price) === 'Цена по запросу' && 'text-[#6b7280]')}>
+                            {formatPrice(a.price)}
+                          </td>
+                          <td className={cn('px-2 py-2 font-medium', formatPrice(a.price) === 'Цена по запросу' && 'text-[#6b7280]')}>
+                            {formatPrice(a.price)}
+                          </td>
                           <td className="px-2 py-2">
                             {formatPrice(a.price) !== 'Цена по запросу' && a.pricePerMeter > 0
                               ? `${a.pricePerMeter.toLocaleString('ru-RU')} ₽/м²`

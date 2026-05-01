@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Heart, Share2, GitCompare, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { mapListingRowToApartment, type ApiListingRow } from '@/redesign/lib/blo
 import { mapListingDetailToApartmentPage, type ApiListingDetail } from '@/redesign/lib/listing-page-from-api';
 import { getApartmentById, formatPrice, MIN_REASONABLE_PRICE_RUB } from '@/redesign/data/mock-data';
 import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
+import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlaceholder';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useFavorites } from '@/shared/hooks/useFavorites';
@@ -23,6 +24,22 @@ function parseNumericListingId(id: string | undefined): number | null {
   const n = Number.parseInt(id, 10);
   if (!Number.isFinite(n) || String(n) !== id) return null;
   return n;
+}
+
+function PlanImage({ src }: { src?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const valid = Boolean(src && !src.endsWith('/placeholder.svg') && !failed);
+  if (!valid) {
+    return <MissingPhotoPlaceholder className="aspect-square max-h-[min(640px,78vh)] max-w-full rounded-xl" />;
+  }
+  return (
+    <img
+      src={src ?? ''}
+      alt="Планировка"
+      className="mx-auto max-h-[min(640px,78vh)] w-auto max-w-full object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 const RedesignApartment = () => {
@@ -244,14 +261,7 @@ const RedesignApartment = () => {
                     <Share2 className="w-4 h-4" />
                   </Button>
                 </div>
-                <img
-                  src={apt.planImage || LIVEGRID_LOGO_SRC}
-                  alt="Планировка"
-                  className="mx-auto max-h-[min(640px,78vh)] w-auto max-w-full object-contain"
-                  onError={(e) => {
-                    e.currentTarget.src = LIVEGRID_LOGO_SRC;
-                  }}
-                />
+                <PlanImage src={apt.planImage} />
               </div>
             </div>
 
@@ -320,12 +330,16 @@ const RedesignApartment = () => {
               </div>
 
               <div className="border-t border-border pt-5 mb-5">
-                <p className="text-3xl font-bold">{totalPriceDisplay}</p>
+                <p className={cn('text-3xl font-bold', totalPriceDisplay === 'Цена по запросу' ? 'text-[#6b7280]' : 'text-primary')}>
+                  {totalPriceDisplay}
+                </p>
                 {ppmOk ? (
                   <p className="text-sm text-muted-foreground mt-1">
                     {apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м²
                   </p>
-                ) : null}
+                ) : (
+                  <p className="text-sm text-[#6b7280] mt-1">Цена по запросу</p>
+                )}
               </div>
 
               <div className="space-y-3">

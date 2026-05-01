@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatListingPriceFromApi } from '@/redesign/data/mock-data';
-import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
+import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlaceholder';
 
 export type ApiListingCardRow = {
   id: number;
@@ -172,9 +172,7 @@ const ListingCard = ({ listing, variant = 'grid' }: Props) => {
         )}
       >
         {showLogo ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted/50 p-6">
-            <img src={LIVEGRID_LOGO_SRC} alt="" className="max-h-[56%] max-w-[70%] object-contain opacity-45" />
-          </div>
+          <MissingPhotoPlaceholder className="absolute inset-0" />
         ) : (
           <img
             src={img}
@@ -196,7 +194,9 @@ const ListingCard = ({ listing, variant = 'grid' }: Props) => {
       <div className="p-3 flex flex-col gap-0.5 flex-1 min-w-0">
         <div className="flex justify-between items-start gap-2">
           <h3 className="font-semibold text-sm leading-tight truncate">{title}</h3>
-          <span className="font-bold text-sm shrink-0 text-primary">{formatted}</span>
+          <span className={cn('font-bold text-sm shrink-0', formatted === 'Цена по запросу' ? 'text-[#6b7280]' : 'text-primary')}>
+            {formatted}
+          </span>
         </div>
         <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <MapPin className="w-3 h-3 shrink-0" />
