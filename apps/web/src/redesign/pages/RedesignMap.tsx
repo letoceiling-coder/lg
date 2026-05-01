@@ -86,6 +86,7 @@ const RedesignMap = () => {
   const [activeBlock, setActiveBlock] = useState<string | null>(null);
   const [activeListing, setActiveListing] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
   const geoPreset = searchParams.get('geo_preset') ?? undefined;
   const geoPolygon = searchParams.get('geo_polygon') ?? undefined;
@@ -277,6 +278,36 @@ const RedesignMap = () => {
     ? 'Нет объявлений, добавьте первым'
     : loading ? 'Загрузка…' : `${totalCount} объектов на карте`;
 
+  const searchSuggestions = useMemo(() => {
+    const q = filters.search.trim().toLowerCase();
+    if (useBlocksMap) {
+      return blocks
+        .filter((c) => {
+          if (!q) return true;
+          return [c.name, c.address, c.district, c.subway].some((v) => v.toLowerCase().includes(q));
+        })
+        .slice(0, 6)
+        .map((c) => ({
+          id: c.slug,
+          type: 'block' as const,
+          label: c.name,
+          meta: [c.district, c.address].filter((v) => v && v !== '—').join(' · '),
+        }));
+    }
+    return listingItems
+      .filter((l) => {
+        if (!q) return true;
+        return [l.title, l.address].some((v) => (v ?? '').toLowerCase().includes(q));
+      })
+      .slice(0, 6)
+      .map((l) => ({
+        id: String(l.id),
+        type: 'listing' as const,
+        label: l.title ?? l.address ?? `Объект #${l.id}`,
+        meta: l.address ?? '',
+      }));
+  }, [blocks, filters.search, listingItems, useBlocksMap]);
+
   // Derive available objectType options from kindCounts
   const objectTypeOptions = useMemo(
     () => objectKindLinks.map((x) => x.type),
@@ -311,6 +342,21 @@ const RedesignMap = () => {
     [setSearchParams, setStoredRegionId],
   );
 
+  const handleSuggestionSelect = useCallback(
+    (suggestion: (typeof searchSuggestions)[number]) => {
+      setSuggestionsOpen(false);
+      handleFiltersChange({ ...filters, search: suggestion.label });
+      if (suggestion.type === 'block') {
+        setActiveListing(null);
+        setActiveBlock(suggestion.id);
+      } else {
+        setActiveBlock(null);
+        setActiveListing(Number(suggestion.id));
+      }
+    },
+    [filters, handleFiltersChange, searchSuggestions],
+  );
+
   return (
     <div className="flex h-svh flex-col bg-background">
       <RedesignHeader />
@@ -340,10 +386,33 @@ const RedesignMap = () => {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={filters.search}
-                  onChange={(e) => handleFiltersChange({ ...filters, search: e.target.value })}
+                  onChange={(e) => {
+                    setSuggestionsOpen(true);
+                    handleFiltersChange({ ...filters, search: e.target.value });
+                  }}
+                  onFocus={() => setSuggestionsOpen(true)}
+                  onBlur={() => window.setTimeout(() => setSuggestionsOpen(false), 120)}
                   placeholder="Поиск по ЖК, адресу, району"
                   className="h-9 bg-background pl-9 text-sm"
                 />
+                {suggestionsOpen && searchSuggestions.length > 0 ? (
+                  <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+                    {searchSuggestions.map((suggestion) => (
+                      <button
+                        key={`${suggestion.type}-${suggestion.id}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSuggestionSelect(suggestion)}
+                        className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60"
+                      >
+                        <span className="block truncate font-medium">{suggestion.label}</span>
+                        {suggestion.meta ? (
+                          <span className="block truncate text-xs text-muted-foreground">{suggestion.meta}</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <span className="text-sm font-semibold sm:ml-auto">{subtitle}</span>
               <Button variant="outline" size="sm" className="h-9 lg:hidden" onClick={() => setShowFilters(true)}>

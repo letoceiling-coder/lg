@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useYandexMapsReady } from '@/shared/hooks/useYandexMapsReady';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ declare global {
 const DEFAULT_CENTER = [55.751244, 37.618423];
 const DEFAULT_ZOOM = 11;
 const PLACEHOLDER = '/placeholder.svg';
+const PRICE_LABEL_ZOOM = 12;
 
 interface Props {
   complexes: ResidentialComplex[];
@@ -35,6 +36,7 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
   const mapInstance = useRef<any>(null);
   const clustererRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const { ready } = useYandexMapsReady();
 
   const activeComplex = complexes.find(c => c.slug === activeSlug);
@@ -44,6 +46,10 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
     mapInstance.current = new window.ymaps.Map(mapRef.current, {
       center: regionCenter ?? DEFAULT_CENTER, zoom: DEFAULT_ZOOM,
       controls: ['zoomControl'],
+    });
+    mapInstance.current.events.add('boundschange', () => {
+      const nextZoom = mapInstance.current?.getZoom?.();
+      if (typeof nextZoom === 'number') setZoom(nextZoom);
     });
   }, [ready, regionCenter]);
 
@@ -71,6 +77,7 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
     });
 
     const placemarks: any[] = [];
+    const showPriceLabels = zoom >= PRICE_LABEL_ZOOM;
 
     complexes.forEach(c => {
       const aptCount = getAptCount(c);
@@ -81,34 +88,44 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
         ? `от ${c.priceFrom >= 1e6 ? (c.priceFrom / 1e6).toFixed(1) + ' млн' : Math.round(c.priceFrom / 1e3) + ' тыс'}`
         : `${aptCount} кв.`;
 
+      const color = isActive ? '#ef4444' : '#2563EB';
       const layout = window.ymaps.templateLayoutFactory.createClass(
-        `<div style="
-          background: ${isActive ? '#ffffff' : '#ffffff'};
-          color: ${isActive ? '#ef4444' : '#1d4ed8'};
-          padding: 6px 12px;
-          border-radius: 999px;
-          font-size: 12px;
-          line-height: 1;
-          font-weight: 700;
-          letter-spacing: 0.2px;
-          white-space: nowrap;
-          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.20);
-          cursor: pointer;
-          transform: translate(-50%, -100%);
-          border: 2px solid ${isActive ? '#ef4444' : 'rgba(37, 99, 235, 0.55)'};
-          text-shadow: ${isActive ? 'none' : 'none'};
-          position: relative;
-        ">${priceLabel}<div style="
-          position: absolute;
-          bottom: -8px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 0; height: 0;
-          border-left: 6px solid transparent;
-          border-right: 6px solid transparent;
-          border-top: 8px solid ${isActive ? '#ef4444' : '#ffffff'};
-          filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.18));
-        "></div></div>`
+        showPriceLabels
+          ? `<div style="
+              background: ${color};
+              color: #ffffff;
+              padding: 6px 10px;
+              border-radius: 999px;
+              font-size: 12px;
+              line-height: 1;
+              font-weight: 700;
+              white-space: nowrap;
+              box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
+              cursor: pointer;
+              transform: translate(-50%, -100%);
+              border: 2px solid #ffffff;
+              position: relative;
+            ">${priceLabel}<div style="
+              position: absolute;
+              bottom: -8px;
+              left: 50%;
+              transform: translateX(-50%);
+              width: 0; height: 0;
+              border-left: 6px solid transparent;
+              border-right: 6px solid transparent;
+              border-top: 8px solid ${color};
+              filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.18));
+            "></div></div>`
+          : `<div style="
+              width: ${isActive ? 22 : 16}px;
+              height: ${isActive ? 22 : 16}px;
+              border-radius: 999px;
+              background: ${color};
+              border: 3px solid #ffffff;
+              box-shadow: 0 8px 20px rgba(37, 99, 235, 0.32);
+              cursor: pointer;
+              transform: translate(-50%, -50%);
+            "></div>`
       );
 
       const pm = new window.ymaps.Placemark(c.coords, {}, {
@@ -126,7 +143,7 @@ const MapSearch = ({ complexes, activeSlug, onSelect, height = '70vh', compact, 
     clusterer.add(placemarks);
     map.geoObjects.add(clusterer);
     clustererRef.current = clusterer;
-  }, [complexes, ready, activeSlug, onSelect]);
+  }, [complexes, ready, activeSlug, onSelect, zoom]);
 
 
   // Center on active
