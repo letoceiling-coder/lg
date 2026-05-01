@@ -6,16 +6,26 @@ import { useAuth } from '@/shared/hooks/useAuth';
 
 interface ImportHistoryRow {
   id: number;
-  regionCode: string;
+  regionCode?: string | null;
+  region?: {
+    code?: string | null;
+    name?: string | null;
+  } | null;
   status: string;
-  startedAt: string;
+  startedAt: string | null;
+  createdAt?: string | null;
   finishedAt: string | null;
-  blocksCreated: number;
-  blocksUpdated: number;
-  buildingsCreated: number;
-  buildingsUpdated: number;
-  listingsCreated: number;
-  listingsUpdated: number;
+  blocksCreated?: number | null;
+  blocksUpdated?: number | null;
+  buildingsCreated?: number | null;
+  buildingsUpdated?: number | null;
+  listingsCreated?: number | null;
+  listingsUpdated?: number | null;
+  stats?: {
+    blocks_upserted?: number;
+    buildings_upserted?: number;
+    apartments_upserted?: number;
+  } | null;
   errorMessage: string | null;
 }
 
@@ -35,6 +45,7 @@ const statusIcon: Record<string, typeof CheckCircle2> = {
   COMPLETED: CheckCircle2,
   FAILED: XCircle,
   IN_PROGRESS: Loader2,
+  RUNNING: Loader2,
   PENDING: Clock,
 };
 
@@ -42,6 +53,7 @@ const statusLabel: Record<string, string> = {
   COMPLETED: 'Завершён',
   FAILED: 'Ошибка',
   IN_PROGRESS: 'В процессе',
+  RUNNING: 'В процессе',
   PENDING: 'Ожидает',
 };
 
@@ -49,8 +61,33 @@ const statusColor: Record<string, string> = {
   COMPLETED: 'text-green-600',
   FAILED: 'text-destructive',
   IN_PROGRESS: 'text-amber-600',
+  RUNNING: 'text-amber-600',
   PENDING: 'text-muted-foreground',
 };
+
+function historyRegionCode(row: ImportHistoryRow): string {
+  return (row.regionCode ?? row.region?.code ?? '—').toString();
+}
+
+function historyStartedAt(row: ImportHistoryRow): string | null {
+  return row.startedAt ?? row.createdAt ?? null;
+}
+
+function formatDateTime(value: string | null | undefined, options: Intl.DateTimeFormatOptions): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('ru-RU', options);
+}
+
+function statValue(row: ImportHistoryRow, direct: 'blocksCreated' | 'blocksUpdated' | 'buildingsCreated' | 'buildingsUpdated' | 'listingsCreated' | 'listingsUpdated'): number {
+  const directValue = row[direct];
+  if (typeof directValue === 'number') return directValue;
+  if (direct === 'blocksUpdated') return row.stats?.blocks_upserted ?? 0;
+  if (direct === 'buildingsUpdated') return row.stats?.buildings_upserted ?? 0;
+  if (direct === 'listingsUpdated') return row.stats?.apartments_upserted ?? 0;
+  return 0;
+}
 
 export default function AdminFeedImport() {
   const qc = useQueryClient();
@@ -223,7 +260,7 @@ export default function AdminFeedImport() {
           <div>
             <p className="text-xs text-muted-foreground">Последний импорт</p>
             <p className="font-medium">
-              {new Date(latest.startedAt).toLocaleString('ru-RU', {
+              {formatDateTime(historyStartedAt(latest), {
                 day: '2-digit',
                 month: '2-digit',
                 year: '2-digit',
@@ -234,7 +271,7 @@ export default function AdminFeedImport() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Регион / статус</p>
-            <p className="font-medium">{latest.regionCode.toUpperCase()} · {statusLabel[latest.status] ?? latest.status}</p>
+            <p className="font-medium">{historyRegionCode(latest).toUpperCase()} · {statusLabel[latest.status] ?? latest.status}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Лог ошибки</p>
@@ -291,27 +328,25 @@ export default function AdminFeedImport() {
                     <tr key={r.id} className="hover:bg-muted/50 transition-colors">
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${statusColor[r.status] ?? ''}`}>
-                          <Icon className={`w-3.5 h-3.5 ${r.status === 'IN_PROGRESS' ? 'animate-spin' : ''}`} />
+                          <Icon className={`w-3.5 h-3.5 ${r.status === 'IN_PROGRESS' || r.status === 'RUNNING' ? 'animate-spin' : ''}`} />
                           {statusLabel[r.status] ?? r.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs uppercase">{r.regionCode}</td>
+                      <td className="px-4 py-3 text-xs uppercase">{historyRegionCode(r)}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(r.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        {formatDateTime(historyStartedAt(r), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {r.finishedAt
-                          ? new Date(r.finishedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-                          : '—'}
+                        {formatDateTime(r.finishedAt, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="px-4 py-3 text-right text-xs">
-                        <span className="text-green-600">+{r.blocksCreated}</span> / <span className="text-amber-600">{r.blocksUpdated}</span>
+                        <span className="text-green-600">+{statValue(r, 'blocksCreated')}</span> / <span className="text-amber-600">{statValue(r, 'blocksUpdated')}</span>
                       </td>
                       <td className="px-4 py-3 text-right text-xs">
-                        <span className="text-green-600">+{r.buildingsCreated}</span> / <span className="text-amber-600">{r.buildingsUpdated}</span>
+                        <span className="text-green-600">+{statValue(r, 'buildingsCreated')}</span> / <span className="text-amber-600">{statValue(r, 'buildingsUpdated')}</span>
                       </td>
                       <td className="px-4 py-3 text-right text-xs">
-                        <span className="text-green-600">+{r.listingsCreated}</span> / <span className="text-amber-600">{r.listingsUpdated}</span>
+                        <span className="text-green-600">+{statValue(r, 'listingsCreated')}</span> / <span className="text-amber-600">{statValue(r, 'listingsUpdated')}</span>
                       </td>
                       <td className="px-4 py-3 text-xs text-destructive max-w-[320px] whitespace-pre-wrap break-words" title={r.errorMessage ?? ''}>
                         {r.errorMessage ?? '—'}
