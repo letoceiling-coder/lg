@@ -22,12 +22,24 @@ import { Label } from '@/components/ui/label';
 import MediaPickerDialog from '@/admin/components/MediaPickerDialog';
 import SellerFields, { emptySellerForm, normalizeSellerForm, type SellerForm } from '@/admin/components/SellerFields';
 import { listingStatusLabel, listingStatusOptions, type ListingStatus } from '@/admin/lib/listingStatus';
+import {
+  commercialTypeOptions,
+  houseTypeOptions,
+  listingWizardKindLabels,
+  listingWizardMediaLabels,
+  listingWizardRequiredAreaLabel,
+  marketSegmentOptions,
+  optionLabel,
+  parkingTypeOptions,
+  type ListingWizardKind,
+} from '@/admin/lib/listingWizardConfig';
 
-type Kind = 'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING';
+type Kind = ListingWizardKind;
 
 type RegionRow = { id: number; code: string; name: string };
 type BlockRow = { id: number; name: string };
 type RefOpt = { id: number; name: string };
+type ReviewRow = { label: string; value: string };
 
 const KIND_OPTIONS: Array<{
   kind: Kind;
@@ -35,11 +47,11 @@ const KIND_OPTIONS: Array<{
   hint: string;
   icon: typeof Home;
 }> = [
-  { kind: 'APARTMENT', title: 'Квартира', hint: 'Жилая квартира в ЖК или вторичка', icon: Building2 },
-  { kind: 'HOUSE', title: 'Дом', hint: 'Частный дом, таунхаус, дуплекс', icon: Home },
-  { kind: 'LAND', title: 'Участок', hint: 'Земельный участок (ИЖС, СНТ)', icon: TreePine },
-  { kind: 'COMMERCIAL', title: 'Коммерция', hint: 'Офис, магазин, склад', icon: Store },
-  { kind: 'PARKING', title: 'Паркинг', hint: 'Машиноместо', icon: Car },
+  { kind: 'APARTMENT', ...listingWizardKindLabels.APARTMENT, icon: Building2 },
+  { kind: 'HOUSE', ...listingWizardKindLabels.HOUSE, icon: Home },
+  { kind: 'LAND', ...listingWizardKindLabels.LAND, icon: TreePine },
+  { kind: 'COMMERCIAL', ...listingWizardKindLabels.COMMERCIAL, icon: Store },
+  { kind: 'PARKING', ...listingWizardKindLabels.PARKING, icon: Car },
 ];
 
 const STORAGE_KEY = 'admin:listing-wizard:draft:v1';
@@ -150,14 +162,19 @@ function loadDraft(): DraftState {
     if (!raw) return makeEmptyDraft();
     const parsed = JSON.parse(raw) as Partial<DraftState>;
     const base = makeEmptyDraft();
+    const parsedKind = KIND_OPTIONS.some((option) => option.kind === parsed.kind) ? parsed.kind : base.kind;
     return {
       ...base,
       ...parsed,
+      kind: parsedKind,
       apartment: { ...base.apartment, ...parsed.apartment },
       house: { ...base.house, ...parsed.house },
       land: { ...base.land, ...parsed.land },
       commercial: { ...base.commercial, ...parsed.commercial },
       parking: { ...base.parking, ...parsed.parking },
+      extraPhotoUrls: Array.isArray(parsed.extraPhotoUrls)
+        ? parsed.extraPhotoUrls.filter((u): u is string => typeof u === 'string').slice(0, 24)
+        : [],
       seller: { ...base.seller, ...parsed.seller },
     } as DraftState;
   } catch {
@@ -176,6 +193,83 @@ function intNum(s: string): number | undefined {
   if (!t) return undefined;
   const n = Number.parseInt(t, 10);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function hasPositive(value: string): boolean {
+  const n = num(value);
+  return n != null && n > 0;
+}
+
+function hasIntegerInRange(value: string, min: number, max?: number): boolean {
+  const n = intNum(value);
+  if (n == null) return false;
+  return n >= min && (max == null || n <= max);
+}
+
+function validateDraftStep(draft: DraftState, step: number): { ok: boolean; reason?: string } {
+  if (step === 0) {
+    if (!draft.kind) return { ok: false, reason: 'Выберите тип объекта' };
+    return { ok: true };
+  }
+  if (step === 1) {
+    if (!draft.regionId) return { ok: false, reason: 'Выберите регион' };
+    const p = num(draft.price);
+    if (p == null || p < 1) return { ok: false, reason: 'Укажите цену в рублях' };
+    const hasBlock = intNum(draft.blockId) != null;
+    const hasAddress = draft.address.trim().length > 0;
+    if (!hasBlock && !hasAddress) return { ok: false, reason: 'Укажите ЖК или адрес объекта' };
+    const hasLat = draft.lat.trim().length > 0;
+    const hasLng = draft.lng.trim().length > 0;
+    if (hasLat !== hasLng) return { ok: false, reason: 'Заполните широту и долготу вместе' };
+    const lat = num(draft.lat);
+    if (hasLat && (lat == null || lat < -90 || lat > 90)) {
+      return { ok: false, reason: 'Широта должна быть числом от -90 до 90' };
+    }
+    const lng = num(draft.lng);
+    if (hasLng && (lng == null || lng < -180 || lng > 180)) {
+      return { ok: false, reason: 'Долгота должна быть числом от -180 до 180' };
+    }
+    return { ok: true };
+  }
+  if (step === 2) {
+    switch (draft.kind) {
+      case 'APARTMENT':
+        if (!hasPositive(draft.apartment.areaTotal)) return { ok: false, reason: 'Укажите площадь квартиры, м²' };
+        if (draft.apartment.floorsTotal.trim() && !hasIntegerInRange(draft.apartment.floorsTotal, 1)) {
+          return { ok: false, reason: 'Этажей в доме должно быть целым числом от 1' };
+        }
+        return { ok: true };
+      case 'HOUSE':
+        if (!hasPositive(draft.house.areaTotal)) return { ok: false, reason: 'Укажите площадь дома, м²' };
+        if (draft.house.yearBuilt.trim() && !hasIntegerInRange(draft.house.yearBuilt, 1800, new Date().getFullYear() + 5)) {
+          return { ok: false, reason: 'Проверьте год постройки дома' };
+        }
+        return { ok: true };
+      case 'LAND':
+        if (!hasPositive(draft.land.areaSotki)) return { ok: false, reason: 'Укажите площадь участка, сот.' };
+        return { ok: true };
+      case 'COMMERCIAL':
+        if (!hasPositive(draft.commercial.area)) return { ok: false, reason: 'Укажите площадь помещения, м²' };
+        return { ok: true };
+      case 'PARKING':
+        if (!hasPositive(draft.parking.area)) return { ok: false, reason: 'Укажите площадь машино-места, м²' };
+        return { ok: true };
+      default:
+        return { ok: false, reason: 'Выберите тип объекта' };
+    }
+  }
+  if (step === 3 && draft.extraPhotoUrls.length > 24) {
+    return { ok: false, reason: 'В галерее может быть не более 24 фото' };
+  }
+  return { ok: true };
+}
+
+function validateDraft(draft: DraftState): { ok: boolean; reason?: string; step?: number } {
+  for (let i = 0; i < STEP_TITLES.length; i += 1) {
+    const result = validateDraftStep(draft, i);
+    if (!result.ok) return { ...result, step: i };
+  }
+  return { ok: true };
 }
 
 export default function AdminListingWizard() {
@@ -226,48 +320,7 @@ export default function AdminListingWizard() {
   const update = (patch: Partial<DraftState>) => setDraft((prev) => ({ ...prev, ...patch }));
 
   const stepValid = useMemo<{ ok: boolean; reason?: string }>(() => {
-    if (step === 0) {
-      if (!draft.kind) return { ok: false, reason: 'Выберите тип объекта' };
-      return { ok: true };
-    }
-    if (step === 1) {
-      if (!draft.regionId) return { ok: false, reason: 'Выберите регион' };
-      const p = num(draft.price);
-      if (p == null || p < 1) return { ok: false, reason: 'Укажите цену в рублях' };
-      return { ok: true };
-    }
-    if (step === 2) {
-      switch (draft.kind) {
-        case 'APARTMENT': {
-          const a = num(draft.apartment.areaTotal);
-          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь, м²' };
-          return { ok: true };
-        }
-        case 'HOUSE': {
-          const a = num(draft.house.areaTotal);
-          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь дома, м²' };
-          return { ok: true };
-        }
-        case 'LAND': {
-          const a = num(draft.land.areaSotki);
-          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь участка, сот.' };
-          return { ok: true };
-        }
-        case 'COMMERCIAL': {
-          const a = num(draft.commercial.area);
-          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь помещения, м²' };
-          return { ok: true };
-        }
-        case 'PARKING': {
-          const a = num(draft.parking.area);
-          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь машино-места, м²' };
-          return { ok: true };
-        }
-        default:
-          return { ok: false };
-      }
-    }
-    return { ok: true };
+    return validateDraftStep(draft, step);
   }, [step, draft]);
 
   const saveMutation = useMutation({
@@ -355,6 +408,8 @@ export default function AdminListingWizard() {
           const fl = intNum(c.floor);
           if (fl != null) commercial.floor = fl;
           commercial.hasSeparateEntrance = c.hasSeparateEntrance;
+          if (draft.mainPhotoUrl.trim()) commercial.photoUrl = draft.mainPhotoUrl.trim();
+          if (draft.extraPhotoUrls.length) commercial.extraPhotoUrls = draft.extraPhotoUrls;
           return apiPost('/admin/listings/manual-commercial', { ...common, commercial });
         }
         case 'PARKING': {
@@ -366,6 +421,8 @@ export default function AdminListingWizard() {
           const fl = intNum(p.floor);
           if (fl != null) parking.floor = fl;
           if (p.number.trim()) parking.number = p.number.trim();
+          if (draft.mainPhotoUrl.trim()) parking.photoUrl = draft.mainPhotoUrl.trim();
+          if (draft.extraPhotoUrls.length) parking.extraPhotoUrls = draft.extraPhotoUrls;
           return apiPost('/admin/listings/manual-parking', { ...common, parking });
         }
         default:
@@ -582,7 +639,7 @@ export default function AdminListingWizard() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Координаты обязательны, если объект должен появиться на карте без привязки к ЖК.
+                Координаты заполняются парой. Без привязки к ЖК укажите хотя бы адрес, чтобы карточка была понятной.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -627,8 +684,13 @@ export default function AdminListingWizard() {
 
         {step === 3 ? (
           <div className="space-y-4">
+            {draft.kind ? (
+              <p className="text-xs text-muted-foreground">
+                Фото сохраняются для типа «{listingWizardKindLabels[draft.kind].title}». Используйте файлы из медиатеки.
+              </p>
+            ) : null}
             <div className="space-y-1">
-              <Label>Главное фото</Label>
+              <Label>{draft.kind ? listingWizardMediaLabels[draft.kind].main : 'Главное фото'}</Label>
               <div className="flex items-center gap-3">
                 {draft.mainPhotoUrl ? (
                   <img
@@ -660,7 +722,7 @@ export default function AdminListingWizard() {
 
             {draft.kind === 'APARTMENT' ? (
               <div className="space-y-1">
-                <Label>Планировка (PNG/JPG)</Label>
+                <Label>{listingWizardMediaLabels.APARTMENT.plan} (PNG/JPG)</Label>
                 <div className="flex items-center gap-3">
                   {draft.planUrl ? (
                     <img
@@ -689,7 +751,7 @@ export default function AdminListingWizard() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Галерея ({draft.extraPhotoUrls.length})</Label>
+                <Label>{draft.kind ? listingWizardMediaLabels[draft.kind].gallery : 'Галерея'} ({draft.extraPhotoUrls.length})</Label>
                 <Button type="button" variant="outline" size="sm" onClick={() => setPicker('extra')}>
                   Добавить из медиа
                 </Button>
@@ -721,7 +783,7 @@ export default function AdminListingWizard() {
           </div>
         ) : null}
 
-        {step === 4 ? <ReviewStep draft={draft} regions={regions ?? []} /> : null}
+        {step === 4 ? <ReviewStep draft={draft} regions={regions ?? []} blocks={blocksForRegion?.data ?? []} /> : null}
       </div>
 
       <div className="flex items-center justify-between mt-4">
@@ -738,6 +800,12 @@ export default function AdminListingWizard() {
           <Button
             type="button"
             onClick={() => {
+              const validation = validateDraft(draft);
+              if (!validation.ok) {
+                setStep(validation.step ?? 0);
+                setSubmitError(validation.reason ?? 'Проверьте обязательные поля');
+                return;
+              }
               setSubmitError('');
               saveMutation.mutate();
             }}
@@ -818,13 +886,13 @@ function CharacteristicsStep({
               value={a.marketSegment}
               onChange={(e) => upd({ marketSegment: e.target.value as DraftState['apartment']['marketSegment'] })}
             >
-              <option value="auto">Авто / не указано</option>
-              <option value="NEW_BUILDING">Новостройка</option>
-              <option value="SECONDARY">Вторичка</option>
+              {marketSegmentOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </div>
           <div className="space-y-1 col-span-2">
-            <Label>Площадь, м² *</Label>
+            <Label>{listingWizardRequiredAreaLabel.APARTMENT} *</Label>
             <Input value={a.areaTotal} onChange={(e) => upd({ areaTotal: e.target.value })} placeholder="54.2" />
           </div>
           <div className="space-y-1">
@@ -893,10 +961,9 @@ function CharacteristicsStep({
               onChange={(e) => upd({ houseType: e.target.value as DraftState['house']['houseType'] })}
             >
               <option value="">—</option>
-              <option value="DETACHED">Отдельно стоящий</option>
-              <option value="SEMI">Полудуплекс</option>
-              <option value="TOWNHOUSE">Таунхаус</option>
-              <option value="DUPLEX">Дуплекс</option>
+              {houseTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </div>
           <div className="space-y-1">
@@ -904,7 +971,7 @@ function CharacteristicsStep({
             <Input value={h.yearBuilt} onChange={(e) => upd({ yearBuilt: e.target.value })} />
           </div>
           <div className="space-y-1">
-            <Label>Площадь дома, м²</Label>
+            <Label>{listingWizardRequiredAreaLabel.HOUSE} *</Label>
             <Input value={h.areaTotal} onChange={(e) => upd({ areaTotal: e.target.value })} />
           </div>
           <div className="space-y-1">
@@ -940,7 +1007,7 @@ function CharacteristicsStep({
       return (
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <Label>Площадь, сот.</Label>
+            <Label>{listingWizardRequiredAreaLabel.LAND} *</Label>
             <Input value={l.areaSotki} onChange={(e) => upd({ areaSotki: e.target.value })} />
           </div>
           <div className="space-y-1">
@@ -977,15 +1044,13 @@ function CharacteristicsStep({
               }
             >
               <option value="">—</option>
-              <option value="OFFICE">Офис</option>
-              <option value="RETAIL">Магазин</option>
-              <option value="WAREHOUSE">Склад</option>
-              <option value="RESTAURANT">Общепит</option>
-              <option value="OTHER">Другое</option>
+              {commercialTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </div>
           <div className="space-y-1">
-            <Label>Площадь, м²</Label>
+            <Label>{listingWizardRequiredAreaLabel.COMMERCIAL} *</Label>
             <Input value={c.area} onChange={(e) => upd({ area: e.target.value })} />
           </div>
           <div className="space-y-1">
@@ -1018,13 +1083,13 @@ function CharacteristicsStep({
               }
             >
               <option value="">—</option>
-              <option value="UNDERGROUND">Подземный</option>
-              <option value="GROUND">Наземный</option>
-              <option value="MULTILEVEL">Многоуровневый</option>
+              {parkingTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
           </div>
           <div className="space-y-1">
-            <Label>Площадь, м²</Label>
+            <Label>{listingWizardRequiredAreaLabel.PARKING} *</Label>
             <Input value={p.area} onChange={(e) => upd({ area: e.target.value })} />
           </div>
           <div className="space-y-1">
@@ -1043,22 +1108,113 @@ function CharacteristicsStep({
   }
 }
 
-function ReviewStep({ draft, regions }: { draft: DraftState; regions: RegionRow[] }) {
+function formatPrice(value: string): string {
+  const n = num(value);
+  return n != null ? `${n.toLocaleString('ru-RU')} ₽` : '—';
+}
+
+function boolLabel(value: boolean): string {
+  return value ? 'Да' : 'Нет';
+}
+
+function sellerSummary(seller: SellerForm): string {
+  const parts = [seller.fullName, seller.phone, seller.email, seller.address].map((x) => x.trim()).filter(Boolean);
+  return parts.length ? parts.join(' · ') : '—';
+}
+
+function kindReviewRows(draft: DraftState): ReviewRow[] {
+  switch (draft.kind) {
+    case 'APARTMENT':
+      return [
+        { label: 'Тип рынка', value: optionLabel(marketSegmentOptions, draft.apartment.marketSegment) },
+        { label: 'Адрес квартиры', value: draft.apartment.blockAddress || draft.address || '—' },
+        { label: 'Площадь', value: draft.apartment.areaTotal ? `${draft.apartment.areaTotal} м²` : '—' },
+        { label: 'Кухня', value: draft.apartment.areaKitchen ? `${draft.apartment.areaKitchen} м²` : '—' },
+        { label: 'Этаж', value: [draft.apartment.floor, draft.apartment.floorsTotal].filter(Boolean).join(' / ') || '—' },
+        { label: 'Корпус', value: draft.apartment.buildingName || '—' },
+        { label: 'Номер квартиры', value: draft.apartment.number || '—' },
+        { label: 'Планировка', value: draft.planUrl || '—' },
+      ];
+    case 'HOUSE':
+      return [
+        { label: 'Тип дома', value: optionLabel(houseTypeOptions, draft.house.houseType) },
+        { label: 'Площадь дома', value: draft.house.areaTotal ? `${draft.house.areaTotal} м²` : '—' },
+        { label: 'Площадь участка', value: draft.house.areaLand ? `${draft.house.areaLand} сот.` : '—' },
+        { label: 'Этажей', value: draft.house.floorsCount || '—' },
+        { label: 'Спален', value: draft.house.bedrooms || '—' },
+        { label: 'Санузлов', value: draft.house.bathrooms || '—' },
+        { label: 'Гараж', value: boolLabel(draft.house.hasGarage) },
+        { label: 'Год постройки', value: draft.house.yearBuilt || '—' },
+      ];
+    case 'LAND':
+      return [
+        { label: 'Площадь участка', value: draft.land.areaSotki ? `${draft.land.areaSotki} сот.` : '—' },
+        { label: 'Категория земли', value: draft.land.landCategory || '—' },
+        { label: 'Кадастровый номер', value: draft.land.cadastralNumber || '—' },
+        { label: 'Коммуникации', value: boolLabel(draft.land.hasCommunications) },
+      ];
+    case 'COMMERCIAL':
+      return [
+        { label: 'Тип помещения', value: optionLabel(commercialTypeOptions, draft.commercial.commercialType) },
+        { label: 'Площадь', value: draft.commercial.area ? `${draft.commercial.area} м²` : '—' },
+        { label: 'Этаж', value: draft.commercial.floor || '—' },
+        { label: 'Отдельный вход', value: boolLabel(draft.commercial.hasSeparateEntrance) },
+      ];
+    case 'PARKING':
+      return [
+        { label: 'Тип паркинга', value: optionLabel(parkingTypeOptions, draft.parking.parkingType) },
+        { label: 'Площадь', value: draft.parking.area ? `${draft.parking.area} м²` : '—' },
+        { label: 'Этаж/уровень', value: draft.parking.floor || '—' },
+        { label: 'Номер места', value: draft.parking.number || '—' },
+      ];
+    default:
+      return [];
+  }
+}
+
+function ReviewSection({ title, rows }: { title: string; rows: ReviewRow[] }) {
+  return (
+    <section className="space-y-2 rounded-xl border border-border bg-muted/10 p-3">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <Row key={row.label} label={row.label} value={row.value} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReviewStep({ draft, regions, blocks }: { draft: DraftState; regions: RegionRow[]; blocks: BlockRow[] }) {
   const region = regions.find((r) => r.id === draft.regionId);
-  const kindLabel = KIND_OPTIONS.find((o) => o.kind === draft.kind)?.title ?? '—';
+  const block = blocks.find((b) => String(b.id) === draft.blockId);
+  const kindLabel = draft.kind ? listingWizardKindLabels[draft.kind].title : '—';
+  const coords = draft.lat.trim() && draft.lng.trim() ? `${draft.lat.trim()}, ${draft.lng.trim()}` : '—';
   return (
     <div className="space-y-3 text-sm">
-      <Row label="Тип" value={kindLabel} />
-      <Row label="Регион" value={region ? `${region.name} (${region.code})` : '—'} />
-      <Row label="ЖК" value={draft.blockId ? `#${draft.blockId}` : '—'} />
-      <Row
-        label="Цена"
-        value={draft.price ? `${Number(draft.price.replace(/\s/g, '').replace(',', '.')).toLocaleString('ru-RU')} ₽` : '—'}
+      <ReviewSection
+        title="Основное"
+        rows={[
+          { label: 'Тип', value: kindLabel },
+          { label: 'Регион', value: region ? `${region.name} (${region.code})` : '—' },
+          { label: 'ЖК', value: block ? `${block.name} (#${block.id})` : draft.blockId ? `#${draft.blockId}` : '—' },
+          { label: 'Адрес', value: draft.address || '—' },
+          { label: 'Координаты', value: coords },
+          { label: 'Цена', value: formatPrice(draft.price) },
+          { label: 'Статус', value: listingStatusLabel(draft.status) },
+          { label: 'Публикация', value: boolLabel(draft.isPublished) },
+        ]}
       />
-      <Row label="Статус" value={listingStatusLabel(draft.status)} />
-      <Row label="Публикация" value={draft.isPublished ? 'Да' : 'Нет'} />
-      <Row label="Главное фото" value={draft.mainPhotoUrl ? draft.mainPhotoUrl : '—'} />
-      <Row label="Галерея" value={`${draft.extraPhotoUrls.length} шт.`} />
+      <ReviewSection title="Характеристики" rows={kindReviewRows(draft)} />
+      <ReviewSection
+        title="Фото"
+        rows={[
+          { label: 'Главное фото', value: draft.mainPhotoUrl || '—' },
+          { label: 'Галерея', value: `${draft.extraPhotoUrls.length} шт.` },
+          ...(draft.kind === 'APARTMENT' ? [{ label: 'Планировка', value: draft.planUrl || '—' }] : []),
+        ]}
+      />
+      <ReviewSection title="Продавец" rows={[{ label: 'Контакты', value: sellerSummary(draft.seller) }]} />
       <p className="text-xs text-muted-foreground pt-2">
         Нажмите «Создать объявление», чтобы сохранить. Локальный черновик будет очищен.
       </p>

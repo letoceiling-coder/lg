@@ -31,6 +31,12 @@ const MEDIA_LIB_PREFIX = '/uploads/media/';
 type ActorContext = { userId: string; role: string };
 type SellerCarrier = { seller?: ManualSellerDto | null };
 
+function assertPositiveNumber(value: number | null | undefined, label: string) {
+  if (value == null || value <= 0) {
+    throw new BadRequestException(`${label}: укажите значение больше 0`);
+  }
+}
+
 function assertMediaLibraryUrl(u: string | undefined | null, label: string) {
   if (u == null || u === '') return;
   if (!u.startsWith(MEDIA_LIB_PREFIX)) {
@@ -730,6 +736,7 @@ export class ListingsService implements OnModuleInit {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const h = dto.house;
+    assertPositiveNumber(h.areaTotal, 'Площадь дома');
     validateManualGalleryMedia(h, 'Дом');
 
     return this.prisma.listing.create({
@@ -798,6 +805,7 @@ export class ListingsService implements OnModuleInit {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const l = dto.land;
+    assertPositiveNumber(l.areaSotki, 'Площадь участка');
     validateManualGalleryMedia(l, 'Участок');
 
     return this.prisma.listing.create({
@@ -862,6 +870,8 @@ export class ListingsService implements OnModuleInit {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const c = dto.commercial;
+    assertPositiveNumber(c.area, 'Площадь помещения');
+    validateManualGalleryMedia(c, 'Коммерция');
 
     return this.prisma.listing.create({
       data: {
@@ -885,6 +895,11 @@ export class ListingsService implements OnModuleInit {
             area: c.area != null ? new Prisma.Decimal(c.area) : null,
             floor: c.floor ?? null,
             hasSeparateEntrance: c.hasSeparateEntrance ?? null,
+            photoUrl: c.photoUrl ?? null,
+            extraPhotoUrls:
+              c.extraPhotoUrls != null && c.extraPhotoUrls.length > 0
+                ? (c.extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
           },
         },
       },
@@ -920,6 +935,8 @@ export class ListingsService implements OnModuleInit {
       : `manual-${randomUUID()}`;
     const status = (dto.status ?? 'DRAFT') as $Enums.ListingStatus;
     const p = dto.parking;
+    assertPositiveNumber(p.area, 'Площадь машино-места');
+    validateManualGalleryMedia(p, 'Паркинг');
 
     return this.prisma.listing.create({
       data: {
@@ -943,6 +960,11 @@ export class ListingsService implements OnModuleInit {
             area: p.area != null ? new Prisma.Decimal(p.area) : null,
             floor: p.floor ?? null,
             number: p.number ?? null,
+            photoUrl: p.photoUrl ?? null,
+            extraPhotoUrls:
+              p.extraPhotoUrls != null && p.extraPhotoUrls.length > 0
+                ? (p.extraPhotoUrls as Prisma.InputJsonValue)
+                : undefined,
           },
         },
       },
@@ -1216,6 +1238,10 @@ export class ListingsService implements OnModuleInit {
       throw new BadRequestException('Операция доступна только для ручной коммерции (MANUAL + COMMERCIAL)');
     }
 
+    if (dto.commercial) {
+      validateManualGalleryMedia(dto.commercial, 'Коммерция');
+    }
+
     if (dto.blockId !== undefined && dto.blockId != null) {
       const block = await this.prisma.block.findUnique({
         where: { id: dto.blockId },
@@ -1253,6 +1279,13 @@ export class ListingsService implements OnModuleInit {
       if (c.hasSeparateEntrance !== undefined) {
         commercialPatch.hasSeparateEntrance = c.hasSeparateEntrance;
       }
+      if (c.photoUrl !== undefined) commercialPatch.photoUrl = c.photoUrl;
+      if (c.extraPhotoUrls !== undefined) {
+        commercialPatch.extraPhotoUrls =
+          c.extraPhotoUrls != null && c.extraPhotoUrls.length > 0
+            ? (c.extraPhotoUrls as Prisma.InputJsonValue)
+            : Prisma.JsonNull;
+      }
     }
 
     const hasListing = Object.keys(listingPatch).length > 0;
@@ -1285,6 +1318,10 @@ export class ListingsService implements OnModuleInit {
     });
     if (!current || current.kind !== 'PARKING') {
       throw new BadRequestException('Операция доступна только для ручного паркинга (MANUAL + PARKING)');
+    }
+
+    if (dto.parking) {
+      validateManualGalleryMedia(dto.parking, 'Паркинг');
     }
 
     if (dto.blockId !== undefined && dto.blockId != null) {
@@ -1322,6 +1359,13 @@ export class ListingsService implements OnModuleInit {
       }
       if (p.floor !== undefined) parkingPatch.floor = p.floor;
       if (p.number !== undefined) parkingPatch.number = p.number;
+      if (p.photoUrl !== undefined) parkingPatch.photoUrl = p.photoUrl;
+      if (p.extraPhotoUrls !== undefined) {
+        parkingPatch.extraPhotoUrls =
+          p.extraPhotoUrls != null && p.extraPhotoUrls.length > 0
+            ? (p.extraPhotoUrls as Prisma.InputJsonValue)
+            : Prisma.JsonNull;
+      }
     }
 
     const hasListing = Object.keys(listingPatch).length > 0;

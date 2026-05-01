@@ -174,7 +174,7 @@ const AppRoutes = () => (
       <Route path="buildings" element={<RequireAuth roles={['admin', 'editor']}><AdminBuildings /></RequireAuth>} />
       <Route path="listings" element={<AdminListings />} />
       <Route path="sellers" element={<RequireAuth roles={['admin', 'editor', 'manager', 'agent']}><AdminSellers /></RequireAuth>} />
-      <Route path="listings/wizard/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminListingWizard /></RequireAuth>} />
+      <Route path="listings/wizard/new" element={<RequireAuth roles={['admin', 'editor', 'manager', 'agent']}><AdminListingWizard /></RequireAuth>} />
       <Route path="listings/manual/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual/:listingId/edit" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualListing /></RequireAuth>} />
       <Route path="listings/manual-house/new" element={<RequireAuth roles={['admin', 'editor', 'agent']}><AdminManualHouse /></RequireAuth>} />

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayMaxSize,
   IsBoolean,
   IsIn,
   IsInt,
@@ -48,6 +49,7 @@ export class ManualLandFieldsDto {
   @ApiPropertyOptional({ type: [String], description: 'Дополнительные фото из медиатеки' })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(24)
   @IsString({ each: true })
   @MaxLength(2048, { each: true })
   extraPhotoUrls?: string[];
@@ -146,6 +148,7 @@ export class ManualLandPatchDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(24)
   @IsString({ each: true })
   @MaxLength(2048, { each: true })
   extraPhotoUrls?: string[] | null;

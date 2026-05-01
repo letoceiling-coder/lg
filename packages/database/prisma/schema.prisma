@@ -650,6 +650,8 @@ model ListingParking {
   area        Decimal?     @db.Decimal(8, 2)
   floor       Int?
   number      String?
+  photoUrl    String?      @map("photo_url")
+  extraPhotoUrls Json?     @map("extra_photo_urls")
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
@@ -684,6 +686,8 @@ model ListingCommercial {
   area               Decimal?        @db.Decimal(10, 2)
   floor              Int?
   hasSeparateEntrance Boolean?       @map("has_separate_entrance")
+  photoUrl           String?         @map("photo_url")
+  extraPhotoUrls     Json?           @map("extra_photo_urls")
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 

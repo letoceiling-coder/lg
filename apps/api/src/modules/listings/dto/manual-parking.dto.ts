@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -38,6 +40,20 @@ export class ManualParkingFieldsDto {
   @IsString()
   @MaxLength(64)
   number?: string;
+
+  @ApiPropertyOptional({ example: '/uploads/media/parking/main.jpg' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  photoUrl?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Дополнительные фото из медиатеки' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(24)
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[];
 }
 
 export class CreateManualParkingDto {
@@ -122,6 +138,20 @@ export class ManualParkingPatchDto {
   @IsString()
   @MaxLength(64)
   number?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  photoUrl?: string | null;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(24)
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  extraPhotoUrls?: string[] | null;
 }
 
 export class UpdateManualParkingDto {
