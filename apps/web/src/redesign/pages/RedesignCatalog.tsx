@@ -11,6 +11,7 @@ import RedesignHeader from '@/redesign/components/RedesignHeader';
 import ComplexCard from '@/redesign/components/ComplexCard';
 import ListingCard, { type ApiListingCardRow } from '@/redesign/components/ListingCard';
 import FilterSidebar from '@/redesign/components/FilterSidebar';
+import RegionSelector from '@/redesign/components/RegionSelector';
 import MapSearch from '@/redesign/components/MapSearch';
 import ListingsMapSearch, { type ListingMapItem } from '@/redesign/components/ListingsMapSearch';
 import { useDefaultRegionId, type RegionRow } from '@/redesign/hooks/useDefaultRegionId';
@@ -349,6 +350,19 @@ const RedesignCatalog = () => {
     [setSearchParams, finishingRows],
   );
 
+  const handleRegionSelect = useCallback(
+    (nextRegionId: number) => {
+      setStoredRegionId(nextRegionId);
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev);
+        p.set('region_id', String(nextRegionId));
+        p.delete('city');
+        return p;
+      }, { replace: true });
+    },
+    [setSearchParams, setStoredRegionId],
+  );
+
   const handleSortChange = useCallback(
     (value: string) => {
       const next = parseCatalogSort(value);
@@ -422,6 +436,12 @@ const RedesignCatalog = () => {
               На карте
             </Link>
           </div>
+          <RegionSelector
+            regions={regionRows}
+            selectedRegionId={regionId}
+            onSelect={handleRegionSelect}
+            className="mt-3 max-w-[900px]"
+          />
         </div>
       </div>
 

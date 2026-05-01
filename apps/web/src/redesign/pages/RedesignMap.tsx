@@ -5,6 +5,7 @@ import RedesignHeader from '@/redesign/components/RedesignHeader';
 import MapSearch from '@/redesign/components/MapSearch';
 import ListingsMapSearch, { type ListingMapItem } from '@/redesign/components/ListingsMapSearch';
 import FilterSidebar from '@/redesign/components/FilterSidebar';
+import RegionSelector from '@/redesign/components/RegionSelector';
 import { apiGet } from '@/lib/api';
 import { defaultFilters, type CatalogFilters, type ObjectType } from '@/redesign/data/types';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
@@ -297,6 +298,19 @@ const RedesignMap = () => {
     [finishingRowsForMap, regionId, setSearchParams],
   );
 
+  const handleRegionSelect = useCallback(
+    (nextRegionId: number) => {
+      setStoredRegionId(nextRegionId);
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev);
+        p.set('region_id', String(nextRegionId));
+        p.delete('city');
+        return p;
+      }, { replace: true });
+    },
+    [setSearchParams, setStoredRegionId],
+  );
+
   return (
     <div className="flex h-svh flex-col bg-background">
       <RedesignHeader />
@@ -336,6 +350,12 @@ const RedesignMap = () => {
                 <SlidersHorizontal className="w-4 h-4 mr-1.5" /> Фильтры
               </Button>
             </div>
+            <RegionSelector
+              regions={regionRows}
+              selectedRegionId={regionId}
+              onSelect={handleRegionSelect}
+              className="mb-2 shrink-0 lg:mb-3"
+            />
             <div className="relative min-h-0 flex-1">
               {useBlocksMap ? (
                 <MapSearch

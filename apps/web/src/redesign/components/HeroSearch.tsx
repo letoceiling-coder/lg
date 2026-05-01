@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useMemo, useDeferredValue, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useDeferredValue } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, SlidersHorizontal, ChevronDown, Building2, Home, TreePine, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiGet } from '@/lib/api';
@@ -10,7 +10,6 @@ import type { CatalogHints } from '@/redesign/lib/catalog-hints-types';
 import {
   catalogFiltersIntoSearchParams,
   roomCategoriesFromHeroLabel,
-  sidebarLabelFromFinishingName,
 } from '@/redesign/lib/catalog-url-sync';
 import {
   buildBlocksSearchParams,
@@ -20,6 +19,7 @@ import {
 } from '@/redesign/lib/catalog-api-params';
 import type { CatalogFilters, ObjectType } from '@/redesign/data/types';
 import { defaultFilters } from '@/redesign/data/types';
+import RegionSelector from '@/redesign/components/RegionSelector';
 
 /** В герое поле подписано «₽», поэтому ввод трактуем как рубли без скрытого масштабирования. */
 function priceRubFromHeroInput(raw: string): number | undefined {
@@ -65,7 +65,6 @@ const HeroSearch = () => {
   const [activeTab, setActiveTab] = useState('apartments');
   const [q, setQ] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [regionOpen, setRegionOpen] = useState(false);
   const [propertyType, setPropertyType] = useState('Тип квартиры');
   const [ptOpen, setPtOpen] = useState(false);
   const [deadline, setDeadline] = useState('Срок сдачи');
@@ -78,7 +77,6 @@ const HeroSearch = () => {
   const [floorMin, setFloorMin] = useState('');
   const [floorMax, setFloorMax] = useState('');
   const [aptMarket, setAptMarket] = useState<'all' | 'new' | 'secondary'>('all');
-  const [heroFinishingId, setHeroFinishingId] = useState('');
   const [debouncedForCounts, setDebouncedForCounts] = useState({
     q: '',
     priceFrom: '',
@@ -86,7 +84,6 @@ const HeroSearch = () => {
     propertyType: 'Тип квартиры',
     deadline: 'Срок сдачи',
     aptMarket: 'all' as 'all' | 'new' | 'secondary',
-    heroFinishingId: '',
     areaMin: '',
     areaMax: '',
     floorMin: '',
@@ -109,12 +106,6 @@ const HeroSearch = () => {
     staleTime: 20_000,
   });
 
-  const { data: finishings = [] } = useQuery({
-    queryKey: ['reference', 'finishings'],
-    queryFn: () => apiGet<Array<{ id: number; name: string }>>('/reference/finishings'),
-    staleTime: 60 * 60 * 1000,
-  });
-
   useEffect(() => {
     const t = setTimeout(
       () =>
@@ -125,7 +116,6 @@ const HeroSearch = () => {
           propertyType,
           deadline,
           aptMarket,
-          heroFinishingId,
           areaMin,
           areaMax,
           floorMin,
@@ -134,7 +124,7 @@ const HeroSearch = () => {
       450,
     );
     return () => clearTimeout(t);
-  }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket, heroFinishingId, areaMin, areaMax, floorMin, floorMax]);
+  }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket, areaMin, areaMax, floorMin, floorMax]);
 
   const debouncedFilters = useMemo<CatalogFilters>(() => {
     const objectType = activeTab as ObjectType;
@@ -163,11 +153,9 @@ const HeroSearch = () => {
       const { min: fMin, max: fMax } = heroParsedFloors(debouncedForCounts.floorMin, debouncedForCounts.floorMax);
       if (fMin !== undefined) f.floorMin = fMin;
       if (fMax !== undefined) f.floorMax = fMax;
-      const row = finishings.find((x) => String(x.id) === debouncedForCounts.heroFinishingId);
-      if (row) f.finishing = [sidebarLabelFromFinishingName(row.name)];
     }
     return f;
-  }, [activeTab, debouncedForCounts, finishings]);
+  }, [activeTab, debouncedForCounts]);
 
   const catalogCountParams = useMemo(() => {
     if (regionId == null || activeTab !== 'apartments') return null;
@@ -175,9 +163,8 @@ const HeroSearch = () => {
     return buildBlocksSearchParams({
       filters: debouncedFilters,
       regionId,
-      finishings,
     }).toString();
-  }, [regionId, activeTab, debouncedFilters, finishings]);
+  }, [regionId, activeTab, debouncedFilters]);
 
   const listingHeroCountParams = useMemo(() => {
     if (regionId == null || activeTab !== 'apartments') return null;
@@ -186,11 +173,10 @@ const HeroSearch = () => {
       filters: debouncedFilters,
       regionId,
       kind: 'APARTMENT',
-      finishings,
       page: 1,
       perPage: 1,
     }).toString();
-  }, [regionId, activeTab, debouncedFilters, finishings]);
+  }, [regionId, activeTab, debouncedFilters]);
 
   const apartmentFallbackCountParams = useMemo(() => {
     if (regionId == null || activeTab !== 'apartments') return null;
@@ -199,11 +185,10 @@ const HeroSearch = () => {
       filters: debouncedFilters,
       regionId,
       kind: 'APARTMENT',
-      finishings,
       page: 1,
       perPage: 1,
     }).toString();
-  }, [regionId, activeTab, debouncedFilters, finishings]);
+  }, [regionId, activeTab, debouncedFilters]);
 
   /** Дом / участок / коммерция — счётчик с учётом цены и площади (м² или сотки через area_total_*). */
   const nonAptHeroCountParams = useMemo(() => {
@@ -272,7 +257,6 @@ const HeroSearch = () => {
     setFloorMin('');
     setFloorMax('');
     setAptMarket('all');
-    setHeroFinishingId('');
     setDebouncedForCounts({
       q: '',
       priceFrom: '',
@@ -280,7 +264,6 @@ const HeroSearch = () => {
       propertyType: 'Тип квартиры',
       deadline: 'Срок сдачи',
       aptMarket: 'all',
-      heroFinishingId: '',
       areaMin: '',
       areaMax: '',
       floorMin: '',
@@ -288,32 +271,12 @@ const HeroSearch = () => {
     });
   }, [activeTab]);
 
-  const belgorodRegion = useMemo(
-    () => regionRows?.find((r) => (r.code ?? '').toLowerCase() === 'belgorod'),
-    [regionRows],
-  );
-
-  const isBelgorodActive = belgorodRegion != null && regionId === belgorodRegion.id;
-
-  const onBelgorodClick = useCallback(() => {
-    if (belgorodRegion) {
-      if (isBelgorodActive) {
-        setStoredRegionId(null);
-        return;
-      }
-      setStoredRegionId(belgorodRegion.id);
-      navigate(`/catalog?region_id=${belgorodRegion.id}`);
-      return;
-    }
-    navigate('/belgorod');
-  }, [belgorodRegion, isBelgorodActive, navigate, setStoredRegionId]);
   const searchRef = useRef<HTMLDivElement>(null);
-  const regionRef = useRef<HTMLDivElement>(null);
   const ptRef = useRef<HTMLDivElement>(null);
   const dlRef = useRef<HTMLDivElement>(null);
 
   const doSearch = () => {
-    const params = catalogFiltersIntoSearchParams(new URLSearchParams(), debouncedFilters, finishings.length ? finishings : undefined);
+    const params = catalogFiltersIntoSearchParams(new URLSearchParams(), debouncedFilters);
     if (regionId != null) params.set('region_id', String(regionId));
     navigate(`/catalog?${params.toString()}`);
   };
@@ -321,7 +284,6 @@ const HeroSearch = () => {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchFocused(false);
-      if (regionRef.current && !regionRef.current.contains(e.target as Node)) setRegionOpen(false);
       if (ptRef.current && !ptRef.current.contains(e.target as Node)) setPtOpen(false);
       if (dlRef.current && !dlRef.current.contains(e.target as Node)) setDlOpen(false);
     };
@@ -331,9 +293,6 @@ const HeroSearch = () => {
 
   const showHintsPanel =
     activeTab === 'apartments' && searchFocused && q.trim().length >= 2 && regionId != null;
-
-  const currentRegionLabel =
-    regionRows?.find((r) => r.id === regionId)?.name ?? 'Регион';
 
   const ctaLabel = useMemo(() => {
     if (activeTab === 'apartments') {
@@ -395,8 +354,6 @@ const HeroSearch = () => {
         return listingMarketCount.meta.total;
       }
     }
-    if (activeTab === 'rooms') return 'Комнаты в регионе';
-    if (activeTab === 'dachas') return 'Дачи в регионе';
     const fromStats = catalogStats?.apartments ?? 0;
     if (fromStats > 0) return fromStats;
     const fallbackApt = apartmentFallbackCount?.meta?.total ?? 0;
@@ -412,6 +369,8 @@ const HeroSearch = () => {
     if (activeTab === 'apartments') {
       return `${apartmentsHeadlineCount.toLocaleString('ru-RU')}+ квартир по России`;
     }
+    if (activeTab === 'rooms') return 'Комнаты в регионе';
+    if (activeTab === 'dachas') return 'Дачи в регионе';
     const tab = objectTabs.find((t) => t.value === activeTab);
     const k = tab?.kind;
     const nf = nonAptHeroCount?.meta?.total;
@@ -440,45 +399,14 @@ const HeroSearch = () => {
       {/* Mobile: compact padding, Desktop: generous */}
       <div className="max-w-[1400px] mx-auto px-4 pt-4 pb-5 sm:pt-6 sm:pb-5">
 
-        {/* Geo selector — left-aligned, separate from title */}
+        {/* Region selector — shared across home, catalog, and map. */}
         <div className="flex flex-col items-center gap-1 mb-3">
-          <div className="relative w-fit" ref={regionRef}>
-            <button
-              onClick={() => setRegionOpen(!regionOpen)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border',
-                regionOpen
-                  ? 'border-primary bg-accent text-primary'
-                  : 'border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:border-primary/40'
-              )}
-            >
-              <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-              <span>{currentRegionLabel}</span>
-              <ChevronDown className={cn('w-3 h-3 shrink-0 transition-transform duration-200', regionOpen && 'rotate-180')} />
-            </button>
-            {regionOpen && regionRows && regionRows.length > 0 && (
-              <ul className="absolute top-full left-0 mt-1.5 py-1.5 bg-card border border-border rounded-xl shadow-lg z-50 min-w-[220px] max-h-[300px] overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-150">
-                {regionRows.map((r) => (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStoredRegionId(r.id);
-                        setRegionOpen(false);
-                      }}
-                      className={cn(
-                        'w-full text-left px-4 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2',
-                        regionId === r.id && 'text-primary font-medium',
-                      )}
-                    >
-                      {regionId === r.id && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                      {r.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <RegionSelector
+            regions={regionRows}
+            selectedRegionId={regionId}
+            onSelect={setStoredRegionId}
+            className="w-full max-w-[720px]"
+          />
 
           <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold leading-tight text-center">
             <span className="text-[#2563EB]">Live Grid.</span>{' '}
@@ -508,21 +436,6 @@ const HeroSearch = () => {
                 </button>
               );
             })}
-          {showObjectTypeTabs && <div className="w-px h-6 bg-border shrink-0 mx-0.5 hidden sm:block" />}
-          <button
-            type="button"
-            onClick={onBelgorodClick}
-            title={isBelgorodActive ? 'Сбросить регион (вернуться к Москве)' : 'Перейти в каталог Белгорода'}
-            className={cn(
-              'inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors duration-200 shrink-0 text-white shadow-sm border-2',
-              isBelgorodActive
-                ? 'bg-[#EA580C] border-[#7c2d12]'
-                : 'bg-[#F97316] hover:bg-[#EA580C] border-transparent',
-            )}
-          >
-            <span aria-hidden>🏙</span>
-            <span>Белгород</span>
-          </button>
         </div>
 
         {/* Search block — на всю ширину контентной колонки; подсказки на ширину карточки */}
