@@ -2,7 +2,6 @@ import { Fragment, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import type { Apartment } from '@/redesign/data/types';
-import { formatPrice } from '@/redesign/data/mock-data';
 
 interface Props {
   apartments: Apartment[];
@@ -15,21 +14,21 @@ interface Props {
 type StatusKey = Apartment['status'];
 
 const STATUS_LABEL: Record<StatusKey, string> = {
-  available: 'Свободна',
+  available: 'Свободная',
   reserved: 'Бронь',
-  sold: 'Продана',
+  sold: 'Продано',
 };
 
-const STATUS_BG: Record<StatusKey, string> = {
-  available: 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-white',
-  reserved: 'bg-zinc-700 hover:bg-zinc-600 border-zinc-600 text-white',
-  sold: 'bg-zinc-300 border-zinc-200 text-zinc-700',
+const CARD_CLASS: Record<StatusKey, string> = {
+  available: 'bg-white text-[#333] border-[#e5e7eb] shadow-[0_1px_2px_rgba(15,23,42,0.08)] hover:border-[#111]',
+  reserved: 'bg-[#f3f4f6] text-[#333] border-[#d1d5db] hover:border-[#111]',
+  sold: 'bg-[#050505] text-white border-[#050505]',
 };
 
 const SWATCH_BG: Record<StatusKey, string> = {
-  available: 'bg-zinc-900 border-zinc-700',
-  reserved: 'bg-zinc-700 border-zinc-600',
-  sold: 'bg-zinc-300 border-zinc-200',
+  available: 'bg-white border-[#d1d5db]',
+  reserved: 'bg-[#f3f4f6] border-[#9ca3af]',
+  sold: 'bg-[#050505] border-[#050505]',
 };
 
 const STATUS_ORDER: StatusKey[] = ['available', 'reserved', 'sold'];
@@ -38,6 +37,31 @@ function apartmentNumber(apt: Apartment): number {
   const n = Number(apt.number ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
+
+function roomLabel(rooms: number): string {
+  if (rooms === 0) return 'Студия';
+  if (rooms > 0) return `${rooms}-к.кв`;
+  return '';
+}
+
+function formatChessPrice(value: number): string {
+  return `${Math.max(0, Math.round(value || 0)).toLocaleString('ru-RU')} ₽`;
+}
+
+function formatArea(value: number): string {
+  return `${Number(value || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} м²`;
+}
+
+function sectionTitle(section: number, buildingName: string): string {
+  const normalizedName = buildingName.trim();
+  return `секция ${section}${normalizedName ? ` · ${normalizedName}` : ''}`;
+}
+
+type SectionBoard = {
+  section: number;
+  floors: number[];
+  columns: Array<Array<Apartment | null>>;
+};
 
 const Chessboard = ({ apartments, floors, sections, buildingName, roomFilter = null }: Props) => {
   const counts = useMemo(() => {
@@ -73,26 +97,40 @@ const Chessboard = ({ apartments, floors, sections, buildingName, roomFilter = n
     return Array.from(new Set([...fromCount, ...fromApts])).sort((a, b) => a - b);
   }, [apartments, sections]);
 
-  const byFloorSection = useMemo(() => {
-    const m = new Map<number, Map<number, Apartment[]>>();
+  const sectionBoards = useMemo<SectionBoard[]>(() => {
+    const bySection = new Map<number, Map<number, Apartment[]>>();
     for (const a of apartments) {
       const floor = a.floor || 1;
       const section = Number(a.section ?? 1) || 1;
-      const bySection = m.get(floor) ?? new Map<number, Apartment[]>();
-      const arr = bySection.get(section) ?? [];
+      const byFloor = bySection.get(section) ?? new Map<number, Apartment[]>();
+      const arr = byFloor.get(floor) ?? [];
       arr.push(a);
-      bySection.set(section, arr);
-      m.set(floor, bySection);
+      byFloor.set(floor, arr);
+      bySection.set(section, byFloor);
     }
-    m.forEach((bySection) => {
-      bySection.forEach((arr) => {
-        arr.sort((x, y) => apartmentNumber(x) - apartmentNumber(y) || x.area - y.area);
-      });
-    });
-    return m;
-  }, [apartments]);
 
-  const maxFloor = floors > 0 ? floors : (apartments.length ? Math.max(...apartments.map((a) => a.floor || 1)) : 1);
+    const result: SectionBoard[] = [];
+    const fallbackFloors = Array.from({ length: Math.max(floors, 1) }, (_, i) => Math.max(floors, 1) - i);
+    for (const section of sectionNumbers) {
+      const byFloor = bySection.get(section);
+      if (!byFloor) {
+        result.push({ section, floors: fallbackFloors, columns: [] });
+        continue;
+      }
+
+      byFloor.forEach((arr) => {
+        arr.sort((x, y) => apartmentNumber(x) - apartmentNumber(y) || x.area - y.area || x.id.localeCompare(y.id));
+      });
+
+      const floorNumbers = Array.from(byFloor.keys()).sort((a, b) => b - a);
+      const maxColumns = Math.max(...Array.from(byFloor.values()).map((arr) => arr.length), 0);
+      const columns = Array.from({ length: maxColumns }, (_, colIndex) =>
+        floorNumbers.map((floor) => byFloor.get(floor)?.[colIndex] ?? null),
+      );
+      result.push({ section, floors: floorNumbers, columns });
+    }
+    return result;
+  }, [apartments, floors, sectionNumbers]);
 
   return (
     <div className="space-y-4">
@@ -121,67 +159,76 @@ const Chessboard = ({ apartments, floors, sections, buildingName, roomFilter = n
           })}
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-border bg-card p-3">
-        <div className="min-w-[900px] space-y-1.5">
-          <div
-            className="grid gap-1.5"
-            style={{ gridTemplateColumns: `44px repeat(${Math.max(sectionNumbers.length, 1)}, minmax(160px, 1fr))` }}
-          >
-            <div />
-            {sectionNumbers.map((section) => (
-              <div key={`section-head-${section}`} className="rounded-lg border border-border/40 bg-muted/30 px-2 py-1 text-center text-xs font-medium text-muted-foreground">
-                Секция {section}
-              </div>
-            ))}
+      {sectionBoards.map((board) => (
+        <div key={board.section} className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-border bg-muted/20 px-4 py-2 text-center text-xs font-medium text-muted-foreground">
+            {sectionTitle(board.section, buildingName)}
           </div>
-          {Array.from({ length: maxFloor }, (_, fi) => {
-            const floor = maxFloor - fi;
-            const bySection = byFloorSection.get(floor);
-            return (
-              <div
-                key={`row-${floor}`}
-                className="grid gap-1.5"
-                style={{ gridTemplateColumns: `44px repeat(${Math.max(sectionNumbers.length, 1)}, minmax(160px, 1fr))` }}
-              >
-                <div className="flex items-center justify-center text-xs text-muted-foreground font-medium rounded-lg bg-muted/30 border border-border/40">
-                  {floor}
+          <div className="overflow-x-auto p-3">
+            <div className="inline-grid gap-1.5" style={{ gridTemplateColumns: `42px repeat(${Math.max(board.columns.length, 1)}, 118px)` }}>
+              <div className="h-6" />
+              {board.columns.length > 0 ? board.columns.map((_, idx) => (
+                <div key={`col-head-${board.section}-${idx}`} className="h-6 text-center text-[11px] text-muted-foreground">
+                  {idx + 1}
                 </div>
-                {sectionNumbers.map((section) => {
-                  const cells = bySection?.get(section) ?? [];
-                  return (
-                    <div key={`${floor}-${section}`} className="min-h-16 rounded-lg border border-border/40 bg-muted/10 p-1">
-                      {cells.length === 0 ? (
-                        <div className="h-14 rounded-md border border-dashed border-border/50 bg-muted/10" />
-                      ) : (
-                        <div className="grid grid-cols-2 gap-1">
-                          {cells.map((apt) => {
-                            const roomLabel = apt.rooms === 0 ? 'Ст' : `${apt.rooms}к`;
-                            const statusLabel = STATUS_LABEL[apt.status];
-                            const dimmed = !activeStatuses.has(apt.status) || (roomFilter !== null && apt.rooms !== roomFilter);
-                            const card = (
-                              <div className={cn(
-                                'min-h-14 rounded-md border px-2 py-1 text-[10px] leading-tight transition-opacity',
-                                STATUS_BG[apt.status],
-                                dimmed && 'opacity-25',
-                              )}>
-                                <div className="font-semibold">{roomLabel} · {apt.area}м²</div>
-                                <div className="opacity-90">{formatPrice(apt.price)}</div>
-                                <div className="opacity-70">№ {apt.number || apt.id} · {statusLabel}</div>
-                              </div>
-                            );
-                            if (apt.status === 'sold') return <div key={apt.id}>{card}</div>;
-                            return <Link key={apt.id} to={`/apartment/${apt.id}`}>{card}</Link>;
-                          })}
+              )) : (
+                <div className="h-6" />
+              )}
+
+              {board.floors.map((floor, rowIndex) => (
+                <Fragment key={`row-${board.section}-${floor}`}>
+                  <div
+                    key={`floor-${board.section}-${floor}`}
+                    className="flex h-[86px] items-center justify-center rounded-lg bg-muted/20 text-xs font-medium text-muted-foreground"
+                  >
+                    {floor}
+                  </div>
+                  {board.columns.length > 0 ? board.columns.map((column, colIndex) => {
+                    const apt = column[rowIndex] ?? null;
+                    if (!apt) {
+                      return (
+                        <div
+                          key={`empty-${board.section}-${floor}-${colIndex}`}
+                          className="h-[86px] rounded-lg border border-dashed border-border/50 bg-muted/10"
+                        />
+                      );
+                    }
+                    const statusLabel = STATUS_LABEL[apt.status];
+                    const dimmed = !activeStatuses.has(apt.status) || (roomFilter !== null && apt.rooms !== roomFilter);
+                    const content = (
+                      <div
+                        className={cn(
+                          'flex h-[86px] flex-col justify-between rounded-lg border px-2.5 py-2 text-[11px] leading-tight transition',
+                          CARD_CLASS[apt.status],
+                          dimmed && 'opacity-25',
+                        )}
+                        title={`№ ${apt.number || apt.id} · ${statusLabel} · ${formatArea(apt.area)}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="truncate font-semibold" title={roomLabel(apt.rooms)}>{roomLabel(apt.rooms)}</span>
+                          <span className="shrink-0" title={`№ ${apt.number || apt.id}`}>№ {apt.number || apt.id}</span>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+                        <div className="text-center">
+                          <div className="font-semibold">{formatChessPrice(apt.price)}</div>
+                          <div className="mt-1 opacity-80" title={statusLabel}>{statusLabel}</div>
+                        </div>
+                        <div className="flex items-end justify-between gap-2">
+                          <span className="truncate opacity-80" title={apt.finishing}>{apt.finishing === 'без отделки' ? '' : apt.finishing}</span>
+                          <span className="shrink-0" title={formatArea(apt.area)}>{formatArea(apt.area)}</span>
+                        </div>
+                      </div>
+                    );
+                    if (apt.status === 'sold') return <div key={apt.id}>{content}</div>;
+                    return <Link key={apt.id} to={`/apartment/${apt.id}`}>{content}</Link>;
+                  }) : (
+                    <div className="h-[86px] rounded-lg border border-dashed border-border/50 bg-muted/10" />
+                  )}
+                </Fragment>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      ))}
     </div>
   );
 };
