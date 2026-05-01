@@ -184,6 +184,7 @@ const FilterSidebar = ({
   // Derived flags for conditional filter rendering
   const isApartments = filters.objectType === 'apartments';
   const isLand = filters.objectType === 'land';
+  const isHouseLike = filters.objectType === 'houses' || filters.objectType === 'dachas';
   // "New building" mode: apartments not in secondary market or "all" without explicit secondary
   // isNewBuilding: show new-build filters only when region has actual blocks
   const isNewBuilding = isApartments && hasBlocks && filters.marketType !== 'secondary';
