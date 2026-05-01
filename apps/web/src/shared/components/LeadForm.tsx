@@ -170,7 +170,7 @@ const LeadForm = ({
           {loading ? 'Отправка...' : 'Отправить заявку'}
         </Button>
         <p className="text-[10px] text-muted-foreground text-center">
-          Нажимая кнопку, вы соглашаетесь с{' '}
+          Нажимая кнопку, вы соглашаетесь с обработкой персональных данных и{' '}
           <Link to="/privacy" className="underline hover:text-foreground" target="_blank" rel="noopener noreferrer">
             политикой конфиденциальности
           </Link>

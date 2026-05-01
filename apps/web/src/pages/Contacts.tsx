@@ -1,7 +1,7 @@
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
 import LeadForm from '@/shared/components/LeadForm';
-import { Phone, Mail, MapPin } from 'lucide-react';
+import { Phone, Mail, MapPin, Navigation } from 'lucide-react';
 import { useSiteSettings, settingOptional } from '@/redesign/hooks/useSiteSettings';
 import { telHref, yandexMapsHref } from '@/lib/contact-links';
 
@@ -23,8 +23,29 @@ const Contacts = () => {
         <h1 className="text-2xl sm:text-3xl font-bold mb-8">Контакты</h1>
         <div className="grid lg:grid-cols-[1fr_400px] gap-8">
           <div className="space-y-6">
-            <div className="bg-muted rounded-xl h-[300px] sm:h-[400px] flex items-center justify-center text-muted-foreground">
-              Карта (Leaflet)
+            <div className="relative overflow-hidden rounded-2xl border border-border bg-muted h-[300px] sm:h-[400px]">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(37,99,235,0.20),transparent_32%),radial-gradient(circle_at_80%_70%,rgba(249,115,22,0.16),transparent_30%)]" />
+              <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.14)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.14)_1px,transparent_1px)] bg-[size:42px_42px]" />
+              <div className="relative flex h-full flex-col items-center justify-center px-6 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
+                  <MapPin className="h-7 w-7" />
+                </div>
+                <p className="max-w-md text-lg font-semibold">{address ?? 'Офис LiveGrid'}</p>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  Откройте маршрут в Яндекс Картах или свяжитесь с нами через форму справа.
+                </p>
+                {mapsUrl ? (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Navigation className="h-4 w-4" />
+                    Построить маршрут
+                  </a>
+                ) : null}
+              </div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               {address ? (
