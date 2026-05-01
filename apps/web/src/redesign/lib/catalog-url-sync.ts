@@ -61,6 +61,7 @@ function parseRoomCategories(raw: string | null): number[] {
 /** Приводим название отделки из справочника к меткам FilterSidebar. */
 export function sidebarLabelFromFinishingName(apiName: string): string {
   const n = apiName.trim().toLowerCase();
+  if (n.includes('предчист') || n.includes('подчист')) return apiName.trim();
   if (n.includes('чистов')) return 'чистовая';
   if (n.includes('чернов')) return 'черновая';
   if (n.includes('под ключ')) return 'под ключ';

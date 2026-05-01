@@ -82,6 +82,13 @@ export class QueryBlocksDto {
   @IsString()
   rooms?: string;
 
+  @ApiPropertyOptional({
+    description: 'Comma-separated finishing IDs — ЖК с активными квартирами с такой отделкой',
+  })
+  @IsOptional()
+  @IsString()
+  finishing?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()

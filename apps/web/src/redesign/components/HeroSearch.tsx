@@ -102,6 +102,7 @@ const HeroSearch = () => {
     propertyType: 'Тип квартиры',
     deadline: 'Срок сдачи',
     aptMarket: 'all' as 'all' | 'new' | 'secondary',
+    heroFinishingId: '',
   });
 
   const navigate = useNavigate();
@@ -142,11 +143,12 @@ const HeroSearch = () => {
           propertyType,
           deadline,
           aptMarket,
+          heroFinishingId,
         }),
       450,
     );
     return () => clearTimeout(t);
-  }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket]);
+  }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket, heroFinishingId]);
 
   const catalogCountParams = useMemo(() => {
     if (regionId == null || activeTab !== 'apartments') return null;
@@ -162,6 +164,8 @@ const HeroSearch = () => {
     if (debouncedForCounts.deadline === 'Сдан') sp.set('status', 'COMPLETED');
     const rt = roomTypeIdsForPropertyLabel(debouncedForCounts.propertyType, roomTypes);
     if (rt) sp.set('room_type_ids', rt);
+    const hid = debouncedForCounts.heroFinishingId.trim();
+    if (/^\d+$/.test(hid)) sp.set('finishing', hid);
     return sp.toString();
   }, [regionId, activeTab, debouncedForCounts, roomTypes]);
 
@@ -185,6 +189,8 @@ const HeroSearch = () => {
     if (pMax != null) sp.set('price_max', String(pMax));
     const rooms = roomCategoriesFromHeroLabel(debouncedForCounts.propertyType);
     if (rooms.length) sp.set('rooms', rooms.join(','));
+    const hid = debouncedForCounts.heroFinishingId.trim();
+    if (/^\d+$/.test(hid)) sp.set('finishing', hid);
     return sp.toString();
   }, [regionId, activeTab, debouncedForCounts]);
 

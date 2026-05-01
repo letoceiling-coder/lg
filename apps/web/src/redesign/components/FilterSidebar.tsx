@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDown, Search, X, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { sidebarLabelFromFinishingName } from '@/redesign/lib/catalog-url-sync';
 import type { CatalogFilters, ObjectType, MarketType } from '@/redesign/data/types';
 
 interface Props {
@@ -17,9 +18,10 @@ interface Props {
   builderOptions?: string[];
   deadlineOptions?: string[];
   objectTypeOptions?: ObjectType[];
-  /** Whether the current region/query has residential complexes (blocks).
-   *  When false, hide new-build-specific filters (Отделка, Статус, Застройщик). */
+  /** When false, hide new-build-specific filters (Срок сдачи, Статус, Застройщик). */
   hasBlocks?: boolean;
+  /** Справочник отделки с API — чекбоксы совпадают с героем и с фильтром /listings. */
+  finishingsReference?: { id: number; name: string }[];
 }
 
 const objectTypes: { value: ObjectType; label: string }[] = [
@@ -37,7 +39,6 @@ const marketTypes: { value: MarketType; label: string }[] = [
 
 const roomOptions = [0, 1, 2, 3, 4];
 const roomLabels: Record<number, string> = { 0: 'Ст', 1: '1', 2: '2', 3: '3', 4: '4+' };
-const finishingOptions = ['без отделки', 'черновая', 'чистовая', 'под ключ'];
 
 function prettyDistrict(name: string): string {
   const n = name.trim();
@@ -162,6 +163,7 @@ const FilterSidebar = ({
   deadlineOptions,
   objectTypeOptions,
   hasBlocks = false,
+  finishingsReference,
 }: Props) => {
   // All filter options come exclusively from the API — no mock fallbacks
   const districts = districtOptions ?? [];
@@ -408,16 +410,23 @@ const FilterSidebar = ({
         </FilterSection>
       )}
 
-      {/* 8. Отделка — only for new apartments */}
-      {isNewBuilding && (
+      {/* 8. Отделка — любые режим «Квартиры» при наличии справочника; API в /blocks и /listings */}
+      {isApartments && (finishingsReference?.length ?? 0) > 0 && (
         <FilterSection title="Отделка" defaultOpen={false} count={filters.finishing.length}>
-          <div className="space-y-1.5">
-            {finishingOptions.map(f => (
-              <label key={f} className="flex items-center gap-2 cursor-pointer text-xs capitalize hover:text-foreground transition-colors">
-                <Checkbox checked={filters.finishing.includes(f)} onCheckedChange={() => toggleArray('finishing', f)} className="w-3.5 h-3.5" />
-                {f}
-              </label>
-            ))}
+          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+            {finishingsReference.map((row) => {
+              const label = sidebarLabelFromFinishingName(row.name);
+              return (
+                <label key={row.id} className="flex items-center gap-2 cursor-pointer text-xs hover:text-foreground transition-colors">
+                  <Checkbox
+                    checked={filters.finishing.includes(label)}
+                    onCheckedChange={() => toggleArray('finishing', label)}
+                    className="w-3.5 h-3.5"
+                  />
+                  <span>{row.name}</span>
+                </label>
+              );
+            })}
           </div>
         </FilterSection>
       )}

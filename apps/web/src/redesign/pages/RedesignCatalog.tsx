@@ -272,6 +272,7 @@ const RedesignCatalog = () => {
       filters.subway,
       filters.builder,
       filters.rooms,
+      filters.finishing,
     ],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
@@ -298,6 +299,10 @@ const RedesignCatalog = () => {
       if (filters.subway.length) sp.set('subway_names', filters.subway.join(','));
       if (filters.builder.length) sp.set('builder_names', filters.builder.join(','));
       if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
+      if (filters.finishing.length && finishingRows?.length) {
+        const fids = finishingIdsFromSidebarLabels(filters.finishing, finishingRows);
+        if (fids.length) sp.set('finishing', fids.join(','));
+      }
       if (geoPreset) sp.set('geo_preset', geoPreset);
       if (geoPolygon) sp.set('geo_polygon', geoPolygon);
       if (geoLat && geoLng && geoRadius) {
@@ -584,6 +589,7 @@ const RedesignCatalog = () => {
                 deadlineOptions={deadlinesQuery.data}
                 objectTypeOptions={availableKindLinks.length > 0 ? availableKindLinks.map(x => x.type) : undefined}
                 hasBlocks={showBlocks}
+                finishingsReference={finishingRows ?? []}
               />
             </div>
           </aside>
@@ -738,6 +744,7 @@ const RedesignCatalog = () => {
               deadlineOptions={deadlinesQuery.data}
               objectTypeOptions={availableKindLinks.length > 0 ? availableKindLinks.map(x => x.type) : undefined}
               hasBlocks={showBlocks}
+              finishingsReference={finishingRows ?? []}
             />
           </div>
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-border">

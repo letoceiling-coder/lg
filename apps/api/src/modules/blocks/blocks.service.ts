@@ -136,6 +136,7 @@ export class BlocksService {
       geo_lat, geo_lng, geo_radius_m, geo_polygon, geo_preset,
       rooms,
       deadline,
+      finishing,
     } = query;
 
     const where: Prisma.BlockWhereInput = {};
@@ -372,6 +373,26 @@ export class BlocksService {
       const floorIds = floorRows.map((r) => r.blockId).filter((id): id is number => id != null);
       if (floorIds.length === 0) return { where, noMatch: true };
       where.id = { in: intersectBlockIdFilter(where.id, floorIds) };
+      if ((where.id as { in?: number[] } | undefined)?.in?.length === 0) return { where, noMatch: true };
+    }
+
+    const finishingIds = this.parseCommaSeparatedIds(finishing);
+    if (finishingIds.length) {
+      const finishingWhere: Prisma.ListingWhereInput = {
+        status: ListingStatus.ACTIVE,
+        kind: ListingKind.APARTMENT,
+        isPublished: true,
+        apartment: {
+          is: {
+            finishingId: { in: finishingIds },
+          },
+        },
+        ...(region_id ? { block: { regionId: region_id } } : {}),
+      };
+      const finRows = await this.prisma.listing.groupBy({ by: ['blockId'], where: finishingWhere });
+      const finBlockIds = finRows.map((r) => r.blockId).filter((id): id is number => id != null);
+      if (finBlockIds.length === 0) return { where, noMatch: true };
+      where.id = { in: intersectBlockIdFilter(where.id, finBlockIds) };
       if ((where.id as { in?: number[] } | undefined)?.in?.length === 0) return { where, noMatch: true };
     }
 
@@ -683,6 +704,18 @@ export class BlocksService {
   }
 
 
+
+  private parseCommaSeparatedIds(raw?: string): number[] {
+    if (!raw?.trim()) return [];
+    return Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((s) => Number.parseInt(s.trim(), 10))
+          .filter((n) => Number.isFinite(n)),
+      ),
+    );
+  }
 
   private parseRoomCategories(raw?: string): number[] {
     if (!raw) return [];

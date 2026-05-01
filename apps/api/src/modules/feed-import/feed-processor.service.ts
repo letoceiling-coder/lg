@@ -25,6 +25,13 @@ export class FeedProcessorService {
     }
   }
 
+  /** CRM/фид могут отдавать устаревшее «Подчистовая» — в справочнике храним «Предчистовая». */
+  private normalizeFinishingName(name: string): string {
+    const t = (name ?? '').trim();
+    if (/^подчистовая$/iu.test(t)) return 'Предчистовая';
+    return t;
+  }
+
   /**
    * Извлекает инфраструктуру из произвольного формата фида.
    * Возвращает:
@@ -132,12 +139,13 @@ export class FeedProcessorService {
   async processFinishings(data: any[]): Promise<number> {
     let count = 0;
     for (const item of data) {
+      const name = this.normalizeFinishingName(String(item.name ?? ''));
       await this.prisma.finishing.upsert({
         where: { externalId: item._id },
-        update: { name: item.name, crmId: this.toCrmBigInt(item.crm_id) },
+        update: { name, crmId: this.toCrmBigInt(item.crm_id) },
         create: {
           externalId: item._id,
-          name: item.name,
+          name,
           crmId: this.toCrmBigInt(item.crm_id),
         },
       });

@@ -166,6 +166,7 @@ function extractInfrastructureLabels(raw: unknown): string[] {
 function mapFinishing(name: string | undefined): Apartment['finishing'] {
   const n = (name ?? '').toLowerCase();
   if (n.includes('чернов')) return 'черновая';
+  if (n.includes('предчист') || n.includes('подчист')) return 'чистовая';
   if (n.includes('чистов') || n.includes('white box')) return 'чистовая';
   if (n.includes('под ключ') || n.includes('whitebox')) return 'под ключ';
   if (n.includes('без отделк')) return 'без отделки';

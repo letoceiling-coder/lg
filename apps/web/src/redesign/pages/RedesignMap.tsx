@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDefaultRegionId, type RegionRow } from '@/redesign/hooks/useDefaultRegionId';
 import { mapApiBlockListRowToResidentialComplex, type ApiBlockListRow } from '@/redesign/lib/blocks-from-api';
+import { finishingIdsFromSidebarLabels } from '@/redesign/lib/catalog-url-sync';
 import { formatPrice, formatListingPriceFromApi } from '@/redesign/data/mock-data';
 import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
 import { cn } from '@/lib/utils';
@@ -182,6 +183,12 @@ const RedesignMap = () => {
     select: (r) => r.map((x) => x.name),
   });
 
+  const { data: finishingRowsForMap } = useQuery({
+    queryKey: ['reference', 'finishings'],
+    queryFn: () => apiGet<Array<{ id: number; name: string }>>('/reference/finishings'),
+    staleTime: 60 * 60 * 1000,
+  });
+
   // Blocks query – only for apartments
   const blocksQuery = useQuery({
     queryKey: [
@@ -189,7 +196,7 @@ const RedesignMap = () => {
       filters.priceMin, filters.priceMax, filters.rooms,
       filters.areaMin, filters.areaMax, filters.floorMin, filters.floorMax,
       filters.marketType, filters.status, filters.district, filters.subway, filters.builder,
-      filters.deadline, geoPreset, geoPolygon, geoLat, geoLng, geoRadius,
+      filters.deadline, filters.finishing, geoPreset, geoPolygon, geoLat, geoLng, geoRadius,
     ],
     queryFn: async () => {
       const sp = new URLSearchParams();
@@ -215,6 +222,10 @@ const RedesignMap = () => {
       if (filters.subway.length) sp.set('subway_names', filters.subway.join(','));
       if (filters.builder.length) sp.set('builder_names', filters.builder.join(','));
       if (filters.deadline.length) sp.set('deadline', filters.deadline.join(','));
+      if (filters.finishing.length && finishingRowsForMap?.length) {
+        const fids = finishingIdsFromSidebarLabels(filters.finishing, finishingRowsForMap);
+        if (fids.length) sp.set('finishing', fids.join(','));
+      }
       if (geoPreset) sp.set('geo_preset', geoPreset);
       if (geoPolygon) sp.set('geo_polygon', geoPolygon);
       if (geoLat && geoLng && geoRadius) {
@@ -244,7 +255,7 @@ const RedesignMap = () => {
       filters.priceMin, filters.priceMax,
       filters.areaMin, filters.areaMax,
       filters.floorMin, filters.floorMax,
-      filters.rooms, filters.district, filters.marketType,
+      filters.rooms, filters.district, filters.marketType, filters.finishing,
     ],
     queryFn: async () => {
       const sp = new URLSearchParams();
@@ -263,6 +274,10 @@ const RedesignMap = () => {
       if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
       if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
       if (filters.district.length) sp.set('district_names', filters.district.map(normalizeDistrictValue).join(','));
+      if (objectType === 'apartments' && filters.finishing.length && finishingRowsForMap?.length) {
+        const fids = finishingIdsFromSidebarLabels(filters.finishing, finishingRowsForMap);
+        if (fids.length) sp.set('finishing', fids.join(','));
+      }
       if (objectType === 'apartments') {
         if (filters.marketType === 'secondary') sp.set('apartment_market', 'secondary');
         else if (filters.marketType === 'new') sp.set('apartment_market', 'new_building');
@@ -329,6 +344,7 @@ const RedesignMap = () => {
             deadlineOptions={deadlinesQuery.data}
             objectTypeOptions={objectTypeOptions.length > 0 ? objectTypeOptions : undefined}
             hasBlocks={useBlocksMap}
+            finishingsReference={finishingRowsForMap ?? []}
           />
         </aside>
 
@@ -512,6 +528,7 @@ const RedesignMap = () => {
               deadlineOptions={deadlinesQuery.data}
               objectTypeOptions={objectTypeOptions.length > 0 ? objectTypeOptions : undefined}
               hasBlocks={useBlocksMap}
+              finishingsReference={finishingRowsForMap ?? []}
             />
           </div>
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t border-border">
