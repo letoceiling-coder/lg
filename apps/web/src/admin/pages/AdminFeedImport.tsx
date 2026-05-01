@@ -33,6 +33,8 @@ interface Progress {
   step: string;
   percent: number;
   detail?: string;
+  processedItems?: number;
+  totalItems?: number;
 }
 
 interface RegionOption {
@@ -76,6 +78,24 @@ const statusColor: Record<string, string> = {
   PENDING: 'text-muted-foreground',
 };
 
+const progressStepLabel: Record<string, string> = {
+  'Downloading about.json': 'Загрузка описания фида',
+  'Processing rooms': 'Обработка комнатности',
+  'Processing finishings': 'Обработка отделки',
+  'Processing buildingtypes': 'Обработка типов домов',
+  'Processing regions': 'Обработка районов',
+  'Processing subways': 'Обработка метро',
+  'Processing builders': 'Обработка застройщиков',
+  'Processing blocks': 'Обработка ЖК',
+  'Processing buildings': 'Обработка корпусов',
+  'Downloading apartments': 'Загрузка квартир',
+  'Processing apartments': 'Обработка квартир',
+  'Deriving block statuses': 'Расчёт статусов ЖК',
+  Finalizing: 'Завершение импорта',
+  Completed: 'Импорт завершён',
+  Failed: 'Импорт остановлен или завершился ошибкой',
+};
+
 function historyRegionCode(row: ImportHistoryRow): string {
   return (row.regionCode ?? row.region?.code ?? '—').toString();
 }
@@ -98,6 +118,17 @@ function statValue(row: ImportHistoryRow, direct: 'blocksCreated' | 'blocksUpdat
   if (direct === 'buildingsUpdated') return row.stats?.buildings_upserted ?? 0;
   if (direct === 'listingsUpdated') return row.stats?.apartments_upserted ?? 0;
   return 0;
+}
+
+function progressLabel(progress: Progress): string {
+  return progressStepLabel[progress.step] ?? progress.step;
+}
+
+function progressDetail(progress: Progress): string | undefined {
+  if (typeof progress.processedItems === 'number' && typeof progress.totalItems === 'number') {
+    return `${progress.processedItems.toLocaleString('ru-RU')} из ${progress.totalItems.toLocaleString('ru-RU')} объектов обработано`;
+  }
+  return progress.detail;
 }
 
 export default function AdminFeedImport() {
@@ -365,13 +396,22 @@ export default function AdminFeedImport() {
       {isRunning && progress && (
         <div className="bg-background border rounded-2xl p-5 mb-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">{progress.step}</span>
+            <span className="inline-flex items-center gap-2 text-sm font-medium">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              {progressLabel(progress)}
+            </span>
             <span className="text-sm text-muted-foreground">{progress.percent}%</span>
           </div>
           <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
             <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${progress.percent}%` }} />
           </div>
-          {progress.detail && <p className="text-xs text-muted-foreground mt-2">{progress.detail}</p>}
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{progressDetail(progress) ?? 'Импорт выполняется, обновление статуса каждые несколько секунд'}</span>
+            <span className="inline-flex items-center gap-1 text-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-600 animate-pulse" />
+              процесс идёт
+            </span>
+          </div>
         </div>
       )}
 

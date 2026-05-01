@@ -2,6 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
+interface ProcessApartmentsProgress {
+  processed: number;
+  total: number;
+}
+
+interface ProcessApartmentsOptions {
+  onBatchProgress?: (progress: ProcessApartmentsProgress) => Promise<void> | void;
+}
+
 @Injectable()
 export class FeedProcessorService {
   private readonly logger = new Logger(FeedProcessorService.name);
@@ -417,7 +426,11 @@ export class FeedProcessorService {
     return count;
   }
 
-  async processApartments(data: any[], regionId: number): Promise<number> {
+  async processApartments(
+    data: any[],
+    regionId: number,
+    options: ProcessApartmentsOptions = {},
+  ): Promise<number> {
     let count = 0;
     const blockMap = await this.buildExternalIdMap('block', regionId);
     const buildingMap = await this.buildExternalIdMap('building', regionId);
@@ -592,7 +605,9 @@ export class FeedProcessorService {
         count++;
       }
 
-      this.logger.log(`Apartments progress: ${Math.min(i + batchSize, data.length)}/${data.length}`);
+      const processed = Math.min(i + batchSize, data.length);
+      this.logger.log(`Apartments progress: ${processed}/${data.length}`);
+      await options.onBatchProgress?.({ processed, total: data.length });
     }
 
     // Mark sold: listings from feed that are no longer present

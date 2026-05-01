@@ -24,6 +24,8 @@ export interface ImportProgress {
   step: string;
   detail?: string;
   percent: number;
+  processedItems?: number;
+  totalItems?: number;
 }
 
 const REQUIRED_FEED_FILES = [
@@ -387,11 +389,25 @@ export class FeedImportService implements OnModuleInit {
         try {
           const aptData = await this.fetcher.fetchFeedFile(apartmentsUrl);
           await this.ensureBatchIsRunning(batchId);
-          this.setProgress('Processing apartments', `${aptData.length} items`, 65);
+          this.setProgress('Processing apartments', `0/${aptData.length} квартир обработано`, 65, {
+            processedItems: 0,
+            totalItems: aptData.length,
+          });
           stats.apartments_upserted =
-            await this.processor.processApartments(aptData, regionId);
+            await this.processor.processApartments(aptData, regionId, {
+              onBatchProgress: async ({ processed, total }) => {
+                await this.ensureBatchIsRunning(batchId);
+                this.setProgress(
+                  'Processing apartments',
+                  `${processed}/${total} квартир обработано`,
+                  this.apartmentProgressPercent(processed, total),
+                  { processedItems: processed, totalItems: total },
+                );
+              },
+            });
           await this.ensureBatchIsRunning(batchId);
         } catch (err: unknown) {
+          await this.rethrowIfBatchStopped(batchId, err);
           errors.push(`apartments: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
@@ -772,8 +788,18 @@ export class FeedImportService implements OnModuleInit {
     };
   }
 
-  private setProgress(step: string, detail?: string, percent = 0) {
-    this.currentProgress = { step, detail, percent };
+  private setProgress(
+    step: string,
+    detail?: string,
+    percent = 0,
+    extra: Partial<Pick<ImportProgress, 'processedItems' | 'totalItems'>> = {},
+  ) {
+    this.currentProgress = { step, detail, percent, ...extra };
+  }
+
+  private apartmentProgressPercent(processed: number, total: number): number {
+    if (total <= 0) return 65;
+    return Math.min(94, Math.max(65, Math.round(65 + (processed / total) * 29)));
   }
 
   private async ensureBatchIsRunning(batchId: number) {
@@ -783,6 +809,16 @@ export class FeedImportService implements OnModuleInit {
     });
     if (!batch || batch.status !== 'RUNNING') {
       throw new Error(batch?.errorMessage || 'Import stopped manually');
+    }
+  }
+
+  private async rethrowIfBatchStopped(batchId: number, err: unknown) {
+    const batch = await this.prisma.importBatch.findUnique({
+      where: { id: batchId },
+      select: { status: true, errorMessage: true },
+    });
+    if (!batch || batch.status !== 'RUNNING') {
+      throw new Error(batch?.errorMessage || (err instanceof Error ? err.message : 'Import stopped manually'));
     }
   }
 
