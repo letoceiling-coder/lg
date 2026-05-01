@@ -223,9 +223,10 @@ export class TelegramNotifyService implements OnModuleInit {
       const message = this.extractMessage(update);
       if (!message?.text) return;
 
-      const parts = message.text.trim().split(/\s+/);
+      const text = message.text.trim();
+      const parts = text.split(/\s+/);
       const raw = parts[0]?.toLowerCase();
-      const command = raw?.split('@')[0] ?? '';
+      const command = this.normalizeBotCommand(text, raw?.split('@')[0] ?? '');
       const arg = parts[1] ?? '';
       if (!command) return;
       this.logger.log(`Telegram command received: ${command}`);
@@ -275,14 +276,14 @@ export class TelegramNotifyService implements OnModuleInit {
           token,
           message.chat.id,
           [
-            'Добро пожаловать в LiveGrid Bot.',
+            'Добро пожаловать в LiveGrid.',
             '',
             'Быстрое меню:',
-            '/search — поиск по фильтрам',
-            '/catalog — список ЖК (по 5)',
-            '/favorites — избранное',
-            '/consult — оставить заявку на консультацию',
-            '/contacts — контакты агентства',
+            '🔎 Поиск — поиск по фильтрам',
+            '🏙 Каталог — список ЖК',
+            '❤️ Избранное — сохранённые объекты',
+            '☎️ Консультация — оставить заявку',
+            '📍 Контакты — контакты агентства',
           ].join('\n'),
           undefined,
           this.quickMenu(),
@@ -329,7 +330,7 @@ export class TelegramNotifyService implements OnModuleInit {
       await this.sendMessage(
         token,
         message.chat.id,
-        'Неизвестная команда. Нажмите /start для меню.',
+        'Неизвестная команда. Выберите действие в меню ниже.',
         undefined,
         this.quickMenu(),
       );
@@ -1644,12 +1645,34 @@ export class TelegramNotifyService implements OnModuleInit {
     return map[t] ?? t;
   }
 
+  private normalizeBotCommand(text: string, rawCommand: string): string {
+    if (rawCommand.startsWith('/')) return rawCommand;
+    const normalized = text.trim().toLowerCase();
+    const map: Record<string, string> = {
+      '🔎 поиск': '/search',
+      'поиск': '/search',
+      '🏙 каталог': '/catalog',
+      'каталог': '/catalog',
+      '❤️ избранное': '/favorites',
+      '❤ избранное': '/favorites',
+      'избранное': '/favorites',
+      '☎️ консультация': '/consult',
+      '☎ консультация': '/consult',
+      'консультация': '/consult',
+      '📍 контакты': '/contacts',
+      'контакты': '/contacts',
+      'отмена': '/start',
+      'главное меню': '/start',
+    };
+    return map[normalized] ?? '';
+  }
+
   private quickMenu() {
     return {
       keyboard: [
-        [{ text: '/search' }, { text: '/catalog' }],
-        [{ text: '/favorites' }, { text: '/consult' }],
-        [{ text: '/contacts' }],
+        [{ text: '🔎 Поиск' }, { text: '🏙 Каталог' }],
+        [{ text: '❤️ Избранное' }, { text: '☎️ Консультация' }],
+        [{ text: '📍 Контакты' }],
       ],
       resize_keyboard: true,
       is_persistent: true,
