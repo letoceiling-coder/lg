@@ -6,34 +6,42 @@ import LeadForm from '@/shared/components/LeadForm';
 import { cn } from '@/lib/utils';
 import type { ResidentialComplex } from '@/redesign/data/types';
 import { formatPrice } from '@/redesign/data/mock-data';
+import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlaceholder';
 
 const ComplexHero = ({ complex, blockId }: { complex: ResidentialComplex; blockId?: number }) => {
   const totalApts = complex.buildings.reduce((s, b) => s + b.apartments.filter(a => a.status === 'available').length, 0);
   const [imgIdx, setImgIdx] = useState(0);
+  const [imgFailed, setImgFailed] = useState(false);
   const [openViewingForm, setOpenViewingForm] = useState(false);
+  const currentImage = complex.images[imgIdx];
 
   return (
     <div className="rounded-2xl overflow-hidden border border-border bg-card">
       {/* Gallery */}
       <div className="relative h-72 sm:h-96 bg-muted">
-        <img
-          src={complex.images[imgIdx]}
-          alt={complex.name}
-          className="w-full h-full object-cover transition-opacity duration-300"
-        />
+        {currentImage && !imgFailed ? (
+          <img
+            src={currentImage}
+            alt={complex.name}
+            className="w-full h-full object-cover transition-opacity duration-300"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <MissingPhotoPlaceholder />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-transparent to-foreground/10" />
 
         {/* Gallery nav */}
         {complex.images.length > 1 && (
           <>
             <button
-              onClick={() => setImgIdx(i => (i - 1 + complex.images.length) % complex.images.length)}
+              onClick={() => { setImgFailed(false); setImgIdx(i => (i - 1 + complex.images.length) % complex.images.length); }}
               className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center hover:bg-background/90 transition-colors"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setImgIdx(i => (i + 1) % complex.images.length)}
+              onClick={() => { setImgFailed(false); setImgIdx(i => (i + 1) % complex.images.length); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center hover:bg-background/90 transition-colors"
             >
               <ChevronRight className="w-5 h-5" />
@@ -42,7 +50,7 @@ const ComplexHero = ({ complex, blockId }: { complex: ResidentialComplex; blockI
               {complex.images.map((_, i) => (
                 <button
                   key={i}
-                  onClick={() => setImgIdx(i)}
+                  onClick={() => { setImgFailed(false); setImgIdx(i); }}
                   className={cn('w-2 h-2 rounded-full transition-all', i === imgIdx ? 'bg-primary-foreground w-5' : 'bg-primary-foreground/50')}
                 />
               ))}

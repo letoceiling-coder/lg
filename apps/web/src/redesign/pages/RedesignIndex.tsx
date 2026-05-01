@@ -70,16 +70,16 @@ const RedesignIndex = () => {
           </div>
         </div>
 
-        {/* Mobile: horizontal scroll, Tablet: 3, Desktop: 4 */}
-        <div className="hidden sm:grid md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 items-start">
-          {featured.map(c => <ComplexCard key={c.id} complex={c} />)}
+        {/* Mobile: 1, tablet: 2, desktop: 3 */}
+        <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 items-start">
+          {featured.map(c => <ComplexCard key={c.id} complex={c} coverAspect="4/3" />)}
         </div>
 
         {/* Mobile swiper */}
         <div className="flex sm:hidden gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide -mx-4 px-4">
           {featured.map(c => (
             <div key={c.id} className="min-w-[260px] snap-start shrink-0">
-              <ComplexCard complex={c} />
+              <ComplexCard complex={c} coverAspect="4/3" />
             </div>
           ))}
         </div>

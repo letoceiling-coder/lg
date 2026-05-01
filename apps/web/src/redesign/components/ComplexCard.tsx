@@ -12,6 +12,7 @@ import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlacehold
 interface Props {
   complex: ResidentialComplex;
   variant?: 'grid' | 'list';
+  coverAspect?: '16/9' | '4/3';
 }
 
 /** Пока нет фото или битая ссылка — единая заглушка без логотипа. */
@@ -50,7 +51,13 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
+function roomLabel(rooms: number): string {
+  if (rooms === 0) return 'Студии';
+  if (rooms >= 4) return '4+ комн.';
+  return `${rooms}-комн.`;
+}
+
+const ComplexCard = ({ complex, variant = 'grid', coverAspect = '16/9' }: Props) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,6 +74,17 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
     0,
   );
   const totalApts = Math.max(complex.listingCount ?? 0, fromBuildings);
+  const priceBands = [...complex.buildings.flatMap((b) => b.apartments)]
+    .filter((a) => a.status !== 'sold' && a.price > 0)
+    .reduce<Map<number, number>>((acc, apt) => {
+      const key = apt.rooms >= 4 ? 4 : apt.rooms;
+      const prev = acc.get(key);
+      if (prev == null || apt.price < prev) acc.set(key, apt.price);
+      return acc;
+    }, new Map<number, number>());
+  const priceBandRows = Array.from(priceBands.entries())
+    .sort(([a], [b]) => a - b)
+    .slice(0, 3);
 
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -143,7 +161,7 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
       className="group flex flex-col rounded-xl overflow-hidden bg-card border border-border transition-all duration-200 hover:shadow-md hover:-translate-y-px"
     >
       {/* Image */}
-      <div className="relative shrink-0 overflow-hidden h-[160px]">
+      <div className={cn('relative shrink-0 overflow-hidden', coverAspect === '4/3' ? 'aspect-[4/3]' : 'aspect-video')}>
         <CardCoverImage
           src={complex.images[currentImageIndex] ?? complex.images[0] ?? ''}
           alt={complex.name}
@@ -214,6 +232,16 @@ const ComplexCard = ({ complex, variant = 'grid' }: Props) => {
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-muted-foreground">Сдача</span>
               <span className="font-medium">{complex.deadline}</span>
+            </div>
+          ) : null}
+          {priceBandRows.length > 0 ? (
+            <div className="grid grid-cols-1 gap-1 pt-1">
+              {priceBandRows.map(([rooms, price]) => (
+                <div key={rooms} className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted-foreground">{roomLabel(rooms)}</span>
+                  <span className="font-medium">от {formatPrice(price)}</span>
+                </div>
+              ))}
             </div>
           ) : null}
           <span className="text-primary text-[11px] font-medium hover:underline">Подробнее</span>

@@ -10,6 +10,7 @@ import ComplexHero from '@/redesign/components/ComplexHero';
 import ApartmentTable from '@/redesign/components/ApartmentTable';
 import Chessboard from '@/redesign/components/Chessboard';
 import LayoutGrid from '@/redesign/components/LayoutGrid';
+import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlaceholder';
 import LeadForm from '@/shared/components/LeadForm';
 import { apiGet, apiGetOrNull } from '@/lib/api';
 import { complexes, getComplexBySlug, getLayoutGroups, formatPrice } from '@/redesign/data/mock-data';
@@ -30,8 +31,6 @@ import {
   type ApiListingRow,
 } from '@/redesign/lib/blocks-from-api';
 
-const PLACEHOLDER = '/placeholder.svg';
-
 declare global {
   interface Window { ymaps: any; }
 }
@@ -41,20 +40,23 @@ const COMPLEX_SLUG_ALIASES: Record<string, string> = {
 };
 
 const SimilarComplexCard = ({ complex }: { complex: ResidentialComplex }) => {
+  const [imgFailed, setImgFailed] = useState(false);
   const totalApts =
     complex.listingCount ??
     complex.buildings.reduce((s, b) => s + b.apartments.filter((a) => a.status === 'available').length, 0);
   return (
     <Link to={`/complex/${complex.slug}`} className="group flex flex-col rounded-xl overflow-hidden bg-card border border-border hover:shadow-md hover:-translate-y-px transition-all">
-      <div className="h-[160px] overflow-hidden bg-muted">
-        <img
-          src={complex.images[0] || PLACEHOLDER}
-          alt={complex.name}
-          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-          onError={(e) => {
-            e.currentTarget.src = PLACEHOLDER;
-          }}
-        />
+      <div className="aspect-video overflow-hidden bg-muted">
+        {complex.images[0] && !imgFailed ? (
+          <img
+            src={complex.images[0]}
+            alt={complex.name}
+            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <MissingPhotoPlaceholder />
+        )}
       </div>
       <div className="p-3 space-y-1">
         <h4 className="font-semibold text-sm">{complex.name}</h4>
@@ -145,6 +147,7 @@ const RedesignComplex = () => {
 
   const [sort, setSort] = useState<{ field: SortField; dir: SortDir }>({ field: 'price', dir: 'asc' });
   const [roomFilter, setRoomFilter] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState<string>('');
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
 
@@ -257,6 +260,24 @@ const RedesignComplex = () => {
     hasMapTab ? 'map' : null,
   ].filter((v): v is 'apartments' | 'layouts' | 'chess' | 'about' | 'infra' | 'map' => Boolean(v));
   const defaultTab = tabOrder[0] ?? 'about';
+  const currentTab = tabOrder.includes(activeSection as typeof tabOrder[number])
+    ? activeSection
+    : defaultTab;
+  const sectionAnchors = [
+    hasApartmentsTab ? ['apartments', 'Квартиры'] : null,
+    hasLayoutsTab ? ['layouts', 'Планировки'] : null,
+    hasChessTab ? ['chess', 'Шахматка'] : null,
+    hasAboutTab ? ['about', 'О комплексе'] : null,
+    hasInfraTab ? ['infra', 'Инфраструктура'] : null,
+    hasMapTab ? ['map', 'Карта'] : null,
+  ].filter((v): v is [string, string] => Boolean(v));
+  const openSection = (value: string) => {
+    setActiveSection(value);
+    if (value === 'map') window.setTimeout(initMap, 100);
+    window.setTimeout(() => {
+      document.getElementById(`${value}-block`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  };
 
   const inCompare = isCompared(complex.slug);
   const handleCompare = (e: React.MouseEvent) => {
@@ -333,7 +354,27 @@ const RedesignComplex = () => {
         {/* Main content with sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
           <div className="lg:col-span-3">
-            <Tabs defaultValue={defaultTab} onValueChange={v => { if (v === 'map') setTimeout(initMap, 100); }}>
+            <div className="mb-4 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {sectionAnchors.map(([value, label]) => (
+                <a
+                  key={value}
+                  href={`#${value}-block`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openSection(value);
+                  }}
+                  className={cn(
+                    'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                    currentTab === value
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background hover:border-primary/40 hover:bg-muted/60',
+                  )}
+                >
+                  {label}
+                </a>
+              ))}
+            </div>
+            <Tabs value={currentTab} onValueChange={v => openSection(v)}>
               <TabsList className="w-full justify-start bg-muted/50 rounded-xl p-1 h-auto flex-wrap gap-0.5">
                 {hasApartmentsTab ? (
                   <TabsTrigger value="apartments" className="rounded-lg text-sm data-[state=active]:shadow-sm">
@@ -353,7 +394,7 @@ const RedesignComplex = () => {
 
               {/* Apartments */}
               {hasApartmentsTab ? (
-              <TabsContent value="apartments" className="mt-6">
+              <TabsContent id="apartments-block" value="apartments" className="mt-6 scroll-mt-24">
                 <div className="flex gap-2 mb-4 flex-wrap">
                   <button
                     onClick={() => setRoomFilter(null)}
@@ -373,14 +414,14 @@ const RedesignComplex = () => {
 
               {/* Layouts */}
               {hasLayoutsTab ? (
-              <TabsContent value="layouts" className="mt-6">
+              <TabsContent id="layouts-block" value="layouts" className="mt-6 scroll-mt-24">
                 <LayoutGrid layouts={layouts} complexSlug={complex.slug} />
               </TabsContent>
               ) : null}
 
               {/* Chessboard */}
               {hasChessTab ? (
-              <TabsContent value="chess" className="mt-6 space-y-8">
+              <TabsContent id="chess-block" value="chess" className="mt-6 space-y-8 scroll-mt-24">
                 {complex.buildings.map(b => (
                   <Chessboard key={b.id} apartments={b.apartments} floors={b.floors} sections={b.sections} buildingName={b.name} />
                 ))}
@@ -389,7 +430,7 @@ const RedesignComplex = () => {
 
               {/* About */}
               {hasAboutTab ? (
-              <TabsContent value="about" className="mt-6">
+              <TabsContent id="about-block" value="about" className="mt-6 scroll-mt-24">
                 <div className="bg-card rounded-xl border border-border p-6 space-y-5">
                   <h3 className="font-semibold text-lg">О комплексе</h3>
                   {complex.description.includes('<') ? (
@@ -440,7 +481,7 @@ const RedesignComplex = () => {
 
               {/* Infrastructure */}
               {hasInfraTab ? (
-              <TabsContent value="infra" className="mt-6">
+              <TabsContent id="infra-block" value="infra" className="mt-6 scroll-mt-24">
                 <div className="bg-card rounded-xl border border-border p-6">
                   <h3 className="font-semibold text-lg mb-5">Инфраструктура</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -457,7 +498,7 @@ const RedesignComplex = () => {
 
               {/* Map */}
               {hasMapTab ? (
-              <TabsContent value="map" className="mt-6">
+              <TabsContent id="map-block" value="map" className="mt-6 scroll-mt-24">
                 <div className="rounded-xl border border-border overflow-hidden bg-card">
                   <div className="p-4 border-b border-border flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
