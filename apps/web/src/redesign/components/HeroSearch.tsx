@@ -27,6 +27,25 @@ function priceRubFromHeroInput(raw: string): number | undefined {
   return n;
 }
 
+/** Площадь героя: м² для квартир/домов, сотки для участков и т.д. */
+function heroParsedArea(areaMinRaw: string, areaMaxRaw: string): { min?: number; max?: number } {
+  const o: { min?: number; max?: number } = {};
+  const a1 = parseFloat(areaMinRaw.replace(',', '.'));
+  const a2 = parseFloat(areaMaxRaw.replace(',', '.'));
+  if (Number.isFinite(a1)) o.min = a1;
+  if (Number.isFinite(a2)) o.max = a2;
+  return o;
+}
+
+function heroParsedFloors(floorMinRaw: string, floorMaxRaw: string): { min?: number; max?: number } {
+  const o: { min?: number; max?: number } = {};
+  const fl1 = parseInt(floorMinRaw.replace(/\D/g, ''), 10);
+  const fl2 = parseInt(floorMaxRaw.replace(/\D/g, ''), 10);
+  if (Number.isFinite(fl1)) o.min = fl1;
+  if (Number.isFinite(fl2)) o.max = fl2;
+  return o;
+}
+
 function roomTypeIdsForPropertyLabel(label: string, roomTypes: RoomTypeRow[]): string | undefined {
   if (!label || label === 'Тип квартиры') return undefined;
   const lower = label.toLowerCase();
@@ -103,6 +122,10 @@ const HeroSearch = () => {
     deadline: 'Срок сдачи',
     aptMarket: 'all' as 'all' | 'new' | 'secondary',
     heroFinishingId: '',
+    areaMin: '',
+    areaMax: '',
+    floorMin: '',
+    floorMax: '',
   });
 
   const navigate = useNavigate();
@@ -144,11 +167,15 @@ const HeroSearch = () => {
           deadline,
           aptMarket,
           heroFinishingId,
+          areaMin,
+          areaMax,
+          floorMin,
+          floorMax,
         }),
       450,
     );
     return () => clearTimeout(t);
-  }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket, heroFinishingId]);
+  }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket, heroFinishingId, areaMin, areaMax, floorMin, floorMax]);
 
   const catalogCountParams = useMemo(() => {
     if (regionId == null || activeTab !== 'apartments') return null;
@@ -161,11 +188,23 @@ const HeroSearch = () => {
     const pMax = priceRubFromHeroInput(debouncedForCounts.priceTo);
     if (pMin != null) sp.set('price_min', String(pMin));
     if (pMax != null) sp.set('price_max', String(pMax));
-    if (debouncedForCounts.deadline === 'Сдан') sp.set('status', 'COMPLETED');
+    const dl = debouncedForCounts.deadline;
+    if (dl === 'Сдан') {
+      sp.set('status', 'COMPLETED');
+    } else if (dl && dl !== 'Срок сдачи') {
+      const token = dl === '2029+' ? '2030' : dl;
+      sp.set('deadline', token);
+    }
     const rt = roomTypeIdsForPropertyLabel(debouncedForCounts.propertyType, roomTypes);
     if (rt) sp.set('room_type_ids', rt);
     const hid = debouncedForCounts.heroFinishingId.trim();
     if (/^\d+$/.test(hid)) sp.set('finishing', hid);
+    const { min: aMin, max: aMax } = heroParsedArea(debouncedForCounts.areaMin, debouncedForCounts.areaMax);
+    if (aMin !== undefined) sp.set('area_min', String(aMin));
+    if (aMax !== undefined) sp.set('area_max', String(aMax));
+    const { min: fMin, max: fMax } = heroParsedFloors(debouncedForCounts.floorMin, debouncedForCounts.floorMax);
+    if (fMin !== undefined) sp.set('floor_min', String(fMin));
+    if (fMax !== undefined) sp.set('floor_max', String(fMax));
     return sp.toString();
   }, [regionId, activeTab, debouncedForCounts, roomTypes]);
 
@@ -191,6 +230,37 @@ const HeroSearch = () => {
     if (rooms.length) sp.set('rooms', rooms.join(','));
     const hid = debouncedForCounts.heroFinishingId.trim();
     if (/^\d+$/.test(hid)) sp.set('finishing', hid);
+    const { min: aMin, max: aMax } = heroParsedArea(debouncedForCounts.areaMin, debouncedForCounts.areaMax);
+    if (aMin !== undefined) sp.set('area_total_min', String(aMin));
+    if (aMax !== undefined) sp.set('area_total_max', String(aMax));
+    const { min: fMin, max: fMax } = heroParsedFloors(debouncedForCounts.floorMin, debouncedForCounts.floorMax);
+    if (fMin !== undefined) sp.set('floor_min', String(fMin));
+    if (fMax !== undefined) sp.set('floor_max', String(fMax));
+    return sp.toString();
+  }, [regionId, activeTab, debouncedForCounts]);
+
+  /** Дом / участок / коммерция — счётчик с учётом цены и площади (м² или сотки через area_total_*). */
+  const nonAptHeroCountParams = useMemo(() => {
+    if (regionId == null) return null;
+    if (activeTab === 'apartments') return null;
+    const tab = objectTabs.find((t) => t.value === activeTab);
+    if (!tab) return null;
+    const sp = new URLSearchParams();
+    sp.set('region_id', String(regionId));
+    sp.set('kind', tab.kind);
+    sp.set('statuses', 'ACTIVE,RESERVED');
+    sp.set('is_published', 'true');
+    sp.set('page', '1');
+    sp.set('per_page', '1');
+    const qs = debouncedForCounts.q.trim();
+    if (qs) sp.set('search', qs);
+    const pMin = priceRubFromHeroInput(debouncedForCounts.priceFrom);
+    const pMax = priceRubFromHeroInput(debouncedForCounts.priceTo);
+    if (pMin != null) sp.set('price_min', String(pMin));
+    if (pMax != null) sp.set('price_max', String(pMax));
+    const { min: amin, max: amax } = heroParsedArea(debouncedForCounts.areaMin, debouncedForCounts.areaMax);
+    if (amin !== undefined) sp.set('area_total_min', String(amin));
+    if (amax !== undefined) sp.set('area_total_max', String(amax));
     return sp.toString();
   }, [regionId, activeTab, debouncedForCounts]);
 
@@ -206,6 +276,13 @@ const HeroSearch = () => {
     queryKey: ['listings', 'hero-apt-market-count', listingHeroCountParams],
     queryFn: () => apiGet<{ meta: { total: number } }>(`/listings?${listingHeroCountParams}`),
     enabled: listingHeroCountParams != null,
+    staleTime: 30_000,
+  });
+
+  const { data: nonAptHeroCount } = useQuery({
+    queryKey: ['listings', 'hero-non-apt-count', nonAptHeroCountParams],
+    queryFn: () => apiGet<{ meta: { total: number } }>(`/listings?${nonAptHeroCountParams}`),
+    enabled: nonAptHeroCountParams != null,
     staleTime: 30_000,
   });
 
@@ -354,6 +431,21 @@ const HeroSearch = () => {
     }
     const tab = objectTabs.find((t) => t.value === activeTab);
     const k = tab?.kind;
+    const filteredOther = nonAptHeroCount?.meta?.total;
+    if (filteredOther != null) {
+      if (filteredOther > 0) {
+        const word =
+          activeTab === 'houses'
+            ? 'домов'
+            : activeTab === 'land'
+              ? 'участков'
+              : activeTab === 'commercial'
+                ? 'объектов'
+                : 'объектов';
+        return `${filteredOther.toLocaleString('ru')} ${word} →`;
+      }
+      return 'Нет лотов →';
+    }
     const n = k && kindCounts ? kindCounts[k] ?? 0 : 0;
     if (n > 0) {
       const word =
@@ -367,7 +459,7 @@ const HeroSearch = () => {
       return `${n.toLocaleString('ru')} ${word} →`;
     }
     return 'Найти →';
-  }, [activeTab, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts]);
+  }, [activeTab, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts, nonAptHeroCount]);
 
   const apartmentsHeadlineCount = useMemo(() => {
     if (activeTab === 'apartments') {
@@ -388,7 +480,8 @@ const HeroSearch = () => {
     }
     const tab = objectTabs.find((t) => t.value === activeTab);
     const k = tab?.kind;
-    const n = k && kindCounts ? (kindCounts[k] ?? 0) : 0;
+    const nf = nonAptHeroCount?.meta?.total;
+    const n = nf != null ? nf : k && kindCounts ? (kindCounts[k] ?? 0) : 0;
     if (activeTab === 'houses') {
       return n > 0 ? `${n.toLocaleString('ru-RU')} домов и дач в регионе` : 'Дома и дачи в регионе';
     }
@@ -396,7 +489,7 @@ const HeroSearch = () => {
       return n > 0 ? `${n.toLocaleString('ru-RU')} участков в регионе` : 'Земельные участки';
     }
     return n > 0 ? `${n.toLocaleString('ru-RU')} коммерческих объектов` : 'Коммерческая недвижимость';
-  }, [activeTab, apartmentsHeadlineCount, kindCounts]);
+  }, [activeTab, apartmentsHeadlineCount, kindCounts, nonAptHeroCount]);
 
   const searchPlaceholder = useMemo(() => {
     if (activeTab === 'apartments') return 'Метро, район, ЖК, улица, застройщик';
