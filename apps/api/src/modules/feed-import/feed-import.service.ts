@@ -106,7 +106,7 @@ export class FeedImportService implements OnModuleInit {
       orderBy: { id: 'asc' },
       select: { code: true, baseUrl: true },
     });
-    const importableRows = rows.filter((r) => r.baseUrl?.trim());
+    const importableRows = rows.filter((r) => r.baseUrl?.trim() && this.isRegionImportAllowed(r.code));
     if (!importableRows.length) throw new NotFoundException('Нет включённых регионов с настроенным фидом');
 
     const queued: Array<{ region: string; batchId: number }> = [];
@@ -143,14 +143,19 @@ export class FeedImportService implements OnModuleInit {
     });
     return rows.map((r) => {
       const baseUrl = r.baseUrl?.trim() || null;
+      const allowed = this.isRegionImportAllowed(r.code);
       return {
         id: r.id,
         code: this.normalizeRegionCode(r.code).toUpperCase(),
         name: r.name,
         enabled: r.isEnabled,
         baseUrl,
-        canImport: r.isEnabled && Boolean(baseUrl),
-        reason: baseUrl ? null : 'Feed URL не настроен',
+        canImport: r.isEnabled && Boolean(baseUrl) && allowed,
+        reason: !baseUrl
+          ? 'Feed URL не настроен'
+          : !allowed
+            ? 'Региональный фид пока недоступен'
+            : null,
         lastImportedAt: r.lastImportedAt,
         files: REQUIRED_FEED_FILES.map((name) => ({
           name,
@@ -188,6 +193,10 @@ export class FeedImportService implements OnModuleInit {
         skipped.push({ region: code, reason: 'Feed URL не настроен' });
         continue;
       }
+      if (!this.isRegionImportAllowed(code)) {
+        skipped.push({ region: code, reason: 'Региональный фид пока недоступен' });
+        continue;
+      }
       try {
         const result = await this.triggerImport(code, triggeredBy);
         queued.push({ region: code, batchId: result.batchId });
@@ -216,6 +225,10 @@ export class FeedImportService implements OnModuleInit {
     }
     if (!region.baseUrl?.trim()) {
       this.logger.warn(`Scheduled import skipped: feed URL is not configured for ${regionCode}`);
+      return;
+    }
+    if (!this.isRegionImportAllowed(regionCode)) {
+      this.logger.warn(`Scheduled import skipped: feed is not allowed for ${regionCode}`);
       return;
     }
 
@@ -256,6 +269,9 @@ export class FeedImportService implements OnModuleInit {
     }
     if (!region.baseUrl?.trim()) {
       throw new BadRequestException(`Feed URL is not configured for region: ${regionCode}`);
+    }
+    if (!this.isRegionImportAllowed(regionCode)) {
+      throw new BadRequestException(`Feed is not available for region: ${regionCode}`);
     }
 
     const running = await this.prisma.importBatch.findFirst({
@@ -821,7 +837,7 @@ export class FeedImportService implements OnModuleInit {
         select: { code: true, baseUrl: true },
       });
       return allEnabled
-        .filter((r) => r.baseUrl?.trim())
+        .filter((r) => r.baseUrl?.trim() && this.isRegionImportAllowed(r.code))
         .map((r) => this.normalizeRegionCode(r.code));
     }
 
@@ -830,7 +846,7 @@ export class FeedImportService implements OnModuleInit {
       select: { code: true, baseUrl: true },
     });
     const existing = new Set(rows.map((r) => this.normalizeRegionCode(r.code)));
-    const importable = new Set(rows.filter((r) => r.baseUrl?.trim()).map((r) => this.normalizeRegionCode(r.code)));
+    const importable = new Set(rows.filter((r) => r.baseUrl?.trim() && this.isRegionImportAllowed(r.code)).map((r) => this.normalizeRegionCode(r.code)));
     const missing = configured.filter((code) => !existing.has(code));
     if (missing.length) {
       this.logger.warn(`Skip unknown TRENDAGENT_REGIONS codes: ${missing.join(', ')}`);
@@ -840,5 +856,19 @@ export class FeedImportService implements OnModuleInit {
       this.logger.warn(`Skip TRENDAGENT_REGIONS without feed URL: ${withoutFeed.join(', ')}`);
     }
     return configured.filter((code) => importable.has(code));
+  }
+
+  private allowedImportRegionCodes(): Set<string> {
+    const raw = this.config.get<string>('FEED_IMPORT_ALLOWED_REGIONS') || 'msk';
+    return new Set(
+      raw
+        .split(/[\s,;]+/)
+        .map((code) => this.normalizeRegionCode(code))
+        .filter(Boolean),
+    );
+  }
+
+  private isRegionImportAllowed(regionCode: string): boolean {
+    return this.allowedImportRegionCodes().has(this.normalizeRegionCode(regionCode));
   }
 }
