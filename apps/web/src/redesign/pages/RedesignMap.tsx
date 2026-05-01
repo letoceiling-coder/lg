@@ -28,6 +28,15 @@ import { cn } from '@/lib/utils';
 
 const PER_PAGE = 200;
 
+const OBJECT_TYPE_TABS: { type: ObjectType; label: string; countKey: string }[] = [
+  { type: 'apartments', label: 'Квартиры', countKey: 'APARTMENT' },
+  { type: 'rooms', label: 'Комнаты', countKey: 'APARTMENT' },
+  { type: 'houses', label: 'Дома', countKey: 'HOUSE' },
+  { type: 'land', label: 'Участки', countKey: 'LAND' },
+  { type: 'dachas', label: 'Дачи', countKey: 'HOUSE' },
+  { type: 'commercial', label: 'Коммерция', countKey: 'COMMERCIAL' },
+];
+
 function getListingPhoto(l: any): string | null {
   const tryUrl = (raw: unknown): string | null => {
     if (typeof raw === 'string' && raw.trim()) return raw;
@@ -101,6 +110,7 @@ const RedesignMap = () => {
 
   const deferredSearch = useDeferredValue(filters.search);
   const objectType = filters.objectType;
+  const isUnsupportedSeparateType = objectType === 'rooms' || objectType === 'dachas';
   const useBlocksForApartments = objectType === 'apartments' && filters.marketType !== 'secondary';
 
   // Kind counts – drives the type switcher
@@ -112,15 +122,16 @@ const RedesignMap = () => {
   });
 
   const kindCounts = kindCountsQuery.data ?? {};
-  const availableKindLinks = useMemo(() => {
-    const all = [
-      { type: 'apartments' as ObjectType, label: 'Квартиры', count: kindCounts.APARTMENT ?? 0 },
-      { type: 'houses' as ObjectType, label: 'Дома и дачи', count: kindCounts.HOUSE ?? 0 },
-      { type: 'land' as ObjectType, label: 'Участки', count: kindCounts.LAND ?? 0 },
-      { type: 'commercial' as ObjectType, label: 'Коммерция', count: kindCounts.COMMERCIAL ?? 0 },
-    ];
-    return all.filter((x) => x.count > 0);
-  }, [kindCounts]);
+  const objectKindLinks = useMemo(
+    () => OBJECT_TYPE_TABS.map((x) => ({ ...x, count: kindCounts[x.countKey] ?? 0 })),
+    [kindCounts],
+  );
+  const isMoscowRegion = useMemo(() => {
+    const r = regionRows?.find((row) => row.id === regionId);
+    const code = (r?.code ?? '').toLowerCase();
+    const name = (r?.name ?? '').toLowerCase();
+    return code === 'msk' || name.includes('москва');
+  }, [regionId, regionRows]);
 
   // Deadlines (apartments only)
   const deadlinesQuery = useQuery({
@@ -225,7 +236,7 @@ const RedesignMap = () => {
       });
       return apiGet<{ data: any[] }>(`/listings?${sp}`);
     },
-    enabled: regionId != null && needListings,
+    enabled: regionId != null && needListings && !isUnsupportedSeparateType,
   });
 
   const listingItems = useMemo<ListingMapItem[]>(() => {
@@ -261,12 +272,14 @@ const RedesignMap = () => {
         : listingsQuery.isPending || listingsQuery.isFetching));
 
   const totalCount = useBlocksMap ? blocks.length : listingItems.length;
-  const subtitle = loading ? 'Загрузка…' : `${totalCount} объектов на карте`;
+  const subtitle = isUnsupportedSeparateType
+    ? 'Нет объявлений, добавьте первым'
+    : loading ? 'Загрузка…' : `${totalCount} объектов на карте`;
 
   // Derive available objectType options from kindCounts
   const objectTypeOptions = useMemo(
-    () => availableKindLinks.map((x) => x.type),
-    [availableKindLinks],
+    () => objectKindLinks.map((x) => x.type),
+    [objectKindLinks],
   );
 
   const handleFiltersChange = useCallback(
@@ -299,6 +312,7 @@ const RedesignMap = () => {
             builderOptions={buildersQuery.data}
             deadlineOptions={deadlinesQuery.data}
             objectTypeOptions={objectTypeOptions.length > 0 ? objectTypeOptions : undefined}
+            showMetro={isMoscowRegion}
             hasBlocks={useBlocksMap}
             finishingsReference={finishingRowsForMap ?? []}
           />
@@ -483,6 +497,7 @@ const RedesignMap = () => {
               builderOptions={buildersQuery.data}
               deadlineOptions={deadlinesQuery.data}
               objectTypeOptions={objectTypeOptions.length > 0 ? objectTypeOptions : undefined}
+                showMetro={isMoscowRegion}
               hasBlocks={useBlocksMap}
               finishingsReference={finishingRowsForMap ?? []}
             />

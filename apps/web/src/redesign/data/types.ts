@@ -77,7 +77,7 @@ export interface LayoutGroup {
 export type SortField = 'price' | 'area' | 'floor' | 'rooms';
 export type SortDir = 'asc' | 'desc';
 
-export type ObjectType = 'apartments' | 'houses' | 'land' | 'commercial';
+export type ObjectType = 'apartments' | 'rooms' | 'houses' | 'land' | 'dachas' | 'commercial';
 export type MarketType = 'all' | 'new' | 'secondary';
 
 export interface CatalogFilters {

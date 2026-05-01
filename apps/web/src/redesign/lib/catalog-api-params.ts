@@ -21,8 +21,10 @@ const STATUS_MAP: Record<string, string> = {
 
 export const LISTING_KIND_BY_OBJECT_TYPE: Record<ObjectType, ListingKind> = {
   apartments: 'APARTMENT',
+  rooms: 'APARTMENT',
   houses: 'HOUSE',
   land: 'LAND',
+  dachas: 'HOUSE',
   commercial: 'COMMERCIAL',
 };
 

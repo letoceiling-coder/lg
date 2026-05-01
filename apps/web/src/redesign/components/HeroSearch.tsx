@@ -51,8 +51,10 @@ function heroParsedFloors(floorMinRaw: string, floorMaxRaw: string): { min?: num
 
 const objectTabs = [
   { label: 'Квартиры', icon: Building2, value: 'apartments', kind: 'APARTMENT' as const },
+  { label: 'Комнаты', icon: Building2, value: 'rooms', kind: 'APARTMENT' as const },
   { label: 'Дома', icon: Home, value: 'houses', kind: 'HOUSE' as const },
   { label: 'Участки', icon: TreePine, value: 'land', kind: 'LAND' as const },
+  { label: 'Дачи', icon: Home, value: 'dachas', kind: 'HOUSE' as const },
   { label: 'Коммерция', icon: Store, value: 'commercial', kind: 'COMMERCIAL' as const },
 ];
 
@@ -252,19 +254,9 @@ const HeroSearch = () => {
     staleTime: 60_000,
   });
 
-  const visibleObjectTabs = useMemo(() => {
-    if (!kindCounts) return [];
-    return objectTabs.filter((t) => (kindCounts[t.kind] ?? 0) > 0);
-  }, [kindCounts]);
-
-  const showObjectTypeTabs = visibleObjectTabs.length >= 2;
-
-  useEffect(() => {
-    if (!visibleObjectTabs.length) return;
-    if (!visibleObjectTabs.some((t) => t.value === activeTab)) {
-      setActiveTab(visibleObjectTabs[0].value);
-    }
-  }, [visibleObjectTabs, activeTab]);
+  const visibleObjectTabs = objectTabs;
+  const showObjectTypeTabs = true;
+  const unsupportedSeparateType = activeTab === 'rooms' || activeTab === 'dachas';
 
   /** Сброс полей при смене типа объекта — не смешиваем этаж/отделку квартиры с участком. */
   useEffect(() => {
@@ -363,6 +355,7 @@ const HeroSearch = () => {
       if (fallbackTotal == null) return 'Найти →';
       return 'Нет квартир в этом регионе';
     }
+    if (unsupportedSeparateType) return 'Нет объявлений →';
     const tab = objectTabs.find((t) => t.value === activeTab);
     const k = tab?.kind;
     const filteredOther = nonAptHeroCount?.meta?.total;
@@ -393,7 +386,7 @@ const HeroSearch = () => {
       return `${n.toLocaleString('ru')} ${word} →`;
     }
     return 'Найти →';
-  }, [activeTab, apartmentFallbackCount, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts, nonAptHeroCount]);
+  }, [activeTab, apartmentFallbackCount, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts, nonAptHeroCount, unsupportedSeparateType]);
 
   const apartmentsHeadlineCount = useMemo(() => {
     if (activeTab === 'apartments') {
@@ -402,6 +395,8 @@ const HeroSearch = () => {
         return listingMarketCount.meta.total;
       }
     }
+    if (activeTab === 'rooms') return 'Комнаты в регионе';
+    if (activeTab === 'dachas') return 'Дачи в регионе';
     const fromStats = catalogStats?.apartments ?? 0;
     if (fromStats > 0) return fromStats;
     const fallbackApt = apartmentFallbackCount?.meta?.total ?? 0;
@@ -432,7 +427,9 @@ const HeroSearch = () => {
 
   const searchPlaceholder = useMemo(() => {
     if (activeTab === 'apartments') return 'Метро, район, ЖК, улица, застройщик';
+    if (activeTab === 'rooms') return 'Район, адрес, комната';
     if (activeTab === 'land') return 'Район, адрес, кадастровый номер';
+    if (activeTab === 'dachas') return 'Район, адрес, дача';
     return 'Район, адрес, название объекта';
   }, [activeTab]);
 
@@ -739,21 +736,6 @@ const HeroSearch = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Отделка</label>
-                    <select
-                      className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50 text-foreground"
-                      value={heroFinishingId}
-                      onChange={(e) => setHeroFinishingId(e.target.value)}
-                    >
-                      <option value="">Любая</option>
-                      {finishings.map((x) => (
-                        <option key={x.id} value={String(x.id)}>
-                          {x.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
                     <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Тип жилья</label>
                     <select
                       className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50 text-foreground"
@@ -768,7 +750,7 @@ const HeroSearch = () => {
                 </div>
               ) : activeTab === 'land' ? (
                 <div className="max-w-md">
-                  <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Площадь участка, сот.</label>
+                  <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Площадь, сот.</label>
                   <div className="flex gap-1.5">
                     <input type="text" placeholder="от" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMin} onChange={(e) => setAreaMin(e.target.value)} />
                     <input type="text" placeholder="до" className="w-full h-9 px-2.5 text-sm rounded-lg border border-[#e2e8f0] bg-white outline-none focus:border-primary/50" value={areaMax} onChange={(e) => setAreaMax(e.target.value)} />

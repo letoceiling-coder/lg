@@ -127,7 +127,7 @@ export function catalogFiltersFromSearchParams(
   const f: CatalogFilters = JSON.parse(JSON.stringify(defaultFilters)) as CatalogFilters;
 
   const type = sp.get('type');
-  if (type && ['apartments', 'houses', 'land', 'commercial'].includes(type)) {
+  if (type && ['apartments', 'rooms', 'houses', 'land', 'dachas', 'commercial'].includes(type)) {
     f.objectType = type as ObjectType;
   }
 

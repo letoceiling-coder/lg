@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDown, Search, X, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { sidebarLabelFromFinishingName } from '@/redesign/lib/catalog-url-sync';
 import type { CatalogFilters, ObjectType, MarketType } from '@/redesign/data/types';
 
 interface Props {
@@ -20,14 +19,16 @@ interface Props {
   objectTypeOptions?: ObjectType[];
   /** When false, hide new-build-specific filters (Срок сдачи, Статус, Застройщик). */
   hasBlocks?: boolean;
-  /** Справочник отделки с API — чекбоксы совпадают с героем и с фильтром /listings. */
+  /** Deprecated: отделку скрываем, пока в данных нет надежного покрытия. */
   finishingsReference?: { id: number; name: string }[];
 }
 
 const objectTypes: { value: ObjectType; label: string }[] = [
   { value: 'apartments', label: 'Квартиры' },
+  { value: 'rooms', label: 'Комнаты' },
   { value: 'houses', label: 'Дома' },
   { value: 'land', label: 'Участки' },
+  { value: 'dachas', label: 'Дачи' },
   { value: 'commercial', label: 'Коммерция' },
 ];
 
@@ -279,7 +280,7 @@ const FilterSidebar = ({
                   search: filters.search,
                   priceMin: filters.priceMin,
                   priceMax: filters.priceMax,
-                  // Reset: rooms, area (different units), floor, deadline, finishing, status, subway, builder, district
+                  // Reset: rooms, area (different units), floor, deadline, status, subway, builder, district
                   rooms: [],
                   areaMin: undefined,
                   areaMax: undefined,
@@ -366,9 +367,17 @@ const FilterSidebar = ({
         </FilterSection>
       )}
 
-      {/* 5. Площадь — label adapts: м² for apartments/houses/commercial, сот. for land */}
+      {/* 5. Площадь — label adapts by object type */}
       <FilterSection
-        title={isLand ? 'Площадь участка, сот.' : 'Площадь, м²'}
+        title={
+          isLand
+            ? 'Площадь, сот.'
+            : isHouseLike
+              ? 'Площадь дома, м²'
+              : isCommercial
+                ? 'Площадь, м²'
+                : 'Площадь, м²'
+        }
         defaultOpen={false}
         count={filters.areaMin || filters.areaMax ? 1 : 0}
       >
@@ -410,27 +419,6 @@ const FilterSidebar = ({
         </FilterSection>
       )}
 
-      {/* 8. Отделка — любые режим «Квартиры» при наличии справочника; API в /blocks и /listings */}
-      {isApartments && (finishingsReference?.length ?? 0) > 0 && (
-        <FilterSection title="Отделка" defaultOpen={false} count={filters.finishing.length}>
-          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-            {finishingsReference.map((row) => {
-              const label = sidebarLabelFromFinishingName(row.name);
-              return (
-                <label key={row.id} className="flex items-center gap-2 cursor-pointer text-xs hover:text-foreground transition-colors">
-                  <Checkbox
-                    checked={filters.finishing.includes(label)}
-                    onCheckedChange={() => toggleArray('finishing', label)}
-                    className="w-3.5 h-3.5"
-                  />
-                  <span>{row.name}</span>
-                </label>
-              );
-            })}
-          </div>
-        </FilterSection>
-      )}
-
       {/* 9. Статус — only for new apartments */}
       {isNewBuilding && (
         <FilterSection title="Статус" defaultOpen={false} count={filters.status.length}>
@@ -459,8 +447,8 @@ const FilterSidebar = ({
         </FilterSection>
       )}
 
-      {/* 11. Метро — hidden if region has no subway stations (API returned empty array) */}
-      {hasMetro && (
+      {/* 11. Метро — only apartments and only when parent confirms Moscow/metro support */}
+      {isApartments && showMetro && hasMetro && (
         <FilterSection title="Метро" defaultOpen={false} count={filters.subway.length}>
           <SearchableCheckboxList
             items={subways}

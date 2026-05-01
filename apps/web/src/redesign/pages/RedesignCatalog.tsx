@@ -29,10 +29,21 @@ import { defaultFilters, type CatalogFilters, type ObjectType } from '@/redesign
 
 const OBJECT_TYPE_TITLE: Record<ObjectType, string> = {
   apartments: 'Жилые комплексы',
+  rooms: 'Комнаты',
   houses: 'Дома',
   land: 'Участки',
+  dachas: 'Дачи',
   commercial: 'Коммерческая недвижимость',
 };
+
+const OBJECT_TYPE_TABS: { type: ObjectType; label: string; countKey: string }[] = [
+  { type: 'apartments', label: 'Квартиры', countKey: 'APARTMENT' },
+  { type: 'rooms', label: 'Комнаты', countKey: 'APARTMENT' },
+  { type: 'houses', label: 'Дома', countKey: 'HOUSE' },
+  { type: 'land', label: 'Участки', countKey: 'LAND' },
+  { type: 'dachas', label: 'Дачи', countKey: 'HOUSE' },
+  { type: 'commercial', label: 'Коммерция', countKey: 'COMMERCIAL' },
+];
 
 type ViewMode = 'grid' | 'list' | 'map';
 
@@ -151,6 +162,7 @@ const RedesignCatalog = () => {
   const catalogSort = parseCatalogSort(searchParams.get('sort'));
 
   const isApartmentMode = filters.objectType === 'apartments';
+  const isUnsupportedSeparateType = filters.objectType === 'rooms' || filters.objectType === 'dachas';
   const useBlocksCatalog = isApartmentMode && filters.marketType !== 'secondary';
   const listingKind = LISTING_KIND_BY_OBJECT_TYPE[filters.objectType];
   const pageTitle = OBJECT_TYPE_TITLE[filters.objectType] ?? OBJECT_TYPE_TITLE.apartments;
@@ -194,7 +206,7 @@ const RedesignCatalog = () => {
       if (page >= totalPages) return undefined;
       return page + 1;
     },
-    enabled: regionId != null,
+    enabled: regionId != null && !isUnsupportedSeparateType,
   });
 
   // Flat (non-paginated) query for map view showing individual listings
@@ -211,7 +223,7 @@ const RedesignCatalog = () => {
       });
       return apiGet<{ data: ApiListingCardRow[] }>(`/listings?${sp}`);
     },
-    enabled: regionId != null && view === 'map',
+    enabled: regionId != null && view === 'map' && !isUnsupportedSeparateType,
     staleTime: 2 * 60 * 1000,
   });
 
@@ -280,17 +292,17 @@ const RedesignCatalog = () => {
   });
 
   const kindCounts = kindCountsQuery.data ?? {};
-  const availableKindLinks = useMemo(() => {
-    const items: { type: ObjectType; label: string; count: number }[] = [
-      { type: 'apartments', label: 'Квартиры', count: kindCounts.APARTMENT ?? 0 },
-      { type: 'houses', label: 'Дома и дачи', count: kindCounts.HOUSE ?? 0 },
-      { type: 'land', label: 'Участки', count: kindCounts.LAND ?? 0 },
-      { type: 'commercial', label: 'Коммерция', count: kindCounts.COMMERCIAL ?? 0 },
-    ];
-    return items.filter((x) => x.count > 0);
-  }, [kindCounts]);
-
-  const showKindSwitcher = availableKindLinks.length >= 2 && availableKindLinks.some((x) => x.type !== filters.objectType);
+  const objectKindLinks = useMemo(
+    () => OBJECT_TYPE_TABS.map((x) => ({ ...x, count: kindCounts[x.countKey] ?? 0 })),
+    [kindCounts],
+  );
+  const showKindSwitcher = true;
+  const isMoscowRegion = useMemo(() => {
+    const r = regionRows?.find((row) => row.id === regionId);
+    const code = (r?.code ?? '').toLowerCase();
+    const name = (r?.name ?? '').toLowerCase();
+    return code === 'msk' || name.includes('москва');
+  }, [regionId, regionRows]);
 
   const subwaysQuery = useQuery({
     queryKey: ['subways', regionId],
@@ -370,8 +382,8 @@ const RedesignCatalog = () => {
   }
   const loading = regionLoading
     || (showBlocks && blocksInfinite.isPending && !blocksInfinite.data)
-    || (!showBlocks && listingsInfinite.isPending && !listingsInfinite.data);
-  const loadError = showBlocks ? blocksInfinite.isError : listingsInfinite.isError;
+    || (!showBlocks && !isUnsupportedSeparateType && listingsInfinite.isPending && !listingsInfinite.data);
+  const loadError = isUnsupportedSeparateType ? false : (showBlocks ? blocksInfinite.isError : listingsInfinite.isError);
   const hasMore = showBlocks ? Boolean(blocksInfinite.hasNextPage) : Boolean(listingsInfinite.hasNextPage);
   const fetchingMore = showBlocks ? blocksInfinite.isFetchingNextPage : listingsInfinite.isFetchingNextPage;
   const totalShown = showBlocks ? filtered.length : listingRows.length;
@@ -473,8 +485,8 @@ const RedesignCatalog = () => {
 
         {showKindSwitcher && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground mr-1">В этом регионе доступно:</span>
-            {availableKindLinks.map((x) => (
+            <span className="text-xs text-muted-foreground mr-1">Тип объекта:</span>
+            {objectKindLinks.map((x) => (
               <button
                 key={x.type}
                 type="button"
@@ -524,7 +536,8 @@ const RedesignCatalog = () => {
                 subwayOptions={subwaysQuery.data}
                 builderOptions={buildersQuery.data}
                 deadlineOptions={deadlinesQuery.data}
-                objectTypeOptions={availableKindLinks.length > 0 ? availableKindLinks.map(x => x.type) : undefined}
+                objectTypeOptions={OBJECT_TYPE_TABS.map(x => x.type)}
+                showMetro={isMoscowRegion}
                 hasBlocks={showBlocks}
                 finishingsReference={finishingRows ?? []}
               />
@@ -638,17 +651,29 @@ const RedesignCatalog = () => {
                 <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
                   <SlidersHorizontal className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <p className="text-muted-foreground text-sm mb-1">Ничего не найдено</p>
-                <p className="text-muted-foreground text-xs mb-4">Попробуйте изменить параметры фильтров или строку поиска</p>
-                {availableKindLinks.length > 0 && (
+                <p className="text-muted-foreground text-sm mb-1">
+                  {isUnsupportedSeparateType ? 'Нет объявлений, добавьте первым' : 'Ничего не найдено'}
+                </p>
+                <p className="text-muted-foreground text-xs mb-4">
+                  {isUnsupportedSeparateType
+                    ? 'Для этого типа будет отдельная модель объявлений. Сейчас данные не смешиваем с домами или квартирами.'
+                    : 'Попробуйте изменить параметры фильтров или строку поиска'}
+                </p>
+                {objectKindLinks.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2 justify-center">
-                    {availableKindLinks
+                    {objectKindLinks
                       .filter((x) => x.type !== filters.objectType)
                       .map((x) => (
                         <button
                           key={x.type}
                           type="button"
-                          onClick={() => handleFiltersChange({ ...filters, objectType: x.type })}
+                          onClick={() => handleFiltersChange({
+                            ...defaultFilters,
+                            objectType: x.type,
+                            search: filters.search,
+                            priceMin: filters.priceMin,
+                            priceMax: filters.priceMax,
+                          })}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border border-primary text-primary hover:bg-primary/10"
                         >
                           Открыть «{x.label}» ({x.count})
@@ -679,7 +704,8 @@ const RedesignCatalog = () => {
               subwayOptions={subwaysQuery.data}
               builderOptions={buildersQuery.data}
               deadlineOptions={deadlinesQuery.data}
-              objectTypeOptions={availableKindLinks.length > 0 ? availableKindLinks.map(x => x.type) : undefined}
+              objectTypeOptions={OBJECT_TYPE_TABS.map(x => x.type)}
+              showMetro={isMoscowRegion}
               hasBlocks={showBlocks}
               finishingsReference={finishingRows ?? []}
             />
