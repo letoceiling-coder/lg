@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Building2, CalendarDays, Ruler, ChefHat, Layers, Paintbrush, Train, Phone, MessageCircle, Heart, Share2, GitCompare, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,6 @@ import { apiGet } from '@/lib/api';
 import { mapListingRowToApartment, type ApiListingRow } from '@/redesign/lib/blocks-from-api';
 import { mapListingDetailToApartmentPage, type ApiListingDetail } from '@/redesign/lib/listing-page-from-api';
 import { getApartmentById, formatPrice, MIN_REASONABLE_PRICE_RUB } from '@/redesign/data/mock-data';
-import { LIVEGRID_LOGO_SRC } from '@/redesign/lib/branding';
 import MissingPhotoPlaceholder from '@/redesign/components/MissingPhotoPlaceholder';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -18,6 +17,7 @@ import { useFavorites } from '@/shared/hooks/useFavorites';
 import { useCompare } from '@/shared/hooks/useCompare';
 import { shareCurrentPage } from '@/lib/share-page';
 import { toast } from '@/components/ui/sonner';
+import { useYandexMapsReady } from '@/shared/hooks/useYandexMapsReady';
 
 function parseNumericListingId(id: string | undefined): number | null {
   if (!id) return null;
@@ -26,19 +26,77 @@ function parseNumericListingId(id: string | undefined): number | null {
   return n;
 }
 
-function PlanImage({ src }: { src?: string | null }) {
+declare global {
+  interface Window { ymaps: any; }
+}
+
+const STATUS_LABEL = {
+  available: 'Свободна',
+  reserved: 'Бронь',
+  sold: 'Продана',
+} as const;
+
+type LightboxState = {
+  src: string;
+  label: string;
+} | null;
+
+function isValidImageSrc(src?: string | null): src is string {
+  return Boolean(src && !src.endsWith('/placeholder.svg'));
+}
+
+function PlanImage({ src, onOpen }: { src?: string | null; onOpen?: (src: string) => void }) {
   const [failed, setFailed] = useState(false);
-  const valid = Boolean(src && !src.endsWith('/placeholder.svg') && !failed);
+  const valid = isValidImageSrc(src) && !failed;
   if (!valid) {
     return <MissingPhotoPlaceholder className="aspect-square max-h-[min(640px,78vh)] max-w-full rounded-xl" />;
   }
   return (
+    <button type="button" className="max-w-full cursor-zoom-in" onClick={() => onOpen?.(src)}>
+      <img
+        src={src}
+        alt="Планировка"
+        className="mx-auto max-h-[min(640px,78vh)] w-auto max-w-full object-contain"
+        onError={() => setFailed(true)}
+      />
+    </button>
+  );
+}
+
+function ImageTile({
+  src,
+  alt,
+  className,
+  imageClassName,
+  onOpen,
+}: {
+  src?: string | null;
+  alt: string;
+  className?: string;
+  imageClassName?: string;
+  onOpen?: (src: string) => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const valid = isValidImageSrc(src) && !failed;
+  if (!valid) {
+    return <MissingPhotoPlaceholder className={className} />;
+  }
+  const image = (
     <img
-      src={src ?? ''}
-      alt="Планировка"
-      className="mx-auto max-h-[min(640px,78vh)] w-auto max-w-full object-contain"
+      src={src}
+      alt={alt}
+      className={cn('h-full w-full object-cover', imageClassName)}
+      loading="lazy"
       onError={() => setFailed(true)}
     />
+  );
+  if (!onOpen) {
+    return <div className={cn('overflow-hidden', className)}>{image}</div>;
+  }
+  return (
+    <button type="button" className={cn('block overflow-hidden text-left', className)} onClick={() => onOpen(src)}>
+      {image}
+    </button>
   );
 }
 
@@ -49,6 +107,10 @@ const RedesignApartment = () => {
   const { isAuthenticated } = useAuth();
   const { isListingFavorite, toggleListing } = useFavorites();
   const { isCompared, toggle: toggleCompare, count: compareCount } = useCompare();
+  const { ready: ymapsReady } = useYandexMapsReady();
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const [lightbox, setLightbox] = useState<LightboxState>(null);
   const listingId = parseNumericListingId(idParam);
 
   const mockResult = useMemo(() => {
@@ -93,6 +155,43 @@ const RedesignApartment = () => {
   const apt = mockResult?.apartment ?? apiPage?.apartment;
   const complex = mockResult?.complex ?? apiPage?.complex;
   const building = mockResult?.building ?? apiPage?.building;
+
+  const mediaImages = useMemo(() => {
+    const fromListing = listingQuery.data && Array.isArray((listingQuery.data as any).mediaFiles)
+      ? ((listingQuery.data as any).mediaFiles as { url?: string | null; kind?: string | null }[])
+          .map((file) => file.url)
+          .filter((url): url is string => isValidImageSrc(url))
+      : [];
+    const fromApartment = apt?.galleryImages?.filter(isValidImageSrc) ?? [];
+    return Array.from(new Set([...fromApartment, ...fromListing]));
+  }, [apt?.galleryImages, listingQuery.data]);
+
+  useEffect(() => {
+    mapInstanceRef.current?.destroy?.();
+    mapInstanceRef.current = null;
+  }, [complex?.coords[0], complex?.coords[1]]);
+
+  useEffect(() => {
+    if (!ymapsReady || !complex || !mapRef.current || mapInstanceRef.current || !window.ymaps) return;
+    window.ymaps.ready(() => {
+      if (!mapRef.current || mapInstanceRef.current) return;
+      const map = new window.ymaps.Map(mapRef.current, {
+        center: complex.coords,
+        zoom: 15,
+        controls: ['zoomControl'],
+      });
+      const placemark = new window.ymaps.Placemark(
+        complex.coords,
+        {
+          balloonContentHeader: `<strong>${complex.name}</strong>`,
+          balloonContentBody: `<div>${complex.address}</div>`,
+        },
+        { preset: 'islands#blueCircleDotIcon' },
+      );
+      map.geoObjects.add(placemark);
+      mapInstanceRef.current = map;
+    });
+  }, [ymapsReady, complex]);
 
   const similarApts = useMemo(() => {
     if (mockResult?.complex && mockResult.apartment) {
@@ -188,6 +287,30 @@ const RedesignApartment = () => {
   const priceOk = Number.isFinite(priceNum) && priceNum >= MIN_REASONABLE_PRICE_RUB;
   const ppmOk = priceOk && apt.pricePerMeter > 0;
 
+  const parameterRows = [
+    { label: 'Жилой комплекс', value: complex.name },
+    { label: 'Адрес', value: complex.address },
+    { label: 'Застройщик', value: complex.builder },
+    { label: 'Корпус', value: building.name },
+    { label: 'Секция', value: apt.section > 0 ? String(apt.section) : null },
+    { label: 'Номер квартиры', value: apt.number },
+    { label: 'Статус', value: STATUS_LABEL[apt.status] },
+    { label: 'Комнатность', value: roomLabel },
+    { label: 'Общая площадь', value: `${apt.area} м²` },
+    { label: 'Площадь кухни', value: apt.kitchenArea > 0 ? `${apt.kitchenArea} м²` : null },
+    { label: 'Этаж', value: apt.floor > 0 ? `${apt.floor} из ${apt.totalFloors}` : null },
+    { label: 'Отделка', value: apt.finishing },
+    { label: 'Срок сдачи', value: building.deadline },
+    { label: 'Район', value: complex.district },
+    { label: 'Метро', value: complex.subway !== '—' ? `${complex.subway} · ${complex.subwayDistance}` : null },
+    { label: 'Цена', value: totalPriceDisplay },
+    { label: 'Цена за м²', value: ppmOk ? `${apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м²` : 'Цена по запросу' },
+  ].filter((row) => {
+    if (row.value == null) return false;
+    const value = String(row.value).trim();
+    return value.length > 0 && value !== '—' && value !== 'undefined';
+  });
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <RedesignHeader />
@@ -261,7 +384,7 @@ const RedesignApartment = () => {
                     <Share2 className="w-4 h-4" />
                   </Button>
                 </div>
-                <PlanImage src={apt.planImage} />
+                <PlanImage src={apt.planImage} onOpen={(src) => setLightbox({ src, label: 'Планировка' })} />
               </div>
             </div>
 
@@ -271,33 +394,29 @@ const RedesignApartment = () => {
                   <h3 className="font-semibold text-sm">Отделка</h3>
                 </div>
                 <div className="aspect-[4/3] bg-muted/50 flex items-center justify-center p-8">
-                  <img
+                  <ImageTile
                     src={apt.finishingImage}
                     alt="Отделка"
-                    className="max-w-full max-h-full object-contain"
-                    onError={(e) => {
-                      e.currentTarget.src = LIVEGRID_LOGO_SRC;
-                    }}
+                    className="h-full w-full rounded-xl bg-muted/30"
+                    imageClassName="object-contain"
+                    onOpen={(src) => setLightbox({ src, label: 'Отделка' })}
                   />
                 </div>
               </div>
             ) : null}
 
-            {apt.galleryImages && apt.galleryImages.length > 0 ? (
+            {mediaImages.length > 0 ? (
               <div className="rounded-2xl border border-border bg-card p-6">
                 <h3 className="font-semibold mb-3">Фотографии</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {apt.galleryImages.map((src, i) => (
-                    <div key={`${src}-${i}`} className="rounded-xl overflow-hidden border border-border bg-muted/30">
-                      <img
-                        src={src || LIVEGRID_LOGO_SRC}
-                        alt=""
-                        className="w-full h-48 object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = LIVEGRID_LOGO_SRC;
-                        }}
-                      />
-                    </div>
+                  {mediaImages.map((src, i) => (
+                    <ImageTile
+                      key={`${src}-${i}`}
+                      src={src}
+                      alt={`Фото квартиры ${i + 1}`}
+                      className="h-48 rounded-xl border border-border bg-muted/30"
+                      onOpen={(imageSrc) => setLightbox({ src: imageSrc, label: `Фото квартиры ${i + 1}` })}
+                    />
                   ))}
                 </div>
               </div>
@@ -313,6 +432,33 @@ const RedesignApartment = () => {
                 {' '}Кухня {apt.kitchenArea} м².
                 {ppmOk ? ` Цена за метр: ${apt.pricePerMeter.toLocaleString('ru-RU')} ₽/м².` : ''}
               </p>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <h3 className="font-semibold mb-4">Параметры квартиры</h3>
+              <div className="overflow-hidden rounded-xl border border-border">
+                {parameterRows.map((row, index) => (
+                  <div
+                    key={row.label}
+                    className={cn(
+                      'grid grid-cols-1 gap-1 px-4 py-3 text-sm sm:grid-cols-[220px_1fr] sm:gap-4',
+                      index > 0 && 'border-t border-border',
+                    )}
+                  >
+                    <span className="text-muted-foreground">{row.label}</span>
+                    <span className={cn('font-medium', row.value === 'Цена по запросу' && 'text-[#6b7280]')}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card overflow-hidden">
+              <div className="p-4 border-b border-border flex flex-wrap items-center gap-2">
+                <MapPin className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{complex.address}</span>
+                {complex.subway !== '—' ? <span className="text-xs text-muted-foreground">· м. {complex.subway} · {complex.subwayDistance}</span> : null}
+              </div>
+              <div ref={mapRef} className="h-[320px] bg-muted" />
             </div>
           </div>
 
@@ -409,14 +555,11 @@ const RedesignApartment = () => {
                   className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-md hover:-translate-y-px transition-all"
                 >
                   <div className="aspect-square bg-muted/50 flex items-center justify-center p-6 sm:p-8">
-                    <img
+                    <ImageTile
                       src={a.planImage}
                       alt="План"
-                      className="max-h-[min(220px,40vw)] w-auto max-w-full object-contain opacity-60 transition-opacity group-hover:opacity-100"
-                      onError={(e) => {
-                        e.currentTarget.src = LIVEGRID_LOGO_SRC;
-                        e.currentTarget.classList.remove('opacity-60');
-                      }}
+                      className="h-full w-full bg-transparent"
+                      imageClassName="object-contain p-6 sm:p-8 opacity-60 transition-opacity group-hover:opacity-100"
                     />
                   </div>
                   <div className="p-3 space-y-1">
@@ -429,6 +572,46 @@ const RedesignApartment = () => {
             </div>
           </section>
         )}
+      </div>
+
+      {lightbox ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-zoom-out"
+            aria-label="Закрыть изображение"
+            onClick={() => setLightbox(null)}
+          />
+          <div className="relative z-10 max-h-full w-full max-w-5xl rounded-2xl bg-background p-3 shadow-2xl">
+            <div className="mb-2 flex items-center justify-between gap-3 px-1">
+              <p className="text-sm font-medium">{lightbox.label}</p>
+              <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => setLightbox(null)}>
+                Закрыть
+              </button>
+            </div>
+            <img src={lightbox.src} alt={lightbox.label} className="max-h-[82vh] w-full rounded-xl object-contain" />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-[1400px] gap-2">
+          <Button
+            type="button"
+            className="h-11 flex-1"
+            onClick={() => toast.info('Телефон застройщика будет доступен после подключения справочника контактов')}
+          >
+            <Phone className="mr-2 h-4 w-4" /> Позвонить
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 flex-1"
+            onClick={() => toast.info('Оставьте заявку ниже — менеджер согласует время просмотра')}
+          >
+            <MessageCircle className="mr-2 h-4 w-4" /> Просмотр
+          </Button>
+        </div>
       </div>
 
       <FooterSection />
