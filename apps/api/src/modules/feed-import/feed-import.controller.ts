@@ -1,6 +1,10 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  ParseIntPipe,
   Post,
   Query,
   HttpCode,
@@ -39,6 +43,32 @@ export class FeedImportController {
     return this.service.getProgress() || { step: 'idle', percent: 0 };
   }
 
+  @Get('sources')
+  @Roles('admin', 'editor')
+  @ApiOperation({ summary: 'List configured regional feed sources and required files' })
+  listSources() {
+    return this.service.listFeedSources();
+  }
+
+  @Post('trigger-selected')
+  @Roles('admin')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Trigger feed import for selected regions' })
+  triggerSelected(
+    @CurrentUser('sub') userId: string,
+    @Body('regions') regions: string[] = [],
+  ) {
+    return this.service.triggerImportForRegions(regions, userId);
+  }
+
+  @Post('stop')
+  @Roles('admin')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Stop all pending/running feed imports' })
+  stopAll() {
+    return this.service.stopActiveImports('Stopped manually from admin');
+  }
+
   @Get('diagnostics')
   @Roles('admin', 'editor')
   @ApiOperation({
@@ -69,6 +99,22 @@ export class FeedImportController {
     @Query('per_page') perPage?: number,
   ) {
     return this.service.getHistory(undefined, page ? +page : 1, perPage ? +perPage : 20);
+  }
+
+  @Post('history/:id/stop')
+  @Roles('admin')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Stop an import batch' })
+  stopBatch(@Param('id', ParseIntPipe) id: number) {
+    return this.service.stopBatch(id, 'Stopped manually from admin');
+  }
+
+  @Delete('history/:id')
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete an import batch from history' })
+  deleteBatch(@Param('id', ParseIntPipe) id: number) {
+    return this.service.deleteBatch(id);
   }
 
   @Post('refresh-cache')

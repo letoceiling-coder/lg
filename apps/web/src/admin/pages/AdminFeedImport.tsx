@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, Loader2, Play, RefreshCw, CheckCircle2, XCircle, Clock, FileJson } from 'lucide-react';
-import { apiGet, apiPost } from '@/lib/api';
+import { Download, Loader2, Play, RefreshCw, CheckCircle2, XCircle, Clock, FileJson, Square, Trash2 } from 'lucide-react';
+import { apiDelete, apiGet, apiPost } from '@/lib/api';
 import { useAuth } from '@/shared/hooks/useAuth';
 
 interface ImportHistoryRow {
@@ -39,6 +39,17 @@ interface RegionOption {
   id: number;
   code: string;
   name: string;
+}
+
+interface FeedSourceRow {
+  id: number;
+  code: string;
+  name: string;
+  enabled: boolean;
+  baseUrl: string | null;
+  canImport: boolean;
+  reason: string | null;
+  files: { name: string; required: boolean; url: string | null }[];
 }
 
 const statusIcon: Record<string, typeof CheckCircle2> = {
@@ -93,6 +104,7 @@ export default function AdminFeedImport() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const [region, setRegion] = useState('all');
+  const [selectedFeedCodes, setSelectedFeedCodes] = useState<string[]>([]);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const canTrigger = user?.role === 'admin';
 
@@ -101,6 +113,25 @@ export default function AdminFeedImport() {
     queryFn: () => apiGet<RegionOption[]>('/regions'),
     staleTime: 60_000,
   });
+
+  const { data: sources = [] } = useQuery({
+    queryKey: ['admin', 'feed-import', 'sources'],
+    queryFn: () => apiGet<FeedSourceRow[]>('/admin/feed-import/sources'),
+    staleTime: 30_000,
+  });
+
+  const importableSourceCodes = useMemo(
+    () => sources.filter((s) => s.canImport).map((s) => s.code),
+    [sources],
+  );
+
+  useEffect(() => {
+    setSelectedFeedCodes((prev) => {
+      const allowed = new Set(importableSourceCodes);
+      const next = prev.filter((code) => allowed.has(code));
+      return next.length ? next : importableSourceCodes;
+    });
+  }, [importableSourceCodes]);
 
   const selectedRegionCode = useMemo(() => {
     if (region === 'all') return null;
@@ -134,12 +165,28 @@ export default function AdminFeedImport() {
 
   const triggerMutation = useMutation({
     mutationFn: () =>
-      apiPost(
-        `/admin/feed-import/trigger?region=${encodeURIComponent(
-          region === 'all' ? 'all' : (selectedRegionCode ?? 'msk'),
-        )}`,
-        {},
-      ),
+      apiPost('/admin/feed-import/trigger-selected', { regions: selectedFeedCodes }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'feed-import'] });
+    },
+  });
+
+  const stopAllMutation = useMutation({
+    mutationFn: () => apiPost('/admin/feed-import/stop', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'feed-import'] });
+    },
+  });
+
+  const stopBatchMutation = useMutation({
+    mutationFn: (id: number) => apiPost(`/admin/feed-import/history/${id}/stop`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'feed-import'] });
+    },
+  });
+
+  const deleteBatchMutation = useMutation({
+    mutationFn: (id: number) => apiDelete(`/admin/feed-import/history/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'feed-import'] });
     },
@@ -158,6 +205,7 @@ export default function AdminFeedImport() {
     progress.percent < 100;
   const rows = history?.data ?? [];
   const latest = rows[0];
+  const selectedCount = selectedFeedCodes.length;
 
   return (
     <div className="p-6 max-w-5xl">
@@ -197,12 +245,21 @@ export default function AdminFeedImport() {
           </button>
           <button
             onClick={() => triggerMutation.mutate()}
-            disabled={triggerMutation.isPending || isRunning || !canTrigger}
+            disabled={triggerMutation.isPending || isRunning || !canTrigger || selectedCount === 0}
             className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-            title={!canTrigger ? 'Запуск импорта доступен только администратору' : undefined}
+            title={!canTrigger ? 'Запуск импорта доступен только администратору' : selectedCount === 0 ? 'Выберите хотя бы один доступный фид' : undefined}
           >
             {triggerMutation.isPending || isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            {isRunning ? 'Импорт идёт…' : 'Запустить импорт'}
+            {isRunning ? 'Импорт идёт…' : `Запустить (${selectedCount})`}
+          </button>
+          <button
+            onClick={() => stopAllMutation.mutate()}
+            disabled={stopAllMutation.isPending || !isRunning || !canTrigger}
+            className="inline-flex items-center gap-2 border border-destructive/40 bg-background px-4 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+            title={!canTrigger ? 'Остановка доступна только администратору' : undefined}
+          >
+            {stopAllMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
+            Остановить
           </button>
           <button
             onClick={() => refreshCacheMutation.mutate()}
@@ -217,6 +274,66 @@ export default function AdminFeedImport() {
             )}
             Обновить кеш каталога
           </button>
+        </div>
+      </div>
+
+      <div className="bg-background border rounded-2xl p-4 mb-6">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-semibold">Доступные фиды по регионам</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Отмечайте только регионы, для которых реально настроен фид. Сейчас доступна Москва.
+            </p>
+          </div>
+          <span className="text-xs rounded-full bg-muted px-2 py-1 text-muted-foreground">
+            Выбрано: {selectedCount}
+          </span>
+        </div>
+        <div className="space-y-2">
+          {sources.map((source) => {
+            const checked = selectedFeedCodes.includes(source.code);
+            return (
+              <label
+                key={source.id}
+                className={`flex items-start gap-3 rounded-xl border p-3 text-sm ${source.canImport ? 'cursor-pointer hover:bg-muted/30' : 'opacity-60 bg-muted/20'}`}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={checked}
+                  disabled={!source.canImport}
+                  onChange={(e) => {
+                    setSelectedFeedCodes((prev) =>
+                      e.target.checked
+                        ? Array.from(new Set([...prev, source.code]))
+                        : prev.filter((code) => code !== source.code),
+                    );
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{source.name}</span>
+                    <span className="text-xs uppercase text-muted-foreground">{source.code}</span>
+                    {source.canImport ? (
+                      <span className="text-xs text-green-700">фид настроен</span>
+                    ) : (
+                      <span className="text-xs text-destructive">{source.reason ?? 'недоступен'}</span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground break-all">
+                    {source.baseUrl ?? 'URL фида не задан'}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {source.files.map((file) => (
+                      <span key={file.name} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                        {file.name}.json
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -322,6 +439,7 @@ export default function AdminFeedImport() {
                   <th className="px-4 py-3 font-medium text-right">Корпуса</th>
                   <th className="px-4 py-3 font-medium text-right">Квартиры</th>
                   <th className="px-4 py-3 font-medium">Ошибка</th>
+                  <th className="px-4 py-3 font-medium text-right">Действия</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -353,6 +471,32 @@ export default function AdminFeedImport() {
                       </td>
                       <td className="px-4 py-3 text-xs text-destructive max-w-[320px] whitespace-pre-wrap break-words" title={r.errorMessage ?? ''}>
                         {r.errorMessage ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          {r.status === 'RUNNING' || r.status === 'PENDING' ? (
+                            <button
+                              type="button"
+                              onClick={() => stopBatchMutation.mutate(r.id)}
+                              disabled={!canTrigger || stopBatchMutation.isPending}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                              title="Остановить импорт"
+                            >
+                              <Square className="h-4 w-4" />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Удалить запрос импорта #${r.id}?`)) deleteBatchMutation.mutate(r.id);
+                            }}
+                            disabled={!canTrigger || deleteBatchMutation.isPending || r.status === 'RUNNING'}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                            title={r.status === 'RUNNING' ? 'Сначала остановите импорт' : 'Удалить запрос'}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

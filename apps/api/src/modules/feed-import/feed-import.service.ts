@@ -26,6 +26,18 @@ export interface ImportProgress {
   percent: number;
 }
 
+const REQUIRED_FEED_FILES = [
+  'rooms',
+  'finishings',
+  'buildingtypes',
+  'regions',
+  'subways',
+  'builders',
+  'blocks',
+  'buildings',
+  'apartments',
+] as const;
+
 @Injectable()
 export class FeedImportService implements OnModuleInit {
   private readonly logger = new Logger(FeedImportService.name);
@@ -115,6 +127,80 @@ export class FeedImportService implements OnModuleInit {
       skipped,
       total: importableRows.length,
     };
+  }
+
+  async listFeedSources() {
+    const rows = await this.prisma.feedRegion.findMany({
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        baseUrl: true,
+        isEnabled: true,
+        lastImportedAt: true,
+      },
+    });
+    return rows.map((r) => {
+      const baseUrl = r.baseUrl?.trim() || null;
+      return {
+        id: r.id,
+        code: this.normalizeRegionCode(r.code).toUpperCase(),
+        name: r.name,
+        enabled: r.isEnabled,
+        baseUrl,
+        canImport: r.isEnabled && Boolean(baseUrl),
+        reason: baseUrl ? null : 'Feed URL не настроен',
+        lastImportedAt: r.lastImportedAt,
+        files: REQUIRED_FEED_FILES.map((name) => ({
+          name,
+          required: true,
+          url: baseUrl ? `${baseUrl.replace(/\/+$/, '')}/${name}.json` : null,
+        })),
+      };
+    });
+  }
+
+  async triggerImportForRegions(regionCodes: string[], triggeredBy?: string) {
+    const requested = Array.from(new Set(regionCodes.map((code) => this.normalizeRegionCode(code)).filter(Boolean)));
+    if (!requested.length) throw new BadRequestException('Выберите хотя бы один регион для импорта');
+
+    const rows = await this.prisma.feedRegion.findMany({
+      where: { code: { in: requested } },
+      orderBy: { id: 'asc' },
+      select: { code: true, baseUrl: true, isEnabled: true },
+    });
+    const byCode = new Map(rows.map((r) => [this.normalizeRegionCode(r.code), r]));
+    const queued: Array<{ region: string; batchId: number }> = [];
+    const skipped: Array<{ region: string; reason: string }> = [];
+
+    for (const code of requested) {
+      const row = byCode.get(code);
+      if (!row) {
+        skipped.push({ region: code, reason: 'Регион не найден' });
+        continue;
+      }
+      if (!row.isEnabled) {
+        skipped.push({ region: code, reason: 'Регион выключен' });
+        continue;
+      }
+      if (!row.baseUrl?.trim()) {
+        skipped.push({ region: code, reason: 'Feed URL не настроен' });
+        continue;
+      }
+      try {
+        const result = await this.triggerImport(code, triggeredBy);
+        queued.push({ region: code, batchId: result.batchId });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        skipped.push({ region: code, reason: msg });
+      }
+    }
+
+    if (!queued.length) {
+      throw new BadRequestException(`Не удалось поставить импорт в очередь: ${skipped.map((s) => `${s.region}: ${s.reason}`).join('; ')}`);
+    }
+    return { status: 'QUEUED' as const, queued, skipped, total: requested.length };
   }
 
   /**
@@ -210,6 +296,7 @@ export class FeedImportService implements OnModuleInit {
       });
 
       const about = await this.fetcher.fetchAbout(regionCode);
+      await this.ensureBatchIsRunning(batchId);
       const exportedAt = about[0]?.exported_at;
 
       await this.prisma.importBatch.update({
@@ -242,7 +329,9 @@ export class FeedImportService implements OnModuleInit {
         this.setProgress(`Processing ${rf.name}`, url, 10 + i * 3);
         try {
           const data = await this.fetcher.fetchFeedFile(url);
+          await this.ensureBatchIsRunning(batchId);
           stats[`${rf.name}_upserted`] = await rf.process(data);
+          await this.ensureBatchIsRunning(batchId);
         } catch (err: any) {
           errors.push(`${rf.name}: ${err.message}`);
           this.logger.error(`Error processing ${rf.name}: ${err.message}`);
@@ -254,7 +343,9 @@ export class FeedImportService implements OnModuleInit {
         this.setProgress('Processing blocks', blocksUrl, 30);
         try {
           const blocksData = await this.fetcher.fetchFeedFile(blocksUrl);
+          await this.ensureBatchIsRunning(batchId);
           stats.blocks_upserted = await this.processor.processBlocks(blocksData, regionId);
+          await this.ensureBatchIsRunning(batchId);
         } catch (err: unknown) {
           errors.push(`blocks: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -265,8 +356,10 @@ export class FeedImportService implements OnModuleInit {
         this.setProgress('Processing buildings', buildingsUrl, 45);
         try {
           const buildingsData = await this.fetcher.fetchFeedFile(buildingsUrl);
+          await this.ensureBatchIsRunning(batchId);
           stats.buildings_upserted =
             await this.processor.processBuildings(buildingsData, regionId);
+          await this.ensureBatchIsRunning(batchId);
         } catch (err: unknown) {
           errors.push(`buildings: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -277,9 +370,11 @@ export class FeedImportService implements OnModuleInit {
         this.setProgress('Downloading apartments', apartmentsUrl, 60);
         try {
           const aptData = await this.fetcher.fetchFeedFile(apartmentsUrl);
+          await this.ensureBatchIsRunning(batchId);
           this.setProgress('Processing apartments', `${aptData.length} items`, 65);
           stats.apartments_upserted =
             await this.processor.processApartments(aptData, regionId);
+          await this.ensureBatchIsRunning(batchId);
         } catch (err: unknown) {
           errors.push(`apartments: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -287,6 +382,7 @@ export class FeedImportService implements OnModuleInit {
 
       this.setProgress('Deriving block statuses', undefined, 95);
       try {
+        await this.ensureBatchIsRunning(batchId);
         stats.block_statuses_updated =
           await this.processor.deriveBlockStatuses(regionId);
       } catch (err: unknown) {
@@ -325,18 +421,71 @@ export class FeedImportService implements OnModuleInit {
       const stack = err instanceof Error ? err.stack : undefined;
       this.logger.error(`Import batch ${batchId} failed: ${msg}`, stack);
 
-      await this.prisma.importBatch.update({
-        where: { id: batchId },
-        data: {
-          status: 'FAILED',
-          finishedAt: new Date(),
-          errorMessage: msg,
-          stats: { ...stats, errors: [...errors, msg] },
-        },
-      });
+      const current = await this.prisma.importBatch.findUnique({ where: { id: batchId }, select: { status: true, errorMessage: true } });
+      if (current?.status !== 'FAILED') {
+        await this.prisma.importBatch.update({
+          where: { id: batchId },
+          data: {
+            status: 'FAILED',
+            finishedAt: new Date(),
+            errorMessage: msg,
+            stats: { ...stats, errors: [...errors, msg] },
+          },
+        });
+      }
 
       this.setProgress('Failed', msg, 0);
     }
+  }
+
+  async stopBatch(id: number, reason = 'Stopped manually') {
+    const batch = await this.prisma.importBatch.findUnique({
+      where: { id },
+      include: { region: { select: { code: true } } },
+    });
+    if (!batch) throw new NotFoundException('Import batch not found');
+    if (batch.status === 'COMPLETED' || batch.status === 'FAILED') {
+      return { stopped: false, status: batch.status, reason: 'Batch already finished' };
+    }
+
+    const removedJobs = await this.removeQueuedJobsForBatch(id, batch.region.code);
+    await this.prisma.importBatch.update({
+      where: { id },
+      data: {
+        status: 'FAILED',
+        finishedAt: new Date(),
+        errorMessage: reason,
+      },
+    });
+    this.setProgress('Failed', reason, 0);
+    return { stopped: true, batchId: id, removedJobs };
+  }
+
+  async deleteBatch(id: number) {
+    const batch = await this.prisma.importBatch.findUnique({
+      where: { id },
+      include: { region: { select: { code: true } } },
+    });
+    if (!batch) throw new NotFoundException('Import batch not found');
+    if (batch.status === 'RUNNING') {
+      throw new BadRequestException('Сначала остановите импорт, затем удалите запрос');
+    }
+    const removedJobs = await this.removeQueuedJobsForBatch(id, batch.region.code);
+    await this.prisma.importBatch.delete({ where: { id } });
+    return { deleted: true, batchId: id, removedJobs };
+  }
+
+  async stopActiveImports(reason = 'Stopped manually') {
+    const batches = await this.prisma.importBatch.findMany({
+      where: { status: { in: ['PENDING', 'RUNNING'] } },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const stopped = [];
+    for (const batch of batches) {
+      stopped.push(await this.stopBatch(batch.id, reason));
+    }
+    return { stopped };
   }
 
   /**
@@ -609,6 +758,34 @@ export class FeedImportService implements OnModuleInit {
 
   private setProgress(step: string, detail?: string, percent = 0) {
     this.currentProgress = { step, detail, percent };
+  }
+
+  private async ensureBatchIsRunning(batchId: number) {
+    const batch = await this.prisma.importBatch.findUnique({
+      where: { id: batchId },
+      select: { status: true, errorMessage: true },
+    });
+    if (!batch || batch.status !== 'RUNNING') {
+      throw new Error(batch?.errorMessage || 'Import stopped manually');
+    }
+  }
+
+  private async removeQueuedJobsForBatch(batchId: number, regionCode: string): Promise<number> {
+    const jobs = await this.feedImportQueue.getJobs(['waiting', 'delayed', 'paused']);
+    let removed = 0;
+    for (const job of jobs) {
+      const data = job.data as Partial<FeedImportBatchJob> & { regionCode?: string };
+      const matchesBatch = data.batchId === batchId;
+      const matchesRegion = !data.batchId && this.normalizeRegionCode(data.regionCode || '') === this.normalizeRegionCode(regionCode);
+      if (!matchesBatch && !matchesRegion) continue;
+      try {
+        await job.remove();
+        removed++;
+      } catch (e: unknown) {
+        this.logger.warn(`Could not remove feed import job ${job.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    return removed;
   }
 
   async refreshCatalogSearchCache() {
