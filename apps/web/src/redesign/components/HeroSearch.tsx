@@ -21,13 +21,12 @@ import {
 import type { CatalogFilters, ObjectType } from '@/redesign/data/types';
 import { defaultFilters } from '@/redesign/data/types';
 
-/** Числа 1–999 считаем миллионами ₽ (как на витринах); от 1 000 000 — рублями. */
+/** В герое поле подписано «₽», поэтому ввод трактуем как рубли без скрытого масштабирования. */
 function priceRubFromHeroInput(raw: string): number | undefined {
   const digits = raw.replace(/\D/g, '');
   if (!digits) return undefined;
   const n = parseInt(digits, 10);
   if (!Number.isFinite(n) || n <= 0) return undefined;
-  if (n < 1_000_000) return n * 1_000_000;
   return n;
 }
 
@@ -191,6 +190,19 @@ const HeroSearch = () => {
     }).toString();
   }, [regionId, activeTab, debouncedFilters, finishings]);
 
+  const apartmentFallbackCountParams = useMemo(() => {
+    if (regionId == null || activeTab !== 'apartments') return null;
+    if (debouncedFilters.marketType === 'secondary') return null;
+    return buildListingsSearchParams({
+      filters: debouncedFilters,
+      regionId,
+      kind: 'APARTMENT',
+      finishings,
+      page: 1,
+      perPage: 1,
+    }).toString();
+  }, [regionId, activeTab, debouncedFilters, finishings]);
+
   /** Дом / участок / коммерция — счётчик с учётом цены и площади (м² или сотки через area_total_*). */
   const nonAptHeroCountParams = useMemo(() => {
     if (regionId == null) return null;
@@ -216,6 +228,13 @@ const HeroSearch = () => {
     queryKey: ['listings', 'hero-apt-market-count', listingHeroCountParams],
     queryFn: () => apiGet<{ meta: { total: number } }>(`/listings?${listingHeroCountParams}`),
     enabled: listingHeroCountParams != null,
+    staleTime: 30_000,
+  });
+
+  const { data: apartmentFallbackCount } = useQuery({
+    queryKey: ['listings', 'hero-apt-fallback-count', apartmentFallbackCountParams],
+    queryFn: () => apiGet<{ meta: { total: number } }>(`/listings?${apartmentFallbackCountParams}`),
+    enabled: apartmentFallbackCountParams != null,
     staleTime: 30_000,
   });
 
@@ -249,6 +268,9 @@ const HeroSearch = () => {
 
   /** Сброс полей при смене типа объекта — не смешиваем этаж/отделку квартиры с участком. */
   useEffect(() => {
+    setQ('');
+    setPriceFrom('');
+    setPriceTo('');
     setPropertyType('Тип квартиры');
     setDeadline('Срок сдачи');
     setPtOpen(false);
@@ -259,6 +281,19 @@ const HeroSearch = () => {
     setFloorMax('');
     setAptMarket('all');
     setHeroFinishingId('');
+    setDebouncedForCounts({
+      q: '',
+      priceFrom: '',
+      priceTo: '',
+      propertyType: 'Тип квартиры',
+      deadline: 'Срок сдачи',
+      aptMarket: 'all',
+      heroFinishingId: '',
+      areaMin: '',
+      areaMax: '',
+      floorMin: '',
+      floorMax: '',
+    });
   }, [activeTab]);
 
   const belgorodRegion = useMemo(
@@ -323,6 +358,9 @@ const HeroSearch = () => {
         return `${apartmentsInBlocks.toLocaleString('ru')} квартир в ${blocks.toLocaleString('ru')} ЖК →`;
       }
       if (catalogStats == null) return 'Найти →';
+      const fallbackTotal = apartmentFallbackCount?.meta?.total;
+      if (fallbackTotal != null && fallbackTotal > 0) return `${fallbackTotal.toLocaleString('ru')} квартир →`;
+      if (fallbackTotal == null) return 'Найти →';
       return 'Нет квартир в этом регионе';
     }
     const tab = objectTabs.find((t) => t.value === activeTab);
@@ -355,7 +393,7 @@ const HeroSearch = () => {
       return `${n.toLocaleString('ru')} ${word} →`;
     }
     return 'Найти →';
-  }, [activeTab, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts, nonAptHeroCount]);
+  }, [activeTab, apartmentFallbackCount, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts, nonAptHeroCount]);
 
   const apartmentsHeadlineCount = useMemo(() => {
     if (activeTab === 'apartments') {
@@ -366,12 +404,14 @@ const HeroSearch = () => {
     }
     const fromStats = catalogStats?.apartments ?? 0;
     if (fromStats > 0) return fromStats;
+    const fallbackApt = apartmentFallbackCount?.meta?.total ?? 0;
+    if (fallbackApt > 0) return fallbackApt;
     if (!hasNarrowingFilters(debouncedFilters)) {
       const fromKinds = kindCounts?.APARTMENT ?? 0;
       if (fromKinds > 0) return fromKinds;
     }
     return 0;
-  }, [activeTab, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts]);
+  }, [activeTab, apartmentFallbackCount, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts]);
 
   const heroSubtitle = useMemo(() => {
     if (activeTab === 'apartments') {
@@ -445,8 +485,7 @@ const HeroSearch = () => {
 
           <h1 className="text-xl sm:text-2xl md:text-4xl font-extrabold leading-tight text-center">
             <span className="text-[#2563EB]">Live Grid.</span>{' '}
-            <span className="hidden sm:inline text-foreground">{apartmentsHeadlineCount.toLocaleString('ru-RU')}+ квартир по России</span>
-            <span className="sm:hidden text-foreground">{apartmentsHeadlineCount.toLocaleString('ru-RU')}+ квартир</span>
+            <span className="text-foreground">{heroSubtitle}</span>
           </h1>
         </div>
 

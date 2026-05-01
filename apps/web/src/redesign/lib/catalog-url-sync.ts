@@ -38,13 +38,12 @@ export function catalogFilterUrlSignature(sp: URLSearchParams): string {
   return parts.sort().join('&');
 }
 
-/** То же масштабирование цены, что в HeroSearch (< 1e6 считаются миллионами). */
+/** Поля цены подписаны «₽», поэтому ввод трактуем как рубли без скрытого масштабирования. */
 export function heroDigitsToRubles(digitsRaw: string): number | undefined {
   const digits = digitsRaw.replace(/\D/g, '');
   if (!digits) return undefined;
   const n = parseInt(digits, 10);
   if (!Number.isFinite(n) || n <= 0) return undefined;
-  if (n < 1_000_000) return n * 1_000_000;
   return n;
 }
 
