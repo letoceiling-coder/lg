@@ -23,6 +23,10 @@ export const CATALOG_FILTER_URL_KEYS = [
   'floorMax',
   'deadline',
   'finishing_ids',
+  'district_names',
+  'subway_names',
+  'builder_names',
+  'status',
 ] as const;
 
 export function catalogFilterUrlSignature(sp: URLSearchParams): string {
@@ -56,6 +60,14 @@ function parseRoomCategories(raw: string | null): number[] {
     .split(',')
     .map((s) => parseInt(s.trim(), 10))
     .filter((n) => Number.isFinite(n) && n >= 0 && n <= 4);
+}
+
+function parseStringList(raw: string | null): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /** Приводим название отделки из справочника к меткам FilterSidebar. */
@@ -156,8 +168,13 @@ export function catalogFiltersFromSearchParams(
 
   const dl = sp.get('deadline');
   if (dl?.trim()) {
-    f.deadline = dl.split(',').map((s) => s.trim()).filter(Boolean);
+    f.deadline = parseStringList(dl);
   }
+
+  f.district = parseStringList(sp.get('district_names'));
+  f.subway = parseStringList(sp.get('subway_names'));
+  f.builder = parseStringList(sp.get('builder_names'));
+  f.status = parseStringList(sp.get('status')).filter((s) => ['building', 'completed', 'planned'].includes(s));
 
   const finIds = sp.get('finishing_ids');
   if (finIds?.trim()) {
@@ -210,6 +227,18 @@ export function catalogFiltersIntoSearchParams(
   if (f.deadline.length) p.set('deadline', f.deadline.join(','));
   else p.delete('deadline');
 
+  if (f.district.length) p.set('district_names', f.district.join(','));
+  else p.delete('district_names');
+
+  if (f.subway.length) p.set('subway_names', f.subway.join(','));
+  else p.delete('subway_names');
+
+  if (f.builder.length) p.set('builder_names', f.builder.join(','));
+  else p.delete('builder_names');
+
+  if (f.status.length) p.set('status', f.status.join(','));
+  else p.delete('status');
+
   if (f.finishing.length && finishings?.length) {
     const ids = finishingIdsFromSidebarLabels(f.finishing, finishings);
     if (ids.length) p.set('finishing_ids', ids.join(','));
@@ -224,6 +253,9 @@ export function catalogFiltersIntoSearchParams(
   p.delete('areaMax');
   p.delete('floorMin');
   p.delete('floorMax');
+  p.delete('district');
+  p.delete('subway');
+  p.delete('builder');
 
   return p;
 }

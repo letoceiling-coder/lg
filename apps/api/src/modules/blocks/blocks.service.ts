@@ -24,6 +24,8 @@ function intersectBlockIdFilter(current: Prisma.BlockWhereInput['id'], ids: numb
   return existing.filter((id) => s.has(id));
 }
 
+const PUBLIC_LISTING_STATUSES = [ListingStatus.ACTIVE, ListingStatus.RESERVED] as const;
+
 
 
 function parseDeadlineFilterTokens(deadlineRaw: string): Array<{ kind: 'year' | 'month' | 'quarter' | 'completed' | 'exact'; value: string }> {
@@ -253,7 +255,7 @@ export class BlocksService {
     if (require_active_listings === true) {
       where.listings = {
         some: {
-          status: ListingStatus.ACTIVE,
+          status: { in: [...PUBLIC_LISTING_STATUSES] },
           kind: ListingKind.APARTMENT,
           isPublished: true,
         },
@@ -268,7 +270,7 @@ export class BlocksService {
         return { where, noMatch: true };
       }
       const listingWhere: Prisma.ListingWhereInput = {
-        status: { in: [ListingStatus.ACTIVE, ListingStatus.RESERVED] },
+        status: { in: [...PUBLIC_LISTING_STATUSES] },
         kind: ListingKind.APARTMENT,
         isPublished: true,
         apartment: {
@@ -299,7 +301,7 @@ export class BlocksService {
       if (price_min != null) priceFilter.gte = price_min;
       if (price_max != null) priceFilter.lte = price_max;
       const priceWhere: Prisma.ListingWhereInput = {
-        status: ListingStatus.ACTIVE,
+        status: { in: [...PUBLIC_LISTING_STATUSES] },
         kind: ListingKind.APARTMENT,
         price: priceFilter,
         isPublished: true,
@@ -332,7 +334,7 @@ export class BlocksService {
 
     if (area_min != null || area_max != null) {
       const areaWhere: Prisma.ListingWhereInput = {
-        status: ListingStatus.ACTIVE,
+        status: { in: [...PUBLIC_LISTING_STATUSES] },
         kind: ListingKind.APARTMENT,
         isPublished: true,
         apartment: {
@@ -355,7 +357,7 @@ export class BlocksService {
 
     if (floor_min != null || floor_max != null) {
       const floorWhere: Prisma.ListingWhereInput = {
-        status: ListingStatus.ACTIVE,
+        status: { in: [...PUBLIC_LISTING_STATUSES] },
         kind: ListingKind.APARTMENT,
         isPublished: true,
         apartment: {
@@ -379,7 +381,7 @@ export class BlocksService {
     const finishingIds = this.parseCommaSeparatedIds(finishing);
     if (finishingIds.length) {
       const finishingWhere: Prisma.ListingWhereInput = {
-        status: ListingStatus.ACTIVE,
+        status: { in: [...PUBLIC_LISTING_STATUSES] },
         kind: ListingKind.APARTMENT,
         isPublished: true,
         apartment: {
@@ -412,47 +414,40 @@ export class BlocksService {
       return empty;
     }
 
-    const roomIds =
-      query.room_type_ids
-        ?.split(',')
-        .map((s) => parseInt(s.trim(), 10))
-        .filter((n) => Number.isFinite(n)) ?? [];
-
     const listingWhere: Prisma.ListingWhereInput = {
-      status: ListingStatus.ACTIVE,
+      status: { in: [...PUBLIC_LISTING_STATUSES] },
       kind: ListingKind.APARTMENT,
       isPublished: true,
       ...(query.region_id != null ? { regionId: query.region_id } : {}),
       block: where,
     };
-    if (roomIds.length) {
-      listingWhere.apartment = { roomTypeId: { in: roomIds } };
+
+    const apartmentParts: Prisma.ListingApartmentWhereInput[] = [];
+    const roomCategories = this.parseRoomCategories(query.rooms);
+    if (roomCategories.length) {
+      const roomTypeIds = await this.resolveRoomTypeIdsByCategories(roomCategories);
+      if (roomTypeIds.length === 0) {
+        const empty = { blocks: 0, apartments: 0 };
+        await this.cache.setJson(cacheKey, empty, 60);
+        return empty;
+      }
+      apartmentParts.push({ roomTypeId: { in: roomTypeIds } });
+    }
+    const finishingIds = this.parseCommaSeparatedIds(query.finishing);
+    if (finishingIds.length) apartmentParts.push({ finishingId: { in: finishingIds } });
+    if (query.area_min != null) apartmentParts.push({ areaTotal: { gte: query.area_min } });
+    if (query.area_max != null) apartmentParts.push({ areaTotal: { lte: query.area_max } });
+    if (query.floor_min != null) apartmentParts.push({ floor: { gte: query.floor_min } });
+    if (query.floor_max != null) apartmentParts.push({ floor: { lte: query.floor_max } });
+    if (apartmentParts.length) {
+      listingWhere.apartment = { AND: apartmentParts };
     }
 
-    const whereSql = catalogBlockWhereToSql(where);
-    if (whereSql != null && (await this.isCatalogMvAvailable())) {
-      try {
-        const roomFilterSql =
-          roomIds.length > 0 ? Prisma.sql` AND mv.room_type_id IN (${Prisma.join(roomIds)})` : Prisma.empty;
-        const rows = await this.prisma.$queryRaw<{ apartments: bigint; blocks: bigint }[]>`
-          SELECT
-            COUNT(*)::bigint AS apartments,
-            COUNT(DISTINCT mv.block_id)::bigint AS blocks
-          FROM catalog_apartment_active_mv mv
-          INNER JOIN blocks b ON b.id = mv.block_id
-          WHERE ${whereSql}
-          ${roomFilterSql}
-        `;
-        const row = rows[0];
-        const result = {
-          blocks: Number(row?.blocks ?? 0n),
-          apartments: Number(row?.apartments ?? 0n),
-        };
-        await this.cache.setJson(cacheKey, result, 60);
-        return result;
-      } catch (e: unknown) {
-        this.logger.warn(`MV count fallback to base tables: ${e instanceof Error ? e.message : String(e)}`);
-      }
+    if (query.price_min != null || query.price_max != null) {
+      const priceFilter: Prisma.DecimalNullableFilter = { not: null, gt: 0 };
+      if (query.price_min != null) priceFilter.gte = query.price_min;
+      if (query.price_max != null) priceFilter.lte = query.price_max;
+      listingWhere.price = priceFilter;
     }
 
     const listingTotal = await this.prisma.listing.count({ where: listingWhere });

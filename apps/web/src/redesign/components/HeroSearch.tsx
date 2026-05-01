@@ -12,10 +12,14 @@ import {
   roomCategoriesFromHeroLabel,
   sidebarLabelFromFinishingName,
 } from '@/redesign/lib/catalog-url-sync';
-import type { CatalogFilters, MarketType, ObjectType } from '@/redesign/data/types';
+import {
+  buildBlocksSearchParams,
+  buildListingsSearchParams,
+  hasNarrowingFilters,
+  LISTING_KIND_BY_OBJECT_TYPE,
+} from '@/redesign/lib/catalog-api-params';
+import type { CatalogFilters, ObjectType } from '@/redesign/data/types';
 import { defaultFilters } from '@/redesign/data/types';
-
-type RoomTypeRow = { id: number; name: string };
 
 /** Числа 1–999 считаем миллионами ₽ (как на витринах); от 1 000 000 — рублями. */
 function priceRubFromHeroInput(raw: string): number | undefined {
@@ -44,46 +48,6 @@ function heroParsedFloors(floorMinRaw: string, floorMaxRaw: string): { min?: num
   if (Number.isFinite(fl1)) o.min = fl1;
   if (Number.isFinite(fl2)) o.max = fl2;
   return o;
-}
-
-function roomTypeIdsForPropertyLabel(label: string, roomTypes: RoomTypeRow[]): string | undefined {
-  if (!label || label === 'Тип квартиры') return undefined;
-  const lower = label.toLowerCase();
-  const pick = (ids: number[]) => (ids.length ? ids.join(',') : undefined);
-  if (lower.includes('студ')) {
-    return pick(roomTypes.filter((r) => r.name.toLowerCase().includes('студ')).map((r) => r.id));
-  }
-  if (lower.includes('4+') || lower.includes('4 +')) {
-    return pick(
-      roomTypes
-        .filter((r) => {
-          const n = r.name.toLowerCase();
-          return (
-            n.includes('4') ||
-            n.includes('5') ||
-            n.includes('6') ||
-            n.includes('многокомн') ||
-            n.includes('5+') ||
-            n.includes('4-к')
-          );
-        })
-        .map((r) => r.id),
-    );
-  }
-  const m = label.match(/(\d)/);
-  if (m) {
-    const d = m[1];
-    return pick(
-      roomTypes
-        .filter((r) => {
-          const n = r.name.toLowerCase();
-          if (n.includes('студ')) return false;
-          return n.includes(`${d}-комн`) || n.includes(`${d} комн`) || n.includes(`${d}-к`) || n.includes(` ${d} `);
-        })
-        .map((r) => r.id),
-    );
-  }
-  return undefined;
 }
 
 const objectTabs = [
@@ -144,12 +108,6 @@ const HeroSearch = () => {
     staleTime: 20_000,
   });
 
-  const { data: roomTypes = [] } = useQuery({
-    queryKey: ['reference', 'room-types'],
-    queryFn: () => apiGet<RoomTypeRow[]>('/reference/room-types'),
-    staleTime: 60 * 60 * 1000,
-  });
-
   const { data: finishings = [] } = useQuery({
     queryKey: ['reference', 'finishings'],
     queryFn: () => apiGet<Array<{ id: number; name: string }>>('/reference/finishings'),
@@ -177,92 +135,74 @@ const HeroSearch = () => {
     return () => clearTimeout(t);
   }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket, heroFinishingId, areaMin, areaMax, floorMin, floorMax]);
 
-  const catalogCountParams = useMemo(() => {
-    if (regionId == null || activeTab !== 'apartments') return null;
-    if (debouncedForCounts.aptMarket !== 'all') return null;
-    const sp = new URLSearchParams();
-    sp.set('region_id', String(regionId));
-    const qs = debouncedForCounts.q.trim();
-    if (qs) sp.set('search', qs);
+  const debouncedFilters = useMemo<CatalogFilters>(() => {
+    const objectType = activeTab as ObjectType;
+    const f: CatalogFilters = {
+      ...defaultFilters,
+      objectType,
+      marketType:
+        objectType === 'apartments' && debouncedForCounts.aptMarket === 'new'
+          ? 'new'
+          : objectType === 'apartments' && debouncedForCounts.aptMarket === 'secondary'
+            ? 'secondary'
+            : 'all',
+      search: debouncedForCounts.q.trim(),
+    };
     const pMin = priceRubFromHeroInput(debouncedForCounts.priceFrom);
     const pMax = priceRubFromHeroInput(debouncedForCounts.priceTo);
-    if (pMin != null) sp.set('price_min', String(pMin));
-    if (pMax != null) sp.set('price_max', String(pMax));
-    const dl = debouncedForCounts.deadline;
-    if (dl === 'Сдан') {
-      sp.set('status', 'COMPLETED');
-    } else if (dl && dl !== 'Срок сдачи') {
-      const token = dl === '2029+' ? '2030' : dl;
-      sp.set('deadline', token);
-    }
-    const rt = roomTypeIdsForPropertyLabel(debouncedForCounts.propertyType, roomTypes);
-    if (rt) sp.set('room_type_ids', rt);
-    const hid = debouncedForCounts.heroFinishingId.trim();
-    if (/^\d+$/.test(hid)) sp.set('finishing', hid);
+    if (pMin != null) f.priceMin = pMin;
+    if (pMax != null) f.priceMax = pMax;
     const { min: aMin, max: aMax } = heroParsedArea(debouncedForCounts.areaMin, debouncedForCounts.areaMax);
-    if (aMin !== undefined) sp.set('area_min', String(aMin));
-    if (aMax !== undefined) sp.set('area_max', String(aMax));
-    const { min: fMin, max: fMax } = heroParsedFloors(debouncedForCounts.floorMin, debouncedForCounts.floorMax);
-    if (fMin !== undefined) sp.set('floor_min', String(fMin));
-    if (fMax !== undefined) sp.set('floor_max', String(fMax));
-    return sp.toString();
-  }, [regionId, activeTab, debouncedForCounts, roomTypes]);
+    if (aMin !== undefined) f.areaMin = aMin;
+    if (aMax !== undefined) f.areaMax = aMax;
+    if (objectType === 'apartments') {
+      f.rooms = roomCategoriesFromHeroLabel(debouncedForCounts.propertyType);
+      const dl = debouncedForCounts.deadline;
+      if (dl !== 'Срок сдачи') f.deadline = [dl === '2029+' ? '2030' : dl];
+      const { min: fMin, max: fMax } = heroParsedFloors(debouncedForCounts.floorMin, debouncedForCounts.floorMax);
+      if (fMin !== undefined) f.floorMin = fMin;
+      if (fMax !== undefined) f.floorMax = fMax;
+      const row = finishings.find((x) => String(x.id) === debouncedForCounts.heroFinishingId);
+      if (row) f.finishing = [sidebarLabelFromFinishingName(row.name)];
+    }
+    return f;
+  }, [activeTab, debouncedForCounts, finishings]);
+
+  const catalogCountParams = useMemo(() => {
+    if (regionId == null || activeTab !== 'apartments') return null;
+    if (debouncedFilters.marketType === 'secondary') return null;
+    return buildBlocksSearchParams({
+      filters: debouncedFilters,
+      regionId,
+      finishings,
+    }).toString();
+  }, [regionId, activeTab, debouncedFilters, finishings]);
 
   const listingHeroCountParams = useMemo(() => {
     if (regionId == null || activeTab !== 'apartments') return null;
-    if (debouncedForCounts.aptMarket === 'all') return null;
-    const sp = new URLSearchParams();
-    sp.set('region_id', String(regionId));
-    sp.set('kind', 'APARTMENT');
-    sp.set('statuses', 'ACTIVE,RESERVED');
-    sp.set('is_published', 'true');
-    sp.set('page', '1');
-    sp.set('per_page', '1');
-    if (debouncedForCounts.aptMarket === 'secondary') sp.set('apartment_market', 'secondary');
-    if (debouncedForCounts.aptMarket === 'new') sp.set('apartment_market', 'new_building');
-    const qs = debouncedForCounts.q.trim();
-    if (qs) sp.set('search', qs);
-    const pMin = priceRubFromHeroInput(debouncedForCounts.priceFrom);
-    const pMax = priceRubFromHeroInput(debouncedForCounts.priceTo);
-    if (pMin != null) sp.set('price_min', String(pMin));
-    if (pMax != null) sp.set('price_max', String(pMax));
-    const rooms = roomCategoriesFromHeroLabel(debouncedForCounts.propertyType);
-    if (rooms.length) sp.set('rooms', rooms.join(','));
-    const hid = debouncedForCounts.heroFinishingId.trim();
-    if (/^\d+$/.test(hid)) sp.set('finishing', hid);
-    const { min: aMin, max: aMax } = heroParsedArea(debouncedForCounts.areaMin, debouncedForCounts.areaMax);
-    if (aMin !== undefined) sp.set('area_total_min', String(aMin));
-    if (aMax !== undefined) sp.set('area_total_max', String(aMax));
-    const { min: fMin, max: fMax } = heroParsedFloors(debouncedForCounts.floorMin, debouncedForCounts.floorMax);
-    if (fMin !== undefined) sp.set('floor_min', String(fMin));
-    if (fMax !== undefined) sp.set('floor_max', String(fMax));
-    return sp.toString();
-  }, [regionId, activeTab, debouncedForCounts]);
+    if (debouncedFilters.marketType !== 'secondary') return null;
+    return buildListingsSearchParams({
+      filters: debouncedFilters,
+      regionId,
+      kind: 'APARTMENT',
+      finishings,
+      page: 1,
+      perPage: 1,
+    }).toString();
+  }, [regionId, activeTab, debouncedFilters, finishings]);
 
   /** Дом / участок / коммерция — счётчик с учётом цены и площади (м² или сотки через area_total_*). */
   const nonAptHeroCountParams = useMemo(() => {
     if (regionId == null) return null;
     if (activeTab === 'apartments') return null;
-    const tab = objectTabs.find((t) => t.value === activeTab);
-    if (!tab) return null;
-    const sp = new URLSearchParams();
-    sp.set('region_id', String(regionId));
-    sp.set('kind', tab.kind);
-    sp.set('statuses', 'ACTIVE,RESERVED');
-    sp.set('is_published', 'true');
-    sp.set('page', '1');
-    sp.set('per_page', '1');
-    const qs = debouncedForCounts.q.trim();
-    if (qs) sp.set('search', qs);
-    const pMin = priceRubFromHeroInput(debouncedForCounts.priceFrom);
-    const pMax = priceRubFromHeroInput(debouncedForCounts.priceTo);
-    if (pMin != null) sp.set('price_min', String(pMin));
-    if (pMax != null) sp.set('price_max', String(pMax));
-    const { min: amin, max: amax } = heroParsedArea(debouncedForCounts.areaMin, debouncedForCounts.areaMax);
-    if (amin !== undefined) sp.set('area_total_min', String(amin));
-    if (amax !== undefined) sp.set('area_total_max', String(amax));
-    return sp.toString();
-  }, [regionId, activeTab, debouncedForCounts]);
+    return buildListingsSearchParams({
+      filters: debouncedFilters,
+      regionId,
+      kind: LISTING_KIND_BY_OBJECT_TYPE[debouncedFilters.objectType],
+      page: 1,
+      perPage: 1,
+    }).toString();
+  }, [regionId, activeTab, debouncedFilters]);
 
   const { data: catalogStats } = useQuery({
     queryKey: ['blocks', 'catalog-counts', catalogCountParams],
@@ -346,47 +286,7 @@ const HeroSearch = () => {
   const dlRef = useRef<HTMLDivElement>(null);
 
   const doSearch = () => {
-    const objectType = activeTab as ObjectType;
-    const f: CatalogFilters = {
-      ...defaultFilters,
-      objectType,
-      marketType: 'all' as MarketType,
-      search: q.trim(),
-    };
-
-    const pMin = priceRubFromHeroInput(priceFrom);
-    const pMax = priceRubFromHeroInput(priceTo);
-    if (pMin != null) f.priceMin = pMin;
-    if (pMax != null) f.priceMax = pMax;
-
-    if (objectType === 'apartments') {
-      f.rooms = roomCategoriesFromHeroLabel(propertyType);
-      if (aptMarket === 'new') f.marketType = 'new';
-      else if (aptMarket === 'secondary') f.marketType = 'secondary';
-      if (deadline !== 'Срок сдачи') {
-        const token = deadline === '2029+' ? '2030' : deadline;
-        f.deadline = [token];
-      }
-      const a1 = parseFloat(areaMin.replace(',', '.'));
-      const a2 = parseFloat(areaMax.replace(',', '.'));
-      if (Number.isFinite(a1)) f.areaMin = a1;
-      if (Number.isFinite(a2)) f.areaMax = a2;
-      const fl1 = parseInt(floorMin.replace(/\D/g, ''), 10);
-      const fl2 = parseInt(floorMax.replace(/\D/g, ''), 10);
-      if (Number.isFinite(fl1)) f.floorMin = fl1;
-      if (Number.isFinite(fl2)) f.floorMax = fl2;
-      if (heroFinishingId) {
-        const row = finishings.find((x) => String(x.id) === heroFinishingId);
-        if (row) f.finishing = [sidebarLabelFromFinishingName(row.name)];
-      }
-    } else {
-      const a1 = parseFloat(areaMin.replace(',', '.'));
-      const a2 = parseFloat(areaMax.replace(',', '.'));
-      if (Number.isFinite(a1)) f.areaMin = a1;
-      if (Number.isFinite(a2)) f.areaMax = a2;
-    }
-
-    const params = catalogFiltersIntoSearchParams(new URLSearchParams(), f, finishings.length ? finishings : undefined);
+    const params = catalogFiltersIntoSearchParams(new URLSearchParams(), debouncedFilters, finishings.length ? finishings : undefined);
     if (regionId != null) params.set('region_id', String(regionId));
     navigate(`/catalog?${params.toString()}`);
   };
@@ -411,7 +311,7 @@ const HeroSearch = () => {
   const ctaLabel = useMemo(() => {
     if (activeTab === 'apartments') {
       const m = debouncedForCounts.aptMarket;
-      if (m === 'secondary' || m === 'new') {
+      if (m === 'secondary') {
         const t = listingMarketCount?.meta?.total;
         if (t != null && t > 0) return `${t.toLocaleString('ru')} квартир →`;
         if (t === 0) return `Нет квартир →`;
@@ -419,14 +319,10 @@ const HeroSearch = () => {
       }
       const blocks = catalogStats?.blocks ?? 0;
       const apartmentsInBlocks = catalogStats?.apartments ?? 0;
-      const standaloneApartments = kindCounts?.APARTMENT ?? 0;
       if (blocks > 0) {
         return `${apartmentsInBlocks.toLocaleString('ru')} квартир в ${blocks.toLocaleString('ru')} ЖК →`;
       }
-      if (standaloneApartments > 0) {
-        return `${standaloneApartments.toLocaleString('ru')} квартир →`;
-      }
-      if (catalogStats == null && kindCounts == null) return 'Найти →';
+      if (catalogStats == null) return 'Найти →';
       return 'Нет квартир в этом регионе';
     }
     const tab = objectTabs.find((t) => t.value === activeTab);
@@ -446,7 +342,7 @@ const HeroSearch = () => {
       }
       return 'Нет лотов →';
     }
-    const n = k && kindCounts ? kindCounts[k] ?? 0 : 0;
+    const n = !hasNarrowingFilters(debouncedFilters) && k && kindCounts ? kindCounts[k] ?? 0 : 0;
     if (n > 0) {
       const word =
         activeTab === 'houses'
@@ -459,20 +355,23 @@ const HeroSearch = () => {
       return `${n.toLocaleString('ru')} ${word} →`;
     }
     return 'Найти →';
-  }, [activeTab, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts, nonAptHeroCount]);
+  }, [activeTab, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts, nonAptHeroCount]);
 
   const apartmentsHeadlineCount = useMemo(() => {
     if (activeTab === 'apartments') {
       const m = debouncedForCounts.aptMarket;
-      if ((m === 'secondary' || m === 'new') && listingMarketCount?.meta?.total != null) {
+      if (m === 'secondary' && listingMarketCount?.meta?.total != null) {
         return listingMarketCount.meta.total;
       }
     }
     const fromStats = catalogStats?.apartments ?? 0;
     if (fromStats > 0) return fromStats;
-    const fromKinds = kindCounts?.APARTMENT ?? 0;
-    return fromKinds > 0 ? fromKinds : 62_000;
-  }, [activeTab, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts]);
+    if (!hasNarrowingFilters(debouncedFilters)) {
+      const fromKinds = kindCounts?.APARTMENT ?? 0;
+      if (fromKinds > 0) return fromKinds;
+    }
+    return 0;
+  }, [activeTab, debouncedFilters, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts]);
 
   const heroSubtitle = useMemo(() => {
     if (activeTab === 'apartments') {

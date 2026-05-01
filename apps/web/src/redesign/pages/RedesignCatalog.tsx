@@ -19,21 +19,19 @@ import {
   catalogFilterUrlSignature,
   catalogFiltersFromSearchParams,
   catalogFiltersIntoSearchParams,
-  finishingIdsFromSidebarLabels,
 } from '@/redesign/lib/catalog-url-sync';
-import { defaultFilters, type CatalogFilters, type ObjectType, type MarketType } from '@/redesign/data/types';
+import {
+  buildBlocksSearchParams,
+  buildListingsSearchParams,
+  LISTING_KIND_BY_OBJECT_TYPE,
+} from '@/redesign/lib/catalog-api-params';
+import { defaultFilters, type CatalogFilters, type ObjectType } from '@/redesign/data/types';
 
 const OBJECT_TYPE_TITLE: Record<ObjectType, string> = {
   apartments: 'Жилые комплексы',
   houses: 'Дома',
   land: 'Участки',
   commercial: 'Коммерческая недвижимость',
-};
-
-const OBJECT_TYPE_KIND: Record<Exclude<ObjectType, 'apartments'>, 'HOUSE' | 'LAND' | 'COMMERCIAL'> = {
-  houses: 'HOUSE',
-  land: 'LAND',
-  commercial: 'COMMERCIAL',
 };
 
 type ViewMode = 'grid' | 'list' | 'map';
@@ -152,10 +150,9 @@ const RedesignCatalog = () => {
   const deferredSearch = useDeferredValue(filters.search);
   const catalogSort = parseCatalogSort(searchParams.get('sort'));
 
-  const statusMap: Record<string, string> = { building: 'BUILDING', completed: 'COMPLETED', planned: 'PROJECT' };
   const isApartmentMode = filters.objectType === 'apartments';
   const useBlocksCatalog = isApartmentMode && filters.marketType !== 'secondary';
-  const listingKind = !isApartmentMode ? OBJECT_TYPE_KIND[filters.objectType] : 'APARTMENT';
+  const listingKind = LISTING_KIND_BY_OBJECT_TYPE[filters.objectType];
   const pageTitle = OBJECT_TYPE_TITLE[filters.objectType] ?? OBJECT_TYPE_TITLE.apartments;
 
   const listingsInfinite = useInfiniteQuery({
@@ -179,30 +176,14 @@ const RedesignCatalog = () => {
     ],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
-      const sp = new URLSearchParams();
-      if (regionId != null) sp.set('region_id', String(regionId));
-      if (listingKind) sp.set('kind', listingKind);
-      sp.set('statuses', 'ACTIVE,RESERVED');
-      sp.set('is_published', 'true');
-      sp.set('page', String(pageParam));
-      sp.set('per_page', String(PER_PAGE));
-      if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
-      if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
-      if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
-      if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
-      if (filters.areaMin) sp.set('area_total_min', String(filters.areaMin));
-      if (filters.areaMax) sp.set('area_total_max', String(filters.areaMax));
-      if (filters.floorMin) sp.set('floor_min', String(filters.floorMin));
-      if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
-      if (listingKind === 'APARTMENT' && filters.finishing.length && finishingRows?.length) {
-        const fid = finishingIdsFromSidebarLabels(filters.finishing, finishingRows);
-        if (fid.length) sp.set('finishing', fid.join(','));
-      }
-      if (filters.district.length) sp.set('district_names', filters.district.join(','));
-      if (listingKind === 'APARTMENT') {
-        if (filters.marketType === 'secondary') sp.set('apartment_market', 'secondary');
-        else if (filters.marketType === 'new') sp.set('apartment_market', 'new_building');
-      }
+      const sp = buildListingsSearchParams({
+        filters: { ...filters, search: deferredSearch },
+        regionId,
+        kind: listingKind,
+        finishings: finishingRows,
+        page: pageParam,
+        perPage: PER_PAGE,
+      });
       return apiGet<{
         data: ApiListingCardRow[];
         meta: { page: number; per_page: number; total: number; total_pages: number };
@@ -220,30 +201,14 @@ const RedesignCatalog = () => {
   const listingsMapQuery = useQuery({
     queryKey: ['listings', 'catalog', 'map', regionId, listingKind, deferredSearch, filters.priceMin, filters.priceMax, filters.rooms, filters.areaMin, filters.areaMax, filters.floorMin, filters.floorMax, filters.finishing, filters.district, filters.marketType],
     queryFn: async () => {
-      const sp = new URLSearchParams();
-      if (regionId != null) sp.set('region_id', String(regionId));
-      if (listingKind) sp.set('kind', listingKind);
-      sp.set('statuses', 'ACTIVE,RESERVED');
-      sp.set('is_published', 'true');
-      sp.set('page', '1');
-      sp.set('per_page', '200');
-      if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
-      if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
-      if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
-      if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
-      if (filters.areaMin) sp.set('area_total_min', String(filters.areaMin));
-      if (filters.areaMax) sp.set('area_total_max', String(filters.areaMax));
-      if (filters.floorMin) sp.set('floor_min', String(filters.floorMin));
-      if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
-      if (listingKind === 'APARTMENT' && filters.finishing.length && finishingRows?.length) {
-        const fid = finishingIdsFromSidebarLabels(filters.finishing, finishingRows);
-        if (fid.length) sp.set('finishing', fid.join(','));
-      }
-      if (filters.district.length) sp.set('district_names', filters.district.join(','));
-      if (listingKind === 'APARTMENT') {
-        if (filters.marketType === 'secondary') sp.set('apartment_market', 'secondary');
-        else if (filters.marketType === 'new') sp.set('apartment_market', 'new_building');
-      }
+      const sp = buildListingsSearchParams({
+        filters: { ...filters, search: deferredSearch },
+        regionId,
+        kind: listingKind,
+        finishings: finishingRows,
+        page: 1,
+        perPage: 200,
+      });
       return apiGet<{ data: ApiListingCardRow[] }>(`/listings?${sp}`);
     },
     enabled: regionId != null && view === 'map',
@@ -276,40 +241,15 @@ const RedesignCatalog = () => {
     ],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
-      const sp = new URLSearchParams();
-      sp.set('region_id', String(regionId));
-      if (deferredSearch.trim()) sp.set('search', deferredSearch.trim());
-      sp.set('page', String(pageParam));
-      sp.set('per_page', String(PER_PAGE));
-      sp.set('sort', catalogSort);
-      if (filters.priceMin) sp.set('price_min', String(filters.priceMin));
-      if (filters.priceMax) sp.set('price_max', String(filters.priceMax));
-      if (filters.areaMin != null) sp.set('area_min', String(filters.areaMin));
-      if (filters.areaMax != null) sp.set('area_max', String(filters.areaMax));
-      if (filters.floorMin != null) sp.set('floor_min', String(filters.floorMin));
-      if (filters.floorMax != null) sp.set('floor_max', String(filters.floorMax));
-      if (filters.deadline.length) sp.set('deadline', filters.deadline.join(','));
-      if (filters.marketType === 'new') {
-        sp.set('status', 'BUILDING');
-      } else if (filters.status.length === 1) {
-        const apiStatus = statusMap[filters.status[0]];
-        if (apiStatus) sp.set('status', apiStatus);
-      }
-      if (filters.district.length) sp.set('district_names', filters.district.join(','));
-      if (filters.subway.length) sp.set('subway_names', filters.subway.join(','));
-      if (filters.builder.length) sp.set('builder_names', filters.builder.join(','));
-      if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
-      if (filters.finishing.length && finishingRows?.length) {
-        const fids = finishingIdsFromSidebarLabels(filters.finishing, finishingRows);
-        if (fids.length) sp.set('finishing', fids.join(','));
-      }
-      if (geoPreset) sp.set('geo_preset', geoPreset);
-      if (geoPolygon) sp.set('geo_polygon', geoPolygon);
-      if (geoLat && geoLng && geoRadius) {
-        sp.set('geo_lat', geoLat);
-        sp.set('geo_lng', geoLng);
-        sp.set('geo_radius_m', geoRadius);
-      }
+      const sp = buildBlocksSearchParams({
+        filters: { ...filters, search: deferredSearch },
+        regionId,
+        finishings: finishingRows,
+        page: pageParam,
+        perPage: PER_PAGE,
+        sort: catalogSort,
+        geo: { geoPreset, geoPolygon, geoLat, geoLng, geoRadius },
+      });
       return apiGet<{
         data: ApiBlockListRow[];
         meta: { page: number; per_page: number; total: number; total_pages: number };
@@ -441,13 +381,10 @@ const RedesignCatalog = () => {
   };
 
   const mapHref = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = catalogFiltersIntoSearchParams(new URLSearchParams(), filters, finishingRows ?? undefined);
     if (regionId != null) params.set('region_id', String(regionId));
-    if (filters.objectType !== 'apartments') params.set('type', filters.objectType);
-    if (filters.marketType !== 'all') params.set('market', filters.marketType);
-    if (filters.search.trim()) params.set('search', filters.search.trim());
     return `/map${params.toString() ? `?${params.toString()}` : ''}`;
-  }, [filters.marketType, filters.objectType, filters.search, regionId]);
+  }, [filters, finishingRows, regionId]);
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">

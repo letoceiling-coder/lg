@@ -19,7 +19,7 @@ export class StatsService {
       by: ['kind'],
       where: {
         regionId,
-        status: ListingStatus.ACTIVE,
+        status: { in: [ListingStatus.ACTIVE, ListingStatus.RESERVED] },
         isPublished: true,
         kind: { in: HERO_LISTING_KINDS },
       },
@@ -42,7 +42,7 @@ export class StatsService {
     const [blocks, apartments, builders, regions] = await Promise.all([
       this.prisma.block.count(),
       this.prisma.listing.count({
-        where: { status: ListingStatus.ACTIVE, kind: ListingKind.APARTMENT, isPublished: true },
+        where: { status: { in: [ListingStatus.ACTIVE, ListingStatus.RESERVED] }, kind: ListingKind.APARTMENT, isPublished: true },
       }),
       this.prisma.builder.count(),
       this.prisma.feedRegion.count({ where: { isEnabled: true } }),

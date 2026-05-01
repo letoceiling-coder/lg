@@ -273,9 +273,13 @@ export class ListingsService implements OnModuleInit {
       }
     } else if (query.status) {
       where.status = query.status as $Enums.ListingStatus;
+    } else {
+      where.status = { in: [$Enums.ListingStatus.ACTIVE, $Enums.ListingStatus.RESERVED] };
     }
     if (query.is_published !== undefined) {
       where.isPublished = query.is_published;
+    } else {
+      where.isPublished = true;
     }
     if (query.has_geo) {
       where.lat = { not: null };
@@ -320,7 +324,7 @@ export class ListingsService implements OnModuleInit {
       where.blockId = { in: geoIds };
     }
 
-    const apartmentParts = this.buildApartmentWhereParts(query);
+    const apartmentParts = await this.buildApartmentWhereParts(query);
     const listingAndBuckets: Prisma.ListingWhereInput[] = [];
     if (apartmentParts.length) {
       listingAndBuckets.push({ apartment: { AND: apartmentParts } });
@@ -502,11 +506,11 @@ export class ListingsService implements OnModuleInit {
     return undefined;
   }
 
-  private buildApartmentWhereParts(query: QueryListingsDto): Prisma.ListingApartmentWhereInput[] {
+  private async buildApartmentWhereParts(query: QueryListingsDto): Promise<Prisma.ListingApartmentWhereInput[]> {
     const parts: Prisma.ListingApartmentWhereInput[] = [];
 
     // rooms param is room-category list (0=studio,1=1к,2=2к...) same as blocks API
-    const roomCatIds = this.parseRoomCategoryIds(query.rooms);
+    const roomCatIds = await this.parseRoomCategoryIds(query.rooms);
     if (roomCatIds?.length) parts.push({ roomTypeId: { in: roomCatIds } });
 
     const finishingIds = this.parseIdList(query.finishing);
@@ -557,7 +561,19 @@ export class ListingsService implements OnModuleInit {
    *  Frontend always sends category values 0-4, NEVER raw room_type IDs.
    *  Map: 0→Студии, 1→1к, 2→2к, 3→3к, 4→4к+
    */
-  private parseRoomCategoryIds(raw?: string): number[] | undefined {
+  private roomCategoryFromName(name?: string | null): number | null {
+    const n = (name ?? '').toLowerCase();
+    if (!n) return null;
+    if (n.includes('студ')) return 0;
+    const m = n.match(/(\d)/);
+    if (m) {
+      const r = Number.parseInt(m[1], 10);
+      return r > 4 ? 4 : r;
+    }
+    return null;
+  }
+
+  private async parseRoomCategoryIds(raw?: string): Promise<number[] | undefined> {
     if (!raw?.trim()) return undefined;
     const categories = Array.from(
       new Set(
@@ -566,18 +582,14 @@ export class ListingsService implements OnModuleInit {
     );
     if (!categories.length) return undefined;
 
-    // Always use category → type_id mapping (frontend sends 0-4 category codes)
-    const CAT_TO_TYPE_IDS: Record<number, number[]> = {
-      0: [1, 18],           // Студии (both variants)
-      1: [2],               // 1-к.кв
-      2: [3, 9],            // 2-к.кв, 2Е-к.кв
-      3: [4, 10],           // 3-к.кв, 3Е-к.кв
-      4: [5, 6, 7, 8, 11, 12], // 4к, 5к, 6к, 7к, 4Е, 5Е
-    };
-
+    const roomTypes = await this.prisma.roomType.findMany({
+      select: { id: true, name: true, nameOne: true },
+    });
+    const wanted = new Set(categories);
     const ids: number[] = [];
-    for (const c of categories) {
-      ids.push(...(CAT_TO_TYPE_IDS[c] ?? []));
+    for (const rt of roomTypes) {
+      const cat = this.roomCategoryFromName(rt.nameOne ?? rt.name);
+      if (cat != null && wanted.has(cat)) ids.push(rt.id);
     }
     return ids.length ? Array.from(new Set(ids)) : undefined;
   }
