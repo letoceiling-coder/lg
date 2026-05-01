@@ -45,6 +45,7 @@ export default function AdminManualListing() {
   const [buildingName, setBuildingName] = useState('');
   const [number, setNumber] = useState('');
   const [marketSegment, setMarketSegment] = useState<'auto' | 'NEW_BUILDING' | 'SECONDARY'>('auto');
+  const [seller, setSeller] = useState<SellerForm>(emptySellerForm);
   const [formError, setFormError] = useState('');
 
   const [picker, setPicker] = useState<null | 'plan' | 'finishing' | 'extra'>(null);
