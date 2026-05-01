@@ -139,9 +139,7 @@ const ApartmentTable = ({ apartments }: Props) => {
     return rows;
   }, [apartments]);
 
-  const [openKeys, setOpenKeys] = useState<Set<string>>(
-    () => new Set(grouped.length ? [grouped[0].key] : []),
-  );
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
 
   const toggle = (k: string) => {
     setOpenKeys((prev) => {
