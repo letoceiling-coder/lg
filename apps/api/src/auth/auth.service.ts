@@ -10,9 +10,11 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { LinkEmailDto, LoginDto, RegisterDto, TokensDto } from './dto';
+import { ChangePasswordDto, LinkEmailDto, LoginDto, RegisterDto, TokensDto } from './dto';
 import { verifyTelegramLoginWidget } from './telegram-login.util';
 import { normalizeLoginPhone, phoneLookupVariants } from './phone-normalize.util';
+import { MediaService } from '../modules/media/media.service';
+import type { Express } from 'express';
 
 interface JwtPayload {
   sub: string;
@@ -26,6 +28,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly media: MediaService,
   ) {}
 
   async login(dto: LoginDto): Promise<TokensDto> {
@@ -458,6 +461,7 @@ export class AuthService {
         email: true,
         phone: true,
         fullName: true,
+        avatarUrl: true,
         role: true,
         telegramId: true,
         telegramUsername: true,
@@ -468,6 +472,36 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('User not found');
     const { telegramId: _tg, ...rest } = user;
     return { ...rest, telegramLinked: _tg !== null };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    if (dto.newPassword !== dto.confirmNewPassword) {
+      throw new BadRequestException('Пароли не совпадают');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true, isActive: true },
+    });
+    if (!user?.isActive) throw new UnauthorizedException('User not found');
+    if (!user.passwordHash) {
+      throw new BadRequestException('Сначала добавьте email и пароль к аккаунту');
+    }
+    const ok = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!ok) throw new UnauthorizedException('Текущий пароль неверный');
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await this.prisma.session.deleteMany({ where: { userId } });
+    return { ok: true };
+  }
+
+  async updateAvatar(userId: string, file: Express.Multer.File) {
+    const saved = await this.media.saveUploadedFile(file, undefined, userId);
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: saved.url },
+      select: { avatarUrl: true },
+    });
+    return { avatarUrl: updated.avatarUrl };
   }
 
   private async generateTokens(payload: JwtPayload): Promise<TokensDto> {

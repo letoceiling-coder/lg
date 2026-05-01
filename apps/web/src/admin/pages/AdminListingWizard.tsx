@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import MediaPickerDialog from '@/admin/components/MediaPickerDialog';
+import SellerFields, { emptySellerForm, normalizeSellerForm, type SellerForm } from '@/admin/components/SellerFields';
 import { listingStatusLabel, listingStatusOptions, type ListingStatus } from '@/admin/lib/listingStatus';
 
 type Kind = 'APARTMENT' | 'HOUSE' | 'LAND' | 'COMMERCIAL' | 'PARKING';
@@ -55,6 +56,8 @@ type DraftState = {
   status: ListingStatus;
   isPublished: boolean;
   apartment: {
+    blockAddress: string;
+    marketSegment: 'auto' | 'NEW_BUILDING' | 'SECONDARY';
     areaTotal: string;
     areaKitchen: string;
     floor: string;
@@ -95,6 +98,7 @@ type DraftState = {
   mainPhotoUrl: string;
   extraPhotoUrls: string[];
   planUrl: string;
+  seller: SellerForm;
 };
 
 function makeEmptyDraft(): DraftState {
@@ -110,6 +114,7 @@ function makeEmptyDraft(): DraftState {
     isPublished: false,
     apartment: {
       blockAddress: '',
+      marketSegment: 'auto',
       areaTotal: '',
       areaKitchen: '',
       floor: '',
@@ -135,6 +140,7 @@ function makeEmptyDraft(): DraftState {
     mainPhotoUrl: '',
     extraPhotoUrls: [],
     planUrl: '',
+    seller: { ...emptySellerForm },
   };
 }
 
@@ -143,7 +149,17 @@ function loadDraft(): DraftState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return makeEmptyDraft();
     const parsed = JSON.parse(raw) as Partial<DraftState>;
-    return { ...makeEmptyDraft(), ...parsed } as DraftState;
+    const base = makeEmptyDraft();
+    return {
+      ...base,
+      ...parsed,
+      apartment: { ...base.apartment, ...parsed.apartment },
+      house: { ...base.house, ...parsed.house },
+      land: { ...base.land, ...parsed.land },
+      commercial: { ...base.commercial, ...parsed.commercial },
+      parking: { ...base.parking, ...parsed.parking },
+      seller: { ...base.seller, ...parsed.seller },
+    } as DraftState;
   } catch {
     return makeEmptyDraft();
   }
@@ -227,11 +243,26 @@ export default function AdminListingWizard() {
           if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь, м²' };
           return { ok: true };
         }
-        case 'HOUSE':
-        case 'LAND':
-        case 'COMMERCIAL':
-        case 'PARKING':
+        case 'HOUSE': {
+          const a = num(draft.house.areaTotal);
+          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь дома, м²' };
           return { ok: true };
+        }
+        case 'LAND': {
+          const a = num(draft.land.areaSotki);
+          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь участка, сот.' };
+          return { ok: true };
+        }
+        case 'COMMERCIAL': {
+          const a = num(draft.commercial.area);
+          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь помещения, м²' };
+          return { ok: true };
+        }
+        case 'PARKING': {
+          const a = num(draft.parking.area);
+          if (a == null || a <= 0) return { ok: false, reason: 'Укажите площадь машино-места, м²' };
+          return { ok: true };
+        }
         default:
           return { ok: false };
       }
@@ -246,13 +277,15 @@ export default function AdminListingWizard() {
       const bid = intNum(draft.blockId);
       const lat = num(draft.lat);
       const lng = num(draft.lng);
+      const seller = normalizeSellerForm(draft.seller) ?? (draft.address.trim() ? { ...emptySellerForm, address: draft.address.trim() } : undefined);
       const common = {
         regionId: rid,
         price,
         status: draft.status,
         isPublished: draft.isPublished,
         ...(bid != null ? { blockId: bid } : {}),
-        ...(draft.address.trim() ? { seller: { address: draft.address.trim() } } : {}),
+        ...(draft.address.trim() ? { address: draft.address.trim() } : {}),
+        ...(seller ? { seller } : {}),
         ...(lat != null ? { lat } : {}),
         ...(lng != null ? { lng } : {}),
       };
@@ -260,6 +293,7 @@ export default function AdminListingWizard() {
         case 'APARTMENT': {
           const apt = draft.apartment;
           const apartment: Record<string, unknown> = { areaTotal: num(apt.areaTotal) };
+          if (apt.marketSegment !== 'auto') apartment.marketSegment = apt.marketSegment;
           const ak = num(apt.areaKitchen);
           if (ak != null) apartment.areaKitchen = ak;
           const fl = intNum(apt.floor);
@@ -582,6 +616,10 @@ export default function AdminListingWizard() {
               />
               Опубликовать сразу на сайте
             </label>
+            <SellerFields
+              value={draft.seller}
+              onChange={(seller) => update({ seller })}
+            />
           </div>
         ) : null}
 
@@ -772,6 +810,18 @@ function CharacteristicsStep({
           <div className="space-y-1 col-span-2">
             <Label>Адрес объекта</Label>
             <Input value={a.blockAddress} onChange={(e) => upd({ blockAddress: e.target.value })} placeholder="г. Москва, ул. ..." />
+          </div>
+          <div className="space-y-1 col-span-2">
+            <Label>Тип рынка</Label>
+            <select
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background h-10"
+              value={a.marketSegment}
+              onChange={(e) => upd({ marketSegment: e.target.value as DraftState['apartment']['marketSegment'] })}
+            >
+              <option value="auto">Авто / не указано</option>
+              <option value="NEW_BUILDING">Новостройка</option>
+              <option value="SECONDARY">Вторичка</option>
+            </select>
           </div>
           <div className="space-y-1 col-span-2">
             <Label>Площадь, м² *</Label>

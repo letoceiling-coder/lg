@@ -6,15 +6,22 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Express } from 'express';
 import { AuthService } from './auth.service';
 import {
+  ChangePasswordDto,
   LinkEmailDto,
   LoginDto,
   RegisterDto,
@@ -91,6 +98,37 @@ export class AuthController {
     @Body() dto: LinkEmailDto,
   ): Promise<TokensDto> {
     return this.authService.linkEmail(userId, dto);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Сменить пароль текущего пользователя' })
+  async changePassword(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(userId, dto);
+  }
+
+  @Post('avatar')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Загрузить аватар текущего пользователя' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  async uploadAvatar(
+    @CurrentUser('sub') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.authService.updateAvatar(userId, file);
   }
 
   @Public()

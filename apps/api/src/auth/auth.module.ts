@@ -5,9 +5,10 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtAuthGuard } from './guards';
 import { RolesGuard } from './guards';
+import { MediaModule } from '../modules/media/media.module';
 
 @Module({
-  imports: [JwtModule.register({})],
+  imports: [JwtModule.register({}), MediaModule],
   controllers: [AuthController],
   providers: [
     AuthService,

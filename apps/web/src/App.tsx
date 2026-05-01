@@ -53,6 +53,7 @@ const Contacts = lazy(() => import("./pages/Contacts"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const AboutCompany = lazy(() => import("./pages/AboutCompany"));
 const SelectionPage = lazy(() => import("./pages/SelectionPage"));
+const SharedSelectionPage = lazyWithReload(() => import("./pages/SharedSelectionPage"));
 const PartnersPage = lazy(() => import("./pages/PartnersPage"));
 const CareerPage = lazy(() => import("./pages/CareerPage"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
@@ -141,6 +142,7 @@ const AppRoutes = () => (
     <Route path="/contacts" element={<Contacts />} />
     <Route path="/about" element={<AboutCompany />} />
     <Route path="/selection" element={<SelectionPage />} />
+    <Route path="/selections/:token" element={<SharedSelectionPage />} />
     <Route path="/partners" element={<PartnersPage />} />
     <Route path="/career" element={<CareerPage />} />
     <Route path="/terms" element={<TermsPage />} />

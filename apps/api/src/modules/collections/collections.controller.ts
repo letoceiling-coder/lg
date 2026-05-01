@@ -68,6 +68,12 @@ export class CollectionsController {
     return this.service.addItem(userId, collectionId, dto.kind, dto.entityId);
   }
 
+  @Post(':id/share')
+  @ApiOperation({ summary: 'Создать публичную ссылку на подборку' })
+  share(@CurrentUser('sub') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.ensureShareToken(userId, id);
+  }
+
   @Delete(':collectionId/items/:itemId')
   @ApiOperation({ summary: 'Удалить элемент из подборки' })
   removeItem(

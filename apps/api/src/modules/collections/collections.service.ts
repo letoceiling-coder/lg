@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { CollectionItemKind, Prisma } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -11,6 +12,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 @Injectable()
 export class CollectionsService {
   constructor(private readonly prisma: PrismaService) {}
+  private readonly maxItems = 5;
 
   async list(userId: string) {
     return this.prisma.userCollection.findMany({
@@ -66,7 +68,7 @@ export class CollectionsService {
       }),
     );
 
-    return { id: col.id, name: col.name, createdAt: col.createdAt, updatedAt: col.updatedAt, items };
+    return { id: col.id, name: col.name, shareToken: col.shareToken, createdAt: col.createdAt, updatedAt: col.updatedAt, items };
   }
 
   async remove(userId: string, id: string) {
@@ -94,6 +96,11 @@ export class CollectionsService {
       select: { id: true },
     });
     if (!col) throw new NotFoundException('Подборка не найдена');
+
+    const existingCount = await this.prisma.userCollectionItem.count({ where: { collectionId } });
+    if (existingCount >= this.maxItems) {
+      throw new BadRequestException(`В подборке может быть не больше ${this.maxItems} объектов`);
+    }
 
     if (kind === CollectionItemKind.BLOCK) {
       const b = await this.prisma.block.findUnique({ where: { id: entityId }, select: { id: true } });
@@ -125,6 +132,71 @@ export class CollectionsService {
       where: { id: itemId, collectionId },
     });
     if (res.count === 0) throw new NotFoundException('Элемент не найден');
+  }
+
+  async ensureShareToken(userId: string, id: string) {
+    const col = await this.prisma.userCollection.findFirst({
+      where: { id, userId },
+      select: { id: true, shareToken: true },
+    });
+    if (!col) throw new NotFoundException('Подборка не найдена');
+    if (col.shareToken) return { token: col.shareToken };
+    const token = randomUUID().replace(/-/g, '');
+    await this.prisma.userCollection.update({ where: { id }, data: { shareToken: token } });
+    return { token };
+  }
+
+  async getPublicByToken(token: string) {
+    const normalized = token.trim();
+    if (!normalized || normalized.length < 16) throw new NotFoundException('Подборка не найдена');
+    const col = await this.prisma.userCollection.findUnique({
+      where: { shareToken: normalized },
+      include: {
+        items: { orderBy: { createdAt: 'desc' }, take: this.maxItems },
+      },
+    });
+    if (!col) throw new NotFoundException('Подборка не найдена');
+    const items = await Promise.all(
+      col.items.map(async (it) => {
+        if (it.kind === CollectionItemKind.BLOCK) {
+          const b = await this.prisma.block.findUnique({
+            where: { id: it.entityId },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              images: { select: { url: true }, orderBy: { sortOrder: 'asc' }, take: 1 },
+              addresses: { select: { address: true }, orderBy: { sortOrder: 'asc' }, take: 1 },
+            },
+          });
+          return {
+            id: it.id,
+            kind: it.kind,
+            entityId: it.entityId,
+            title: b?.name ?? `ЖК #${it.entityId}`,
+            slug: b?.slug ?? null,
+            price: null,
+            imageUrl: b?.images[0]?.url ?? null,
+            address: b?.addresses[0]?.address ?? null,
+          };
+        }
+        const l = await this.prisma.listing.findUnique({
+          where: { id: it.entityId },
+          select: { id: true, kind: true, title: true, price: true, address: true },
+        });
+        return {
+          id: it.id,
+          kind: it.kind,
+          entityId: it.entityId,
+          title: l?.title ?? `Объявление #${it.entityId}`,
+          listingKind: l?.kind ?? null,
+          price: l?.price ?? null,
+          imageUrl: null,
+          address: l?.address ?? null,
+        };
+      }),
+    );
+    return { name: col.name, items };
   }
 
   async exportPdf(userId: string, id: string): Promise<Buffer> {

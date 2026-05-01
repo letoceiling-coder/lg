@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import RedesignHeader from '@/redesign/components/RedesignHeader';
 import FooterSection from '@/components/FooterSection';
-import { User, LogOut, Mail, FolderOpen, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { User, LogOut, Mail, FolderOpen, Trash2, ChevronDown, ChevronRight, Camera, KeyRound, Copy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { useFavorites } from '@/shared/hooks/useFavorites';
 import { useCompare } from '@/shared/hooks/useCompare';
 import { TelegramLoginButton } from '@/components/TelegramLoginButton';
-import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUrl } from '@/lib/api';
+import { ApiError, apiDelete, apiGet, apiPost, apiPostForm, apiPut, apiUrl } from '@/lib/api';
 
 function parseApiMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -29,6 +29,7 @@ function parseApiMessage(err: unknown): string {
 type CollectionListRow = {
   id: string;
   name: string;
+  shareToken?: string | null;
   createdAt: string;
   updatedAt: string;
   _count: { items: number };
@@ -79,7 +80,7 @@ function formatReqDate(iso: string): string {
 }
 
 const Profile = () => {
-  const { user, logout, linkEmail } = useAuth();
+  const { user, logout, linkEmail, refreshMe } = useAuth();
   const { count: favoritesCount } = useFavorites();
   const { count: compareCount } = useCompare();
   const qc = useQueryClient();
@@ -92,6 +93,10 @@ const Profile = () => {
   const [linkTgOk, setLinkTgOk] = useState<string | null>(null);
   const [newCollectionName, setNewCollectionName] = useState('');
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
+  const [avatarMessage, setAvatarMessage] = useState<string | null>(null);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [collectionShareMessage, setCollectionShareMessage] = useState<string | null>(null);
 
   const requestsQuery = useQuery({
     queryKey: ['requests', 'me', user?.id],
@@ -152,11 +157,57 @@ const Profile = () => {
     },
   });
 
+  const avatarMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiPostForm<{ avatarUrl: string | null }>('/auth/avatar', form);
+    },
+    onSuccess: async () => {
+      setAvatarMessage('Аватар обновлён.');
+      await refreshMe();
+    },
+    onError: (err) => setAvatarMessage(parseApiMessage(err)),
+  });
+
+  const passwordMutation = useMutation({
+    mutationFn: (payload: typeof passwordForm) => apiPost('/auth/change-password', payload),
+    onSuccess: () => {
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmNewPassword: '' });
+      setPasswordMessage('Пароль изменён.');
+    },
+    onError: (err) => setPasswordMessage(parseApiMessage(err)),
+  });
+
+  const shareCollectionMutation = useMutation({
+    mutationFn: (id: string) => apiPost<{ token: string }>(`/collections/${id}/share`, {}),
+    onSuccess: async ({ token }) => {
+      const url = `${window.location.origin}/selections/${token}`;
+      await navigator.clipboard?.writeText(url).catch(() => undefined);
+      setCollectionShareMessage(`Ссылка скопирована: ${url}`);
+      void qc.invalidateQueries({ queryKey: ['collections'] });
+      if (expandedCollectionId) {
+        void qc.invalidateQueries({ queryKey: ['collections', 'detail', expandedCollectionId] });
+      }
+    },
+    onError: (err) => setCollectionShareMessage(parseApiMessage(err)),
+  });
+
   if (!user) return null;
 
   const hasEmail = !!(user.email && user.email.trim());
   const hasTg =
     !!user.telegramLinked || !!(user.telegramUsername && user.telegramUsername.trim());
+
+  const handlePasswordSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setPasswordMessage(null);
+    if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
+      setPasswordMessage('Пароли не совпадают');
+      return;
+    }
+    passwordMutation.mutate(passwordForm);
+  };
 
   const handleLinkEmail = async (e: FormEvent) => {
     e.preventDefault();
@@ -179,9 +230,32 @@ const Profile = () => {
         <h1 className="text-2xl sm:text-3xl font-bold mb-8">Личный кабинет</h1>
         <div className="grid lg:grid-cols-[280px_1fr] gap-8">
           <div className="bg-card border border-border rounded-xl p-6 text-center">
-            <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-              <User className="w-8 h-8 text-muted-foreground" />
+            <div className="relative mx-auto mb-4 h-20 w-20">
+              <div className="h-20 w-20 overflow-hidden rounded-full bg-muted flex items-center justify-center">
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
+                ) : (
+                  <User className="w-8 h-8 text-muted-foreground" />
+                )}
+              </div>
+              <label className="absolute -bottom-1 -right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-border bg-background shadow-sm">
+                <Camera className="h-4 w-4" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={avatarMutation.isPending}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) avatarMutation.mutate(file);
+                    e.currentTarget.value = '';
+                  }}
+                />
+              </label>
             </div>
+            {avatarMessage ? (
+              <p className={avatarMutation.isError ? 'mb-3 text-xs text-destructive' : 'mb-3 text-xs text-green-600'}>{avatarMessage}</p>
+            ) : null}
             <p className="font-bold mb-1">{user.name}</p>
             {user.phone ? (
               <p className="text-xs text-muted-foreground mb-2">{user.phone}</p>
@@ -282,6 +356,60 @@ const Profile = () => {
                 <p className="text-sm text-muted-foreground mt-4">Email уже указан.</p>
               )}
             </div>
+            {hasEmail ? (
+              <div className="bg-card border border-border rounded-xl p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <KeyRound className="h-5 w-5 text-primary" />
+                  <h2 className="font-bold">Смена пароля</h2>
+                </div>
+                <form onSubmit={handlePasswordSubmit} className="grid gap-3 sm:max-w-md">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="current-password">Текущий пароль</Label>
+                    <Input
+                      id="current-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="new-password">Новый пароль</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirm-password">Повторите новый пароль</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={passwordForm.confirmNewPassword}
+                      onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: e.target.value }))}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  {passwordMessage ? (
+                    <p className={passwordMutation.isError || passwordMessage.includes('не совпадают') ? 'text-sm text-destructive' : 'text-sm text-green-600'}>
+                      {passwordMessage}
+                    </p>
+                  ) : null}
+                  <Button type="submit" size="sm" disabled={passwordMutation.isPending}>
+                    Сменить пароль
+                  </Button>
+                </form>
+              </div>
+            ) : null}
             <div className="bg-card border border-border rounded-xl p-6">
               <h2 className="font-bold mb-2">Мои заявки</h2>
               <p className="text-xs text-muted-foreground mb-4">
@@ -334,7 +462,7 @@ const Profile = () => {
                 <h2 className="font-bold">Мои подборки</h2>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Именованные списки ЖК и объявлений. Создайте подборку здесь или сохраните всё избранное одной кнопкой на странице «Избранное».
+                Именованные списки ЖК и объявлений. В подборке до 5 объектов, ссылкой можно поделиться без авторизации.
               </p>
               <form
                 className="flex flex-col sm:flex-row gap-2 mb-4"
@@ -357,6 +485,11 @@ const Profile = () => {
               </form>
               {createCollectionMutation.isError ? (
                 <p className="text-sm text-destructive mb-3">{parseApiMessage(createCollectionMutation.error)}</p>
+              ) : null}
+              {collectionShareMessage ? (
+                <p className={shareCollectionMutation.isError ? 'text-sm text-destructive mb-3' : 'text-sm text-green-600 mb-3'}>
+                  {collectionShareMessage}
+                </p>
               ) : null}
               {collectionsQuery.isLoading ? (
                 <p className="text-sm text-muted-foreground">Загрузка…</p>
@@ -398,6 +531,18 @@ const Profile = () => {
                             variant="ghost"
                             size="sm"
                             className="h-8 px-2 text-xs"
+                            title="Скопировать публичную ссылку"
+                            disabled={shareCollectionMutation.isPending}
+                            onClick={() => shareCollectionMutation.mutate(c.id)}
+                          >
+                            <Copy className="mr-1 h-3.5 w-3.5" />
+                            Ссылка
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
                             asChild
                             title="Скачать подборку в PDF"
                           >
@@ -425,7 +570,7 @@ const Profile = () => {
                           <p className="text-xs text-muted-foreground px-3 py-2">Загрузка…</p>
                         ) : null}
                         {open && collectionDetailQuery.data ? (
-                          <ul className="border-t border-border divide-y max-h-[240px] overflow-y-auto">
+                          <ul className="border-t border-border divide-y max-h-[360px] overflow-y-auto">
                             {collectionDetailQuery.data.items.length === 0 ? (
                               <li className="px-3 py-2 text-xs text-muted-foreground">Пусто — добавьте объекты из избранного.</li>
                             ) : (

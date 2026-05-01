@@ -19,6 +19,7 @@ interface MeResponse {
   email: string | null;
   phone: string | null;
   fullName: string | null;
+  avatarUrl?: string | null;
   role: string;
   telegramUsername?: string | null;
   /** Есть привязанный Telegram (даже без публичного @username) */
@@ -35,6 +36,7 @@ interface AuthState {
   loginWithTelegram: (payload: Record<string, unknown>) => Promise<void>;
   linkTelegram: (payload: Record<string, unknown>) => Promise<void>;
   linkEmail: (email: string, password: string) => Promise<void>;
+  refreshMe: () => Promise<void>;
   register: (data: { name: string; phone: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -54,6 +56,7 @@ function meToProfile(me: MeResponse): UserProfile {
     phone: me.phone || '',
     email,
     role: me.role as UserRole,
+    avatar: me.avatarUrl ?? undefined,
     telegramUsername: me.telegramUsername ?? null,
     telegramLinked:
       me.telegramLinked ??
@@ -73,17 +76,24 @@ export function useAuthState(): AuthState {
   const [loading, setLoading] = useState(() => !!getAccessToken());
   const initDone = useRef(false);
 
+  const applyMe = useCallback((me: MeResponse) => {
+    const profile = meToProfile(me);
+    setUser(profile);
+    localStorage.setItem('lg_user', JSON.stringify(profile));
+  }, []);
+
+  const refreshMe = useCallback(async () => {
+    const me = await apiGet<MeResponse>('/auth/me');
+    applyMe(me);
+  }, [applyMe]);
+
   useEffect(() => {
     if (initDone.current) return;
     initDone.current = true;
     const token = getAccessToken();
     if (!token) { setLoading(false); return; }
     apiGet<MeResponse>('/auth/me')
-      .then((me) => {
-        const profile = meToProfile(me);
-        setUser(profile);
-        localStorage.setItem('lg_user', JSON.stringify(profile));
-      })
+      .then(applyMe)
       .catch(async () => {
         const rt = getRefreshToken();
         if (rt) {
@@ -91,9 +101,7 @@ export function useAuthState(): AuthState {
             const tokens = await apiPost<AuthTokens>('/auth/refresh', { refreshToken: rt });
             setTokens(tokens.accessToken, tokens.refreshToken);
             const me = await apiGet<MeResponse>('/auth/me');
-            const profile = meToProfile(me);
-            setUser(profile);
-            localStorage.setItem('lg_user', JSON.stringify(profile));
+            applyMe(me);
           } catch {
             clearTokens();
             setUser(null);
@@ -106,7 +114,7 @@ export function useAuthState(): AuthState {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [applyMe]);
 
   const login = useCallback(async (identifier: string, password: string) => {
     const trimmed = identifier.trim();
@@ -117,10 +125,8 @@ export function useAuthState(): AuthState {
     const tokens = await apiPost<AuthTokens>('/auth/login', body);
     setTokens(tokens.accessToken, tokens.refreshToken);
     const me = await apiGet<MeResponse>('/auth/me');
-    const profile = meToProfile(me);
-    setUser(profile);
-    localStorage.setItem('lg_user', JSON.stringify(profile));
-  }, []);
+    applyMe(me);
+  }, [applyMe]);
 
   const loginWithTelegram = useCallback(async (payload: Record<string, unknown>) => {
     const body: Record<string, string> = {};
@@ -131,10 +137,8 @@ export function useAuthState(): AuthState {
     const tokens = await apiPost<AuthTokens>('/auth/telegram', body);
     setTokens(tokens.accessToken, tokens.refreshToken);
     const me = await apiGet<MeResponse>('/auth/me');
-    const profile = meToProfile(me);
-    setUser(profile);
-    localStorage.setItem('lg_user', JSON.stringify(profile));
-  }, []);
+    applyMe(me);
+  }, [applyMe]);
 
   const linkTelegram = useCallback(async (payload: Record<string, unknown>) => {
     const body: Record<string, string> = {};
@@ -145,19 +149,15 @@ export function useAuthState(): AuthState {
     const tokens = await apiPost<AuthTokens>('/auth/link-telegram', body);
     setTokens(tokens.accessToken, tokens.refreshToken);
     const me = await apiGet<MeResponse>('/auth/me');
-    const profile = meToProfile(me);
-    setUser(profile);
-    localStorage.setItem('lg_user', JSON.stringify(profile));
-  }, []);
+    applyMe(me);
+  }, [applyMe]);
 
   const linkEmail = useCallback(async (email: string, password: string) => {
     const tokens = await apiPost<AuthTokens>('/auth/link-email', { email, password });
     setTokens(tokens.accessToken, tokens.refreshToken);
     const me = await apiGet<MeResponse>('/auth/me');
-    const profile = meToProfile(me);
-    setUser(profile);
-    localStorage.setItem('lg_user', JSON.stringify(profile));
-  }, []);
+    applyMe(me);
+  }, [applyMe]);
 
   const register = useCallback(async (data: { name: string; phone: string; email: string; password: string }) => {
     const tokens = await apiPost<AuthTokens>('/auth/register', {
@@ -168,10 +168,8 @@ export function useAuthState(): AuthState {
     });
     setTokens(tokens.accessToken, tokens.refreshToken);
     const me = await apiGet<MeResponse>('/auth/me');
-    const profile = meToProfile(me);
-    setUser(profile);
-    localStorage.setItem('lg_user', JSON.stringify(profile));
-  }, []);
+    applyMe(me);
+  }, [applyMe]);
 
   const logout = useCallback(async () => {
     try { await apiPost('/auth/logout', {}); } catch { /* ignore */ }
@@ -188,6 +186,7 @@ export function useAuthState(): AuthState {
     loginWithTelegram,
     linkTelegram,
     linkEmail,
+    refreshMe,
     register,
     logout,
   };
