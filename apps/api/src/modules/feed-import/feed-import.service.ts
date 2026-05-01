@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  BadRequestException,
   ConflictException,
   NotFoundException,
   OnModuleInit,
@@ -89,15 +90,16 @@ export class FeedImportService implements OnModuleInit {
 
   async triggerImportForEnabledRegions(triggeredBy?: string) {
     const rows = await this.prisma.feedRegion.findMany({
-      where: { isEnabled: true },
+      where: { isEnabled: true, baseUrl: { not: null } },
       orderBy: { id: 'asc' },
-      select: { code: true },
+      select: { code: true, baseUrl: true },
     });
-    if (!rows.length) throw new NotFoundException('Нет включённых регионов для импорта');
+    const importableRows = rows.filter((r) => r.baseUrl?.trim());
+    if (!importableRows.length) throw new NotFoundException('Нет включённых регионов с настроенным фидом');
 
     const queued: Array<{ region: string; batchId: number }> = [];
     const skipped: Array<{ region: string; reason: string }> = [];
-    for (const row of rows) {
+    for (const row of importableRows) {
       const code = this.normalizeRegionCode(row.code);
       try {
         const result = await this.triggerImport(code, triggeredBy);
@@ -111,7 +113,7 @@ export class FeedImportService implements OnModuleInit {
       status: 'QUEUED',
       queued,
       skipped,
-      total: rows.length,
+      total: importableRows.length,
     };
   }
 
@@ -124,6 +126,10 @@ export class FeedImportService implements OnModuleInit {
     });
     if (!region) {
       this.logger.error(`Scheduled import: region not found: ${regionCode}`);
+      return;
+    }
+    if (!region.baseUrl?.trim()) {
+      this.logger.warn(`Scheduled import skipped: feed URL is not configured for ${regionCode}`);
       return;
     }
 
@@ -161,6 +167,9 @@ export class FeedImportService implements OnModuleInit {
     });
     if (!region) {
       throw new NotFoundException(`Region not found: ${regionCode}`);
+    }
+    if (!region.baseUrl?.trim()) {
+      throw new BadRequestException(`Feed URL is not configured for region: ${regionCode}`);
     }
 
     const running = await this.prisma.importBatch.findFirst({
@@ -630,22 +639,29 @@ export class FeedImportService implements OnModuleInit {
 
     if (configured.includes('all')) {
       const allEnabled = await this.prisma.feedRegion.findMany({
-        where: { isEnabled: true },
+        where: { isEnabled: true, baseUrl: { not: null } },
         orderBy: { id: 'asc' },
-        select: { code: true },
+        select: { code: true, baseUrl: true },
       });
-      return allEnabled.map((r) => this.normalizeRegionCode(r.code));
+      return allEnabled
+        .filter((r) => r.baseUrl?.trim())
+        .map((r) => this.normalizeRegionCode(r.code));
     }
 
     const rows = await this.prisma.feedRegion.findMany({
       where: { code: { in: configured } },
-      select: { code: true },
+      select: { code: true, baseUrl: true },
     });
     const existing = new Set(rows.map((r) => this.normalizeRegionCode(r.code)));
+    const importable = new Set(rows.filter((r) => r.baseUrl?.trim()).map((r) => this.normalizeRegionCode(r.code)));
     const missing = configured.filter((code) => !existing.has(code));
     if (missing.length) {
       this.logger.warn(`Skip unknown TRENDAGENT_REGIONS codes: ${missing.join(', ')}`);
     }
-    return configured.filter((code) => existing.has(code));
+    const withoutFeed = configured.filter((code) => existing.has(code) && !importable.has(code));
+    if (withoutFeed.length) {
+      this.logger.warn(`Skip TRENDAGENT_REGIONS without feed URL: ${withoutFeed.join(', ')}`);
+    }
+    return configured.filter((code) => importable.has(code));
   }
 }

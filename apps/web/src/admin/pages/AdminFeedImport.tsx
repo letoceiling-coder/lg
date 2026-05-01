@@ -152,7 +152,10 @@ export default function AdminFeedImport() {
     },
   });
 
-  const isRunning = progress?.step !== 'idle' && progress?.step !== undefined && progress?.percent < 100;
+  const isRunning =
+    progress?.step !== undefined &&
+    !['idle', 'Failed', 'Completed'].includes(progress.step) &&
+    progress.percent < 100;
   const rows = history?.data ?? [];
   const latest = rows[0];
 
