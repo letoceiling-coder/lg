@@ -37,8 +37,8 @@ const PropertyCard = ({ data, variant = 'default' }: { data: PropertyData; baseP
   const hasImage = Boolean(data.image?.trim());
 
   return (
-    <CardShell highlighted={isHot} className={cn('min-h-[230px]', hasImage ? 'h-[390px]' : 'h-auto')}>
-      <Link to={linkPath} className="flex flex-col flex-1 min-h-0">
+    <CardShell highlighted={isHot} className="h-auto">
+      <Link to={linkPath} className="flex flex-col">
         {hasImage ? (
           <div className="relative shrink-0 overflow-hidden h-[160px]">
             <img
@@ -65,7 +65,7 @@ const PropertyCard = ({ data, variant = 'default' }: { data: PropertyData; baseP
           </div>
         ) : null}
 
-        <div className="p-3 flex-1 flex flex-col gap-1.5">
+        <div className="p-3 flex flex-col gap-1.5">
           <div className="flex justify-between items-start gap-2">
             <h3 className="font-semibold text-[16px] leading-tight truncate">{data.title}</h3>
             <PriceLabel value={data.price} hot={isHot} />
@@ -93,7 +93,7 @@ const PropertyCard = ({ data, variant = 'default' }: { data: PropertyData; baseP
           {(data.area || data.rooms) && (
             <p className="text-[11px] text-muted-foreground">{[data.area, data.rooms].filter(Boolean).join(' · ')}</p>
           )}
-          <div className="pt-2 mt-auto border-t border-border/70 space-y-1">
+          <div className="pt-2 mt-2 border-t border-border/70 space-y-1">
             {hasDeadline ? (
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-muted-foreground">Сдача</span>

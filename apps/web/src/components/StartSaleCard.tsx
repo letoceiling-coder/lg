@@ -46,8 +46,8 @@ const StartSaleCard = ({ data }: { data: StartSaleData }) => {
   const metroNotes = data.metroNotes?.slice(0, 3) ?? [];
 
   return (
-    <CardShell className="h-[430px]">
-      <Link to={linkPath} className="flex flex-col flex-1 min-h-0">
+    <CardShell className="h-auto">
+      <Link to={linkPath} className="flex flex-col">
         {/* Image — fixed height, no shrinking */}
         <div className="relative shrink-0 overflow-hidden h-[160px]">
           <img
@@ -78,8 +78,7 @@ const StartSaleCard = ({ data }: { data: StartSaleData }) => {
           ) : null}
         </div>
 
-        {/* Info block — fills remaining space */}
-        <div className="p-3 flex-1 flex flex-col gap-2">
+        <div className="p-3 flex flex-col gap-2">
           <h3 className="font-semibold text-[17px] leading-tight truncate">{data.title}</h3>
 
           <div className="space-y-1.5 min-h-[52px]">
@@ -108,7 +107,7 @@ const StartSaleCard = ({ data }: { data: StartSaleData }) => {
             <p className="text-[11px] text-muted-foreground truncate">Застройщик: {data.developer}</p>
           ) : null}
 
-          <div className="pt-2 mt-auto border-t border-border/70 space-y-1.5">
+          <div className="pt-2 mt-2 border-t border-border/70 space-y-1.5">
             {hasRoomBreakdown ? (
               <div className="space-y-1.5">
                 {apartments.slice(0, 4).map((apt, i) => (
