@@ -49,8 +49,9 @@ pnpm --filter @lg/api build
 
 # ── 5. Build frontend ──
 echo "→ Building frontend..."
-# Remove stale hashed chunks so production checks and clients only see the current build.
+# Remove stale generated frontend artifacts so Vite does not copy old chunks from public.
 rm -rf apps/web/dist
+rm -rf apps/web/public/assets apps/web/public/catalog apps/web/public/complex apps/web/public/index.html
 # Каноникал и prerender (sitemap, /complex/*/index.html) берут VITE_PUBLIC_SITE_URL или PUBLIC_SITE_URL
 SITE_FOR_WEB="${VITE_PUBLIC_SITE_URL:-${PUBLIC_SITE_URL:-https://livegrid.ru}}"
 SITE_FOR_WEB="${SITE_FOR_WEB%/}"
