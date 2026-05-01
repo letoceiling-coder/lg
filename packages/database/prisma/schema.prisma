@@ -45,6 +45,12 @@ enum ListingStatus {
   INACTIVE
 }
 
+/// Новостройка vs вторичка (только объявления kind=APARTMENT)
+enum ApartmentMarketSegment {
+  NEW_BUILDING
+  SECONDARY
+}
+
 enum BlockStatus {
   BUILDING
   COMPLETED
@@ -560,6 +566,7 @@ model ListingApartment {
   listingId          Int       @id @map("listing_id")
   roomTypeId         Int?      @map("room_type_id")
   finishingId        Int?      @map("finishing_id")
+  marketSegment      ApartmentMarketSegment? @map("market_segment")
   buildingTypeId     Int?      @map("building_type_id")
   floor              Int?
   floorsTotal        Int?      @map("floors_total")
@@ -597,6 +604,7 @@ model ListingApartment {
 
   @@index([roomTypeId])
   @@index([finishingId])
+  @@index([marketSegment])
   @@index([buildingTypeId])
   @@index([floor])
   @@index([floorsTotal])

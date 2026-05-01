@@ -483,6 +483,8 @@ export class FeedProcessorService {
           'interior_photos',
         ]);
 
+        const feedMarketSegment = blockId != null ? ('NEW_BUILDING' as const) : ('SECONDARY' as const);
+
         const aptPhotoPatch = {
           extraPhotoUrls:
             extraPhotoUrls != null
@@ -550,6 +552,7 @@ export class FeedProcessorService {
             blockIsCity: apt.block_iscity ?? null,
             blockCityId: apt.block_city || null,
             planUrl: apt.plan?.[0] || null,
+            marketSegment: feedMarketSegment,
             extraPhotoUrls:
               extraPhotoUrls != null
                 ? (extraPhotoUrls as Prisma.InputJsonValue)

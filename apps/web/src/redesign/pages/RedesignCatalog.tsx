@@ -199,6 +199,10 @@ const RedesignCatalog = () => {
         if (fid.length) sp.set('finishing', fid.join(','));
       }
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
+      if (listingKind === 'APARTMENT') {
+        if (filters.marketType === 'secondary') sp.set('apartment_market', 'secondary');
+        else if (filters.marketType === 'new') sp.set('apartment_market', 'new_building');
+      }
       return apiGet<{
         data: ApiListingCardRow[];
         meta: { page: number; per_page: number; total: number; total_pages: number };
@@ -236,6 +240,10 @@ const RedesignCatalog = () => {
         if (fid.length) sp.set('finishing', fid.join(','));
       }
       if (filters.district.length) sp.set('district_names', filters.district.join(','));
+      if (listingKind === 'APARTMENT') {
+        if (filters.marketType === 'secondary') sp.set('apartment_market', 'secondary');
+        else if (filters.marketType === 'new') sp.set('apartment_market', 'new_building');
+      }
       return apiGet<{ data: ApiListingCardRow[] }>(`/listings?${sp}`);
     },
     enabled: regionId != null && view === 'map',

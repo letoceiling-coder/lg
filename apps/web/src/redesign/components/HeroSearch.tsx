@@ -101,6 +101,7 @@ const HeroSearch = () => {
     priceTo: '',
     propertyType: 'Тип квартиры',
     deadline: 'Срок сдачи',
+    aptMarket: 'all' as 'all' | 'new' | 'secondary',
   });
 
   const navigate = useNavigate();
@@ -133,14 +134,23 @@ const HeroSearch = () => {
 
   useEffect(() => {
     const t = setTimeout(
-      () => setDebouncedForCounts({ q, priceFrom, priceTo, propertyType, deadline }),
+      () =>
+        setDebouncedForCounts({
+          q,
+          priceFrom,
+          priceTo,
+          propertyType,
+          deadline,
+          aptMarket,
+        }),
       450,
     );
     return () => clearTimeout(t);
-  }, [q, priceFrom, priceTo, propertyType, deadline]);
+  }, [q, priceFrom, priceTo, propertyType, deadline, aptMarket]);
 
   const catalogCountParams = useMemo(() => {
     if (regionId == null || activeTab !== 'apartments') return null;
+    if (debouncedForCounts.aptMarket !== 'all') return null;
     const sp = new URLSearchParams();
     sp.set('region_id', String(regionId));
     const qs = debouncedForCounts.q.trim();
@@ -155,11 +165,41 @@ const HeroSearch = () => {
     return sp.toString();
   }, [regionId, activeTab, debouncedForCounts, roomTypes]);
 
+  const listingHeroCountParams = useMemo(() => {
+    if (regionId == null || activeTab !== 'apartments') return null;
+    if (debouncedForCounts.aptMarket === 'all') return null;
+    const sp = new URLSearchParams();
+    sp.set('region_id', String(regionId));
+    sp.set('kind', 'APARTMENT');
+    sp.set('statuses', 'ACTIVE,RESERVED');
+    sp.set('is_published', 'true');
+    sp.set('page', '1');
+    sp.set('per_page', '1');
+    if (debouncedForCounts.aptMarket === 'secondary') sp.set('apartment_market', 'secondary');
+    if (debouncedForCounts.aptMarket === 'new') sp.set('apartment_market', 'new_building');
+    const qs = debouncedForCounts.q.trim();
+    if (qs) sp.set('search', qs);
+    const pMin = priceRubFromHeroInput(debouncedForCounts.priceFrom);
+    const pMax = priceRubFromHeroInput(debouncedForCounts.priceTo);
+    if (pMin != null) sp.set('price_min', String(pMin));
+    if (pMax != null) sp.set('price_max', String(pMax));
+    const rooms = roomCategoriesFromHeroLabel(debouncedForCounts.propertyType);
+    if (rooms.length) sp.set('rooms', rooms.join(','));
+    return sp.toString();
+  }, [regionId, activeTab, debouncedForCounts]);
+
   const { data: catalogStats } = useQuery({
     queryKey: ['blocks', 'catalog-counts', catalogCountParams],
     queryFn: () =>
       apiGet<{ blocks: number; apartments: number }>(`/blocks/catalog-counts?${catalogCountParams}`),
     enabled: catalogCountParams != null,
+    staleTime: 30_000,
+  });
+
+  const { data: listingMarketCount } = useQuery({
+    queryKey: ['listings', 'hero-apt-market-count', listingHeroCountParams],
+    queryFn: () => apiGet<{ meta: { total: number } }>(`/listings?${listingHeroCountParams}`),
+    enabled: listingHeroCountParams != null,
     staleTime: 30_000,
   });
 
@@ -287,6 +327,13 @@ const HeroSearch = () => {
 
   const ctaLabel = useMemo(() => {
     if (activeTab === 'apartments') {
+      const m = debouncedForCounts.aptMarket;
+      if (m === 'secondary' || m === 'new') {
+        const t = listingMarketCount?.meta?.total;
+        if (t != null && t > 0) return `${t.toLocaleString('ru')} квартир →`;
+        if (t === 0) return `Нет квартир →`;
+        return `Найти →`;
+      }
       const blocks = catalogStats?.blocks ?? 0;
       const apartmentsInBlocks = catalogStats?.apartments ?? 0;
       const standaloneApartments = kindCounts?.APARTMENT ?? 0;
@@ -314,14 +361,20 @@ const HeroSearch = () => {
       return `${n.toLocaleString('ru')} ${word} →`;
     }
     return 'Найти →';
-  }, [activeTab, catalogStats, kindCounts]);
+  }, [activeTab, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts]);
 
   const apartmentsHeadlineCount = useMemo(() => {
+    if (activeTab === 'apartments') {
+      const m = debouncedForCounts.aptMarket;
+      if ((m === 'secondary' || m === 'new') && listingMarketCount?.meta?.total != null) {
+        return listingMarketCount.meta.total;
+      }
+    }
     const fromStats = catalogStats?.apartments ?? 0;
     if (fromStats > 0) return fromStats;
     const fromKinds = kindCounts?.APARTMENT ?? 0;
     return fromKinds > 0 ? fromKinds : 62_000;
-  }, [catalogStats, kindCounts]);
+  }, [activeTab, debouncedForCounts.aptMarket, listingMarketCount, catalogStats, kindCounts]);
 
   const heroSubtitle = useMemo(() => {
     if (activeTab === 'apartments') {
@@ -547,6 +600,23 @@ const HeroSearch = () => {
                       </ul>
                     )}
                   </div>
+                  <div className="w-px h-6 bg-[#e2e8f0] mx-2" />
+                  <label className="sr-only" htmlFor="hero-apt-market">
+                    Тип жилья
+                  </label>
+                  <select
+                    id="hero-apt-market"
+                    className={cn(
+                      'h-9 max-w-[148px] lg:max-w-[160px] rounded-lg border border-[#e2e8f0] bg-white px-2 text-sm outline-none focus:border-primary/50',
+                      aptMarket !== 'all' ? 'font-medium text-primary' : 'text-foreground',
+                    )}
+                    value={aptMarket}
+                    onChange={(e) => setAptMarket(e.target.value as typeof aptMarket)}
+                  >
+                    <option value="all">Все</option>
+                    <option value="new">Новостройки</option>
+                    <option value="secondary">Вторичка</option>
+                  </select>
                 </>
               )}
 

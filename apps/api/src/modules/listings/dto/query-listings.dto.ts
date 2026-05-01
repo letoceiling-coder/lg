@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsInt, IsString, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsInt, IsString, IsNumber, Min, Max, IsIn } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
 export class QueryListingsDto {
@@ -57,4 +57,13 @@ export class QueryListingsDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(1) @Max(200_000) @Type(() => Number) geo_radius_m?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() geo_polygon?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() geo_preset?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Тип жилья (только kind=APARTMENT): secondary — вторичка; new_building — новостройка; пусто — без фильтра',
+    enum: ['secondary', 'new_building'],
+  })
+  @IsOptional()
+  @IsIn(['secondary', 'new_building'])
+  apartment_market?: string;
 }

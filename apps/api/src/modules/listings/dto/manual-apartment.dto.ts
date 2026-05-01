@@ -49,6 +49,11 @@ export class ManualApartmentFieldsDto {
   @IsInt()
   finishingId?: number;
 
+  @ApiPropertyOptional({ enum: ['NEW_BUILDING', 'SECONDARY'], description: 'Пусто — по умолчанию: привязан ЖК → новостройка, иначе вторичка' })
+  @IsOptional()
+  @IsIn(['NEW_BUILDING', 'SECONDARY'])
+  marketSegment?: 'NEW_BUILDING' | 'SECONDARY';
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -182,13 +187,18 @@ export class ManualApartmentPatchDto {
   @IsInt()
   finishingId?: number;
 
+  @ApiPropertyOptional({ enum: ['NEW_BUILDING', 'SECONDARY'] })
+  @IsOptional()
+  @IsIn(['NEW_BUILDING', 'SECONDARY'])
+  marketSegment?: 'NEW_BUILDING' | 'SECONDARY';
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(2048)
   planUrl?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'URL из медиатеки (/uploads/media/...)' })
   @IsOptional()
   @IsString()
   @MaxLength(2048)

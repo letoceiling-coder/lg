@@ -323,9 +323,6 @@ const FilterSidebar = ({
         )}
       </FilterSection>
 
-      {/* Тип жилья removed — no backing data model */}
-
-      {/* 3. Цена */}
       <FilterSection title="Цена, ₽" count={filters.priceMin || filters.priceMax ? 1 : 0}>
         <div className="flex gap-2">
           <Input

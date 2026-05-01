@@ -321,8 +321,17 @@ export class ListingsService implements OnModuleInit {
     }
 
     const apartmentParts = this.buildApartmentWhereParts(query);
+    const listingAndBuckets: Prisma.ListingWhereInput[] = [];
     if (apartmentParts.length) {
-      where.apartment = { AND: apartmentParts };
+      listingAndBuckets.push({ apartment: { AND: apartmentParts } });
+    }
+    const marketClause = this.apartmentMarketWhereClause(query.apartment_market, query.kind);
+    if (marketClause) listingAndBuckets.push(marketClause);
+    if (listingAndBuckets.length) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        ...listingAndBuckets,
+      ];
     }
 
     // House area filter (area_total_min/max -> house.areaTotal)
@@ -466,6 +475,33 @@ export class ListingsService implements OnModuleInit {
     };
   }
 
+  /** Фильтр новостройка/вторичка для объявлений-квартир (публичный query apartment_market). */
+  private apartmentMarketWhereClause(
+    raw: string | undefined,
+    kind: string | undefined,
+  ): Prisma.ListingWhereInput | undefined {
+    if (!raw?.trim()) return undefined;
+    if (kind != null && kind !== '' && kind !== 'APARTMENT') return undefined;
+    const norm = raw.trim().toLowerCase();
+    if (norm === 'secondary') {
+      return {
+        OR: [
+          { apartment: { marketSegment: 'SECONDARY' } },
+          { AND: [{ blockId: null }, { apartment: { marketSegment: null } }] },
+        ],
+      };
+    }
+    if (norm === 'new_building') {
+      return {
+        OR: [
+          { apartment: { marketSegment: 'NEW_BUILDING' } },
+          { AND: [{ blockId: { not: null } }, { apartment: { marketSegment: null } }] },
+        ],
+      };
+    }
+    return undefined;
+  }
+
   private buildApartmentWhereParts(query: QueryListingsDto): Prisma.ListingApartmentWhereInput[] {
     const parts: Prisma.ListingApartmentWhereInput[] = [];
 
@@ -601,6 +637,13 @@ export class ListingsService implements OnModuleInit {
     const a = dto.apartment;
     validateManualApartmentMedia(a);
 
+    const marketSegment: $Enums.ApartmentMarketSegment =
+      a.marketSegment === 'NEW_BUILDING' || a.marketSegment === 'SECONDARY'
+        ? (a.marketSegment as $Enums.ApartmentMarketSegment)
+        : dto.blockId != null
+          ? 'NEW_BUILDING'
+          : 'SECONDARY';
+
     return this.prisma.listing.create({
       data: {
         regionId: dto.regionId,
@@ -635,6 +678,7 @@ export class ListingsService implements OnModuleInit {
             blockAddress: a.blockAddress ?? null,
             buildingName: a.buildingName ?? null,
             number: a.number ?? null,
+            marketSegment,
           },
         },
       },
@@ -957,6 +1001,7 @@ export class ListingsService implements OnModuleInit {
       if (p.blockAddress !== undefined) aptPatch.blockAddress = p.blockAddress;
       if (p.buildingName !== undefined) aptPatch.buildingName = p.buildingName;
       if (p.number !== undefined) aptPatch.number = p.number;
+      if (p.marketSegment !== undefined) aptPatch.marketSegment = p.marketSegment;
     }
 
     const hasListing = Object.keys(listingPatch).length > 0;

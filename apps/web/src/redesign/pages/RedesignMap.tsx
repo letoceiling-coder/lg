@@ -263,6 +263,10 @@ const RedesignMap = () => {
       if (filters.floorMax) sp.set('floor_max', String(filters.floorMax));
       if (filters.rooms.length) sp.set('rooms', filters.rooms.join(','));
       if (filters.district.length) sp.set('district_names', filters.district.map(normalizeDistrictValue).join(','));
+      if (objectType === 'apartments') {
+        if (filters.marketType === 'secondary') sp.set('apartment_market', 'secondary');
+        else if (filters.marketType === 'new') sp.set('apartment_market', 'new_building');
+      }
       return apiGet<{ data: any[] }>(`/listings?${sp}`);
     },
     enabled: regionId != null && needListings,

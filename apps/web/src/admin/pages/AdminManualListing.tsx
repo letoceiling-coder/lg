@@ -44,7 +44,7 @@ export default function AdminManualListing() {
   const [blockAddress, setBlockAddress] = useState('');
   const [buildingName, setBuildingName] = useState('');
   const [number, setNumber] = useState('');
-  const [seller, setSeller] = useState<SellerForm>(emptySellerForm);
+  const [marketSegment, setMarketSegment] = useState<'auto' | 'NEW_BUILDING' | 'SECONDARY'>('auto');
   const [formError, setFormError] = useState('');
 
   const [picker, setPicker] = useState<null | 'plan' | 'finishing' | 'extra'>(null);
@@ -123,6 +123,11 @@ export default function AdminManualListing() {
       setBlockAddress(typeof apt.blockAddress === 'string' ? apt.blockAddress : '');
       setBuildingName(typeof apt.buildingName === 'string' ? apt.buildingName : '');
       setNumber(typeof apt.number === 'string' ? apt.number : '');
+      const ms =
+        apt.marketSegment === 'NEW_BUILDING' || apt.marketSegment === 'SECONDARY'
+          ? (apt.marketSegment as 'NEW_BUILDING' | 'SECONDARY')
+          : undefined;
+      setMarketSegment(ms ?? 'auto');
     }
   }, [editListing, editNumericId, regionIdDefault]);
 
@@ -156,6 +161,8 @@ export default function AdminManualListing() {
       if (blockAddress.trim()) apartment.blockAddress = blockAddress.trim();
       if (buildingName.trim()) apartment.buildingName = buildingName.trim();
       if (number.trim()) apartment.number = number.trim();
+      if (marketSegment !== 'auto') apartment.marketSegment = marketSegment;
+
       const sellerPayload = normalizeSellerForm(seller);
 
       if (!isNew && editNumericId != null) {
@@ -259,6 +266,18 @@ export default function AdminManualListing() {
         <div className="space-y-1">
           <Label>ID ЖК (необязательно)</Label>
           <Input value={blockId} onChange={(e) => setBlockId(e.target.value)} placeholder="Напр. 123" />
+        </div>
+        <div className="space-y-1">
+          <Label>Тип жилья</Label>
+          <select
+            className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+            value={marketSegment}
+            onChange={(e) => setMarketSegment(e.target.value as typeof marketSegment)}
+          >
+            <option value="auto">По умолчанию (есть ЖК — новостройка, нет — вторичка)</option>
+            <option value="NEW_BUILDING">Новостройка</option>
+            <option value="SECONDARY">Вторичка</option>
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
