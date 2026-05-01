@@ -34,33 +34,36 @@ const PropertyCard = ({ data, variant = 'default' }: { data: PropertyData; baseP
   const isHot = variant === 'hot';
   const hasBuilder = Boolean(data.developer && data.developer !== '—');
   const hasDeadline = Boolean(data.deadline && data.deadline !== '—');
+  const hasImage = Boolean(data.image?.trim());
 
   return (
-    <CardShell highlighted={isHot} className="h-[390px]">
+    <CardShell highlighted={isHot} className={cn('min-h-[230px]', hasImage ? 'h-[390px]' : 'h-auto')}>
       <Link to={linkPath} className="flex flex-col flex-1 min-h-0">
-        <div className="relative shrink-0 overflow-hidden h-[160px]">
-          <img
-            src={data.image}
-            alt={data.title}
-            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-          />
-          {isHot && (
-            <div className="absolute inset-0 bg-gradient-to-t from-foreground/15 via-transparent to-transparent" />
-          )}
-          {data.badges && data.badges.length > 0 && (
-            <div className="absolute top-2 left-2 flex flex-wrap gap-1 z-10">
-              {data.badges.map((b, i) => (
-                <PropertyBadge key={i} label={b} type={isHot ? undefined : 'info'} />
-              ))}
-            </div>
-          )}
-          <button
-            className="absolute top-2 right-2 w-7 h-7 bg-background/70 backdrop-blur-sm rounded-full flex items-center justify-center z-10 hover:bg-background/90 transition-colors"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLiked(!liked); }}
-          >
-            <Heart className={cn('w-3.5 h-3.5', liked ? 'fill-destructive text-destructive' : 'text-muted-foreground')} />
-          </button>
-        </div>
+        {hasImage ? (
+          <div className="relative shrink-0 overflow-hidden h-[160px]">
+            <img
+              src={data.image}
+              alt={data.title}
+              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+            />
+            {isHot && (
+              <div className="absolute inset-0 bg-gradient-to-t from-foreground/15 via-transparent to-transparent" />
+            )}
+            {data.badges && data.badges.length > 0 && (
+              <div className="absolute top-2 left-2 flex flex-wrap gap-1 z-10">
+                {data.badges.map((b, i) => (
+                  <PropertyBadge key={i} label={b} type={isHot ? undefined : 'info'} />
+                ))}
+              </div>
+            )}
+            <button
+              className="absolute top-2 right-2 w-7 h-7 bg-background/70 backdrop-blur-sm rounded-full flex items-center justify-center z-10 hover:bg-background/90 transition-colors"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLiked(!liked); }}
+            >
+              <Heart className={cn('w-3.5 h-3.5', liked ? 'fill-destructive text-destructive' : 'text-muted-foreground')} />
+            </button>
+          </div>
+        ) : null}
 
         <div className="p-3 flex-1 flex flex-col gap-1.5">
           <div className="flex justify-between items-start gap-2">
