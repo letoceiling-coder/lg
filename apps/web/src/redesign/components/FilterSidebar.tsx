@@ -40,6 +40,17 @@ const marketTypes: { value: MarketType; label: string }[] = [
 
 const roomOptions = [0, 1, 2, 3, 4];
 const roomLabels: Record<number, string> = { 0: 'Ст', 1: '1', 2: '2', 3: '3', 4: '4+' };
+const houseRoomOptions = [1, 2, 3, 4];
+const directionOptions = [
+  { value: 'south', label: 'Южное' },
+  { value: 'north', label: 'Северное' },
+  { value: 'east', label: 'Восточное' },
+  { value: 'west', label: 'Западное' },
+] as const;
+const houseLocationOptions = [
+  { value: 'belgorod_district', label: 'Белгородский район' },
+  { value: 'belgorod_region', label: 'Белгородская область' },
+] as const;
 
 function prettyDistrict(name: string): string {
   const n = name.trim();
@@ -194,7 +205,7 @@ const FilterSidebar = ({
     onChange({ ...filters, [key]: val });
   }, [filters, onChange]);
 
-  const toggleArray = useCallback((key: 'rooms' | 'district' | 'subway' | 'builder' | 'finishing' | 'deadline' | 'status', val: string | number) => {
+  const toggleArray = useCallback((key: 'rooms' | 'district' | 'subway' | 'builder' | 'finishing' | 'deadline' | 'status' | 'directions' | 'houseLocation', val: string | number) => {
     const arr = filters[key] as (string | number)[];
     const next = arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val];
     onChange({ ...filters, [key]: next });
@@ -203,9 +214,12 @@ const FilterSidebar = ({
   const hasFilters = useMemo(() => {
     return filters.rooms.length > 0 || filters.district.length > 0 || filters.subway.length > 0 ||
       filters.builder.length > 0 || filters.finishing.length > 0 || filters.deadline.length > 0 ||
+      filters.directions.length > 0 || filters.houseLocation.length > 0 ||
       filters.status.length > 0 || filters.search !== '' ||
       filters.priceMin !== undefined || filters.priceMax !== undefined ||
       filters.areaMin !== undefined || filters.areaMax !== undefined ||
+      filters.landAreaMin !== undefined || filters.landAreaMax !== undefined ||
+      filters.distanceMin !== undefined || filters.distanceMax !== undefined ||
       filters.floorMin !== undefined || filters.floorMax !== undefined;
   }, [filters]);
 
@@ -216,6 +230,14 @@ const FilterSidebar = ({
     filters.subway.forEach(s => tags.push({ label: `м. ${s}`, clear: () => toggleArray('subway', s) }));
     filters.builder.forEach(b => tags.push({ label: b, clear: () => toggleArray('builder', b) }));
     filters.finishing.forEach(f => tags.push({ label: f, clear: () => toggleArray('finishing', f) }));
+    filters.directions.forEach(d => {
+      const opt = directionOptions.find(o => o.value === d);
+      tags.push({ label: opt?.label || d, clear: () => toggleArray('directions', d) });
+    });
+    filters.houseLocation.forEach(l => {
+      const opt = houseLocationOptions.find(o => o.value === l);
+      tags.push({ label: opt?.label || l, clear: () => toggleArray('houseLocation', l) });
+    });
     filters.status.forEach(s => {
       const opt = statusOptions.find(o => o.value === s);
       tags.push({ label: opt?.label || s, clear: () => toggleArray('status', s) });
@@ -224,6 +246,10 @@ const FilterSidebar = ({
     if (filters.priceMax) tags.push({ label: `до ${(filters.priceMax / 1e6).toFixed(1)} млн`, clear: () => update('priceMax', undefined) });
     if (filters.areaMin) tags.push({ label: `от ${filters.areaMin} ${isLand ? 'сот.' : 'м²'}`, clear: () => update('areaMin', undefined) });
     if (filters.areaMax) tags.push({ label: `до ${filters.areaMax} ${isLand ? 'сот.' : 'м²'}`, clear: () => update('areaMax', undefined) });
+    if (filters.landAreaMin) tags.push({ label: `участок от ${filters.landAreaMin} сот.`, clear: () => update('landAreaMin', undefined) });
+    if (filters.landAreaMax) tags.push({ label: `участок до ${filters.landAreaMax} сот.`, clear: () => update('landAreaMax', undefined) });
+    if (filters.distanceMin) tags.push({ label: `расстояние от ${filters.distanceMin} км`, clear: () => update('distanceMin', undefined) });
+    if (filters.distanceMax) tags.push({ label: `расстояние до ${filters.distanceMax} км`, clear: () => update('distanceMax', undefined) });
     if (filters.floorMin) tags.push({ label: `этаж от ${filters.floorMin}`, clear: () => update('floorMin', undefined) });
     if (filters.floorMax) tags.push({ label: `этаж до ${filters.floorMax}`, clear: () => update('floorMax', undefined) });
     return tags;
@@ -236,7 +262,10 @@ const FilterSidebar = ({
       finishing: [], deadline: [], status: [], search: '',
       priceMin: undefined, priceMax: undefined,
       areaMin: undefined, areaMax: undefined,
+      landAreaMin: undefined, landAreaMax: undefined,
+      distanceMin: undefined, distanceMax: undefined,
       floorMin: undefined, floorMax: undefined,
+      directions: [], houseLocation: [],
     });
   }, [onChange, filters.objectType]);
 
@@ -286,8 +315,14 @@ const FilterSidebar = ({
                   rooms: [],
                   areaMin: undefined,
                   areaMax: undefined,
+                  landAreaMin: undefined,
+                  landAreaMax: undefined,
+                  distanceMin: undefined,
+                  distanceMax: undefined,
                   floorMin: undefined,
                   floorMax: undefined,
+                  directions: [],
+                  houseLocation: [],
                   deadline: [],
                   finishing: [],
                   status: [],
@@ -369,6 +404,27 @@ const FilterSidebar = ({
         </FilterSection>
       )}
 
+      {isHouseLike && (
+        <FilterSection title="Кол-во комнат" count={filters.rooms.length}>
+          <div className="flex gap-1">
+            {houseRoomOptions.map(r => (
+              <button
+                key={r}
+                onClick={() => toggleArray('rooms', r)}
+                className={cn(
+                  'h-8 flex-1 rounded-lg text-xs font-medium border transition-colors',
+                  filters.rooms.includes(r)
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background border-border text-foreground hover:border-primary/50'
+                )}
+              >
+                {roomLabels[r]}
+              </button>
+            ))}
+          </div>
+        </FilterSection>
+      )}
+
       {/* 5. Площадь — label adapts by object type */}
       <FilterSection
         title={
@@ -388,6 +444,46 @@ const FilterSidebar = ({
           <Input type="number" placeholder="до" className="h-8 text-xs focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-0 focus-visible:border-primary" value={filters.areaMax ?? ''} onChange={e => update('areaMax', e.target.value ? Number(e.target.value) : undefined)} />
         </div>
       </FilterSection>
+
+      {isHouseLike && (
+        <>
+          <FilterSection title="Площадь участка, сот." defaultOpen={false} count={filters.landAreaMin || filters.landAreaMax ? 1 : 0}>
+            <div className="flex gap-2">
+              <Input type="number" placeholder="от" className="h-8 text-xs focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-0 focus-visible:border-primary" value={filters.landAreaMin ?? ''} onChange={e => update('landAreaMin', e.target.value ? Number(e.target.value) : undefined)} />
+              <Input type="number" placeholder="до" className="h-8 text-xs focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-0 focus-visible:border-primary" value={filters.landAreaMax ?? ''} onChange={e => update('landAreaMax', e.target.value ? Number(e.target.value) : undefined)} />
+            </div>
+          </FilterSection>
+
+          <FilterSection title="Расстояние до города, км" defaultOpen={false} count={filters.distanceMin || filters.distanceMax ? 1 : 0}>
+            <div className="flex gap-2">
+              <Input type="number" placeholder="от" className="h-8 text-xs focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-0 focus-visible:border-primary" value={filters.distanceMin ?? ''} onChange={e => update('distanceMin', e.target.value ? Number(e.target.value) : undefined)} />
+              <Input type="number" placeholder="до" className="h-8 text-xs focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-0 focus-visible:border-primary" value={filters.distanceMax ?? ''} onChange={e => update('distanceMax', e.target.value ? Number(e.target.value) : undefined)} />
+            </div>
+          </FilterSection>
+
+          <FilterSection title="Направление" defaultOpen={false} count={filters.directions.length}>
+            <div className="space-y-1.5">
+              {directionOptions.map(option => (
+                <label key={option.value} className="flex items-center gap-2 cursor-pointer text-xs hover:text-foreground transition-colors">
+                  <Checkbox checked={filters.directions.includes(option.value)} onCheckedChange={() => toggleArray('directions', option.value)} className="w-3.5 h-3.5" />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </FilterSection>
+
+          <FilterSection title="Расположение" defaultOpen={false} count={filters.houseLocation.length}>
+            <div className="space-y-1.5">
+              {houseLocationOptions.map(option => (
+                <label key={option.value} className="flex items-center gap-2 cursor-pointer text-xs hover:text-foreground transition-colors">
+                  <Checkbox checked={filters.houseLocation.includes(option.value)} onCheckedChange={() => toggleArray('houseLocation', option.value)} className="w-3.5 h-3.5" />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </FilterSection>
+        </>
+      )}
 
       {/* 6. Этаж — only for apartments (API floor filter applies only to apartment.floor) */}
       {isApartments && (

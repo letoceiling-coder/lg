@@ -88,6 +88,12 @@ export interface CatalogFilters {
   rooms: number[];
   areaMin?: number;
   areaMax?: number;
+  landAreaMin?: number;
+  landAreaMax?: number;
+  distanceMin?: number;
+  distanceMax?: number;
+  directions: string[];
+  houseLocation: string[];
   district: string[];
   subway: string[];
   builder: string[];
@@ -103,6 +109,8 @@ export const defaultFilters: CatalogFilters = {
   objectType: 'apartments',
   marketType: 'all',
   rooms: [],
+  directions: [],
+  houseLocation: [],
   district: [],
   subway: [],
   builder: [],

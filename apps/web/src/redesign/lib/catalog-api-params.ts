@@ -62,6 +62,12 @@ export function hasNarrowingFilters(filters: CatalogFilters): boolean {
       filters.priceMax != null ||
       filters.areaMin != null ||
       filters.areaMax != null ||
+      filters.landAreaMin != null ||
+      filters.landAreaMax != null ||
+      filters.distanceMin != null ||
+      filters.distanceMax != null ||
+      filters.directions.length ||
+      filters.houseLocation.length ||
       filters.floorMin != null ||
       filters.floorMax != null ||
       filters.deadline.length ||
@@ -141,6 +147,16 @@ export function buildListingsSearchParams(args: {
   setFinite(sp, 'area_total_max', filters.areaMax);
   setCsv(sp, 'district_names', filters.district);
   setGeo(sp, geo);
+
+  if (kind === 'HOUSE') {
+    setCsv(sp, 'rooms', filters.rooms);
+    setFinite(sp, 'house_land_min', filters.landAreaMin);
+    setFinite(sp, 'house_land_max', filters.landAreaMax);
+    setFinite(sp, 'distance_min', filters.distanceMin);
+    setFinite(sp, 'distance_max', filters.distanceMax);
+    setCsv(sp, 'house_directions', filters.directions);
+    setCsv(sp, 'house_location', filters.houseLocation);
+  }
 
   if (kind === 'APARTMENT') {
     setCsv(sp, 'rooms', filters.rooms);

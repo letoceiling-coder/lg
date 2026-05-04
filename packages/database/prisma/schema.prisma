@@ -494,6 +494,7 @@ model Listing {
   status     ListingStatus @default(ACTIVE)
   dataSource DataSource    @default(FEED) @map("data_source")
   isPublished Boolean      @default(true) @map("is_published")
+  isHot       Boolean      @default(false) @map("is_hot")
   publishedAt DateTime?    @map("published_at")
   title       String?       @db.Text
   address     String?       @db.Text
@@ -701,11 +702,26 @@ model ListingCommercial {
 model ListingHouse {
   listingId  Int        @id @map("listing_id")
   houseType  HouseType? @map("house_type")
+  material   String?    @db.VarChar(64)
   areaTotal  Decimal?   @map("area_total") @db.Decimal(10, 2)
+  areaLiving Decimal?   @map("area_living") @db.Decimal(10, 2)
+  areaKitchen Decimal?  @map("area_kitchen") @db.Decimal(10, 2)
   areaLand   Decimal?   @map("area_land") @db.Decimal(10, 2)
   floorsCount Int?      @map("floors_count")
   bedrooms   Int?
   bathrooms  Int?
+  districtName String?  @map("district_name") @db.VarChar(128)
+  settlement String?    @db.VarChar(128)
+  street     String?    @db.VarChar(255)
+  houseNumber String?   @map("house_number") @db.VarChar(64)
+  synonyms   String?    @db.VarChar(512)
+  distanceToCity Int?   @map("distance_to_city")
+  directionSouth Boolean @default(false) @map("direction_south")
+  directionNorth Boolean @default(false) @map("direction_north")
+  directionEast  Boolean @default(false) @map("direction_east")
+  directionWest  Boolean @default(false) @map("direction_west")
+  inBelgorodDistrict Boolean @default(true) @map("in_belgorod_district")
+  inBelgorodRegion Boolean @default(true) @map("in_belgorod_region")
   hasGarage  Boolean?   @map("has_garage")
   yearBuilt  Int?       @map("year_built")
   photoUrl   String?    @map("photo_url")

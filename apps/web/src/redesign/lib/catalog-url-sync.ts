@@ -17,6 +17,12 @@ export const CATALOG_FILTER_URL_KEYS = [
   'area_max',
   'areaMin',
   'areaMax',
+  'land_area_min',
+  'land_area_max',
+  'distance_min',
+  'distance_max',
+  'directions',
+  'house_location',
   'floor_min',
   'floor_max',
   'floorMin',
@@ -158,6 +164,21 @@ export function catalogFiltersFromSearchParams(
   if (aMin !== undefined) f.areaMin = aMin;
   if (aMax !== undefined) f.areaMax = aMax;
 
+  const landMin = parseFiniteNumber(sp.get('land_area_min'));
+  const landMax = parseFiniteNumber(sp.get('land_area_max'));
+  if (landMin !== undefined) f.landAreaMin = landMin;
+  if (landMax !== undefined) f.landAreaMax = landMax;
+
+  const distanceMin = parseFiniteNumber(sp.get('distance_min'));
+  const distanceMax = parseFiniteNumber(sp.get('distance_max'));
+  if (distanceMin !== undefined) f.distanceMin = distanceMin;
+  if (distanceMax !== undefined) f.distanceMax = distanceMax;
+
+  f.directions = parseStringList(sp.get('directions')).filter((s) => ['south', 'north', 'east', 'west'].includes(s));
+  f.houseLocation = parseStringList(sp.get('house_location')).filter((s) =>
+    ['belgorod_district', 'belgorod_region'].includes(s),
+  );
+
   const flMin =
     parseFiniteNumber(sp.get('floor_min')) ?? parseFiniteNumber(sp.get('floorMin'));
   const flMax =
@@ -217,6 +238,21 @@ export function catalogFiltersIntoSearchParams(
   else p.delete('area_min');
   if (f.areaMax != null && Number.isFinite(f.areaMax)) p.set('area_max', String(f.areaMax));
   else p.delete('area_max');
+
+  if (f.landAreaMin != null && Number.isFinite(f.landAreaMin)) p.set('land_area_min', String(f.landAreaMin));
+  else p.delete('land_area_min');
+  if (f.landAreaMax != null && Number.isFinite(f.landAreaMax)) p.set('land_area_max', String(f.landAreaMax));
+  else p.delete('land_area_max');
+
+  if (f.distanceMin != null && Number.isFinite(f.distanceMin)) p.set('distance_min', String(f.distanceMin));
+  else p.delete('distance_min');
+  if (f.distanceMax != null && Number.isFinite(f.distanceMax)) p.set('distance_max', String(f.distanceMax));
+  else p.delete('distance_max');
+
+  if (f.directions.length) p.set('directions', f.directions.join(','));
+  else p.delete('directions');
+  if (f.houseLocation.length) p.set('house_location', f.houseLocation.join(','));
+  else p.delete('house_location');
 
   if (f.floorMin != null && Number.isFinite(f.floorMin)) p.set('floor_min', String(f.floorMin));
   else p.delete('floor_min');

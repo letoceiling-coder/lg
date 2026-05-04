@@ -181,6 +181,12 @@ const RedesignCatalog = () => {
       filters.rooms,
       filters.areaMin,
       filters.areaMax,
+      filters.landAreaMin,
+      filters.landAreaMax,
+      filters.distanceMin,
+      filters.distanceMax,
+      filters.directions,
+      filters.houseLocation,
       filters.floorMin,
       filters.floorMax,
       filters.finishing,
@@ -212,7 +218,7 @@ const RedesignCatalog = () => {
 
   // Flat (non-paginated) query for map view showing individual listings
   const listingsMapQuery = useQuery({
-    queryKey: ['listings', 'catalog', 'map', regionId, listingKind, deferredSearch, filters.priceMin, filters.priceMax, filters.rooms, filters.areaMin, filters.areaMax, filters.floorMin, filters.floorMax, filters.finishing, filters.district, filters.marketType],
+    queryKey: ['listings', 'catalog', 'map', regionId, listingKind, deferredSearch, filters.priceMin, filters.priceMax, filters.rooms, filters.areaMin, filters.areaMax, filters.landAreaMin, filters.landAreaMax, filters.distanceMin, filters.distanceMax, filters.directions, filters.houseLocation, filters.floorMin, filters.floorMax, filters.finishing, filters.district, filters.marketType],
     queryFn: async () => {
       const sp = buildListingsSearchParams({
         filters: { ...filters, search: deferredSearch },
@@ -521,8 +527,14 @@ const RedesignCatalog = () => {
                     rooms: [],
                     areaMin: undefined,
                     areaMax: undefined,
+                    landAreaMin: undefined,
+                    landAreaMax: undefined,
+                    distanceMin: undefined,
+                    distanceMax: undefined,
                     floorMin: undefined,
                     floorMax: undefined,
+                    directions: [],
+                    houseLocation: [],
                     deadline: [],
                     finishing: [],
                     status: [],

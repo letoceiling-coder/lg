@@ -22,11 +22,29 @@ export class ManualHouseFieldsDto {
   @IsIn(['DETACHED', 'SEMI', 'TOWNHOUSE', 'DUPLEX'])
   houseType?: 'DETACHED' | 'SEMI' | 'TOWNHOUSE' | 'DUPLEX';
 
+  @ApiPropertyOptional({ example: 'Блок' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  material?: string;
+
   @ApiPropertyOptional({ example: 140.5 })
   @IsOptional()
   @IsNumber()
   @Min(0.01)
   areaTotal?: number;
+
+  @ApiPropertyOptional({ example: 80 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  areaLiving?: number;
+
+  @ApiPropertyOptional({ example: 30 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  areaKitchen?: number;
 
   @ApiPropertyOptional({ example: 6.2 })
   @IsOptional()
@@ -51,6 +69,72 @@ export class ManualHouseFieldsDto {
   @IsInt()
   @Min(0)
   bathrooms?: number;
+
+  @ApiPropertyOptional({ example: 'Белгородский' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  districtName?: string;
+
+  @ApiPropertyOptional({ example: 'пос. Майский' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  settlement?: string;
+
+  @ApiPropertyOptional({ example: 'Поэтическая' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  street?: string;
+
+  @ApiPropertyOptional({ example: '12' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  houseNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Синонимы населённых пунктов для поиска' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  synonyms?: string;
+
+  @ApiPropertyOptional({ example: 7 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  distanceToCity?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionSouth?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionNorth?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionEast?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionWest?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  inBelgorodDistrict?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  inBelgorodRegion?: boolean;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -110,6 +194,17 @@ export class CreateManualHouseDto {
   @MaxLength(2048)
   address?: string;
 
+  @ApiPropertyOptional({ description: 'Описание / информация об объекте' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  description?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isHot?: boolean;
+
   @ApiPropertyOptional({ description: 'Широта для отображения на карте' })
   @IsOptional()
   @Type(() => Number)
@@ -146,9 +241,27 @@ export class ManualHousePatchDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  material?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   @Min(0.01)
   areaTotal?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  areaLiving?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  areaKitchen?: number | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -173,6 +286,72 @@ export class ManualHousePatchDto {
   @IsInt()
   @Min(0)
   bathrooms?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  districtName?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  settlement?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  street?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  houseNumber?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  synonyms?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  distanceToCity?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionSouth?: boolean | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionNorth?: boolean | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionEast?: boolean | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  directionWest?: boolean | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  inBelgorodDistrict?: boolean | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  inBelgorodRegion?: boolean | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -212,10 +391,27 @@ export class UpdateManualHouseDto {
   @Min(1)
   price?: number;
 
+  @ApiPropertyOptional({ description: 'Адрес объекта для карточки/карты' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  address?: string | null;
+
+  @ApiPropertyOptional({ description: 'Описание / информация об объекте' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  description?: string | null;
+
   @ApiPropertyOptional({ enum: ['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'] })
   @IsOptional()
   @IsIn(['ACTIVE', 'DRAFT', 'RESERVED', 'SOLD', 'INACTIVE'])
   status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isHot?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

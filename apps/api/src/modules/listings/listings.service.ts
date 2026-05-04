@@ -244,6 +244,14 @@ export class ListingsService implements OnModuleInit {
     return patch;
   }
 
+  private manualHouseTitle(h: { bedrooms?: number; settlement?: string; districtName?: string }) {
+    const parts = ['Дом'];
+    if (h.bedrooms != null && h.bedrooms > 0) parts.push(`${h.bedrooms} комн.`);
+    if (h.settlement?.trim()) parts.push(h.settlement.trim());
+    else if (h.districtName?.trim()) parts.push(h.districtName.trim());
+    return parts.join(', ');
+  }
+
   private async buildWhere(query: QueryListingsDto): Promise<Prisma.ListingWhereInput> {
     const where: Prisma.ListingWhereInput = {};
 
@@ -294,7 +302,7 @@ export class ListingsService implements OnModuleInit {
     if (query.data_source) where.dataSource = query.data_source as $Enums.DataSource;
     if (query.builder_id != null) where.builderId = query.builder_id;
     if (query.district_id != null) where.districtId = query.district_id;
-    if (query.district_names?.trim()) {
+    if (query.district_names?.trim() && query.kind !== 'HOUSE') {
       const names = query.district_names.split(',').map(s => s.trim()).filter(Boolean);
       if (names.length > 0) {
         const districts = await this.prisma.district.findMany({
@@ -348,12 +356,11 @@ export class ListingsService implements OnModuleInit {
       ];
     }
 
-    // House area filter (area_total_min/max -> house.areaTotal)
-    if (query.kind === 'HOUSE' && (query.area_total_min != null || query.area_total_max != null)) {
-      const houseArea: Prisma.DecimalNullableFilter<'ListingHouse'> = {};
-      if (query.area_total_min != null) houseArea.gte = new Prisma.Decimal(query.area_total_min);
-      if (query.area_total_max != null) houseArea.lte = new Prisma.Decimal(query.area_total_max);
-      where.house = { areaTotal: houseArea };
+    if (query.kind === 'HOUSE') {
+      const houseParts = this.buildHouseWhereParts(query);
+      if (houseParts.length) {
+        where.house = { AND: houseParts };
+      }
     }
 
     // Land area filter (area_total_min/max -> land.areaSotki)
@@ -375,9 +382,18 @@ export class ListingsService implements OnModuleInit {
     if (query.search?.trim()) {
       const term = query.search.trim();
       const searchOr: Prisma.ListingWhereInput[] = [
+        { title: { contains: term, mode: 'insensitive' } },
+        { address: { contains: term, mode: 'insensitive' } },
+        { description: { contains: term, mode: 'insensitive' } },
         { block: { name: { contains: term, mode: 'insensitive' } } },
         { apartment: { blockName: { contains: term, mode: 'insensitive' } } },
+        { house: { settlement: { contains: term, mode: 'insensitive' } } },
+        { house: { street: { contains: term, mode: 'insensitive' } } },
+        { house: { districtName: { contains: term, mode: 'insensitive' } } },
+        { house: { synonyms: { contains: term, mode: 'insensitive' } } },
       ];
+      const id = Number.parseInt(term, 10);
+      if (Number.isFinite(id) && String(id) === term) searchOr.push({ id });
       where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { OR: searchOr }];
     }
 
@@ -567,6 +583,62 @@ export class ListingsService implements OnModuleInit {
     return parts;
   }
 
+  private buildHouseWhereParts(query: QueryListingsDto): Prisma.ListingHouseWhereInput[] {
+    const parts: Prisma.ListingHouseWhereInput[] = [];
+
+    if (query.area_total_min != null || query.area_total_max != null) {
+      const areaTotal: Prisma.DecimalNullableFilter<'ListingHouse'> = {};
+      if (query.area_total_min != null) areaTotal.gte = new Prisma.Decimal(query.area_total_min);
+      if (query.area_total_max != null) areaTotal.lte = new Prisma.Decimal(query.area_total_max);
+      parts.push({ areaTotal });
+    }
+
+    if (query.house_land_min != null || query.house_land_max != null) {
+      const areaLand: Prisma.DecimalNullableFilter<'ListingHouse'> = {};
+      if (query.house_land_min != null) areaLand.gte = new Prisma.Decimal(query.house_land_min);
+      if (query.house_land_max != null) areaLand.lte = new Prisma.Decimal(query.house_land_max);
+      parts.push({ areaLand });
+    }
+
+    if (query.distance_min != null || query.distance_max != null) {
+      const distanceToCity: Prisma.IntNullableFilter<'ListingHouse'> = {};
+      if (query.distance_min != null) distanceToCity.gte = query.distance_min;
+      if (query.distance_max != null) distanceToCity.lte = query.distance_max;
+      parts.push({ distanceToCity });
+    }
+
+    const roomCategories = this.parseNumberList(query.rooms).filter((n) => n >= 1 && n <= 4);
+    if (roomCategories.length) {
+      const exact = roomCategories.filter((n) => n >= 1 && n <= 3);
+      const roomOr: Prisma.ListingHouseWhereInput[] = [];
+      if (exact.length) roomOr.push({ bedrooms: { in: exact } });
+      if (roomCategories.includes(4)) roomOr.push({ bedrooms: { gte: 4 } });
+      if (roomOr.length) parts.push({ OR: roomOr });
+    }
+
+    const directions = new Set(this.parseStringList(query.house_directions));
+    const directionOr: Prisma.ListingHouseWhereInput[] = [];
+    if (directions.has('south')) directionOr.push({ directionSouth: true });
+    if (directions.has('north')) directionOr.push({ directionNorth: true });
+    if (directions.has('east')) directionOr.push({ directionEast: true });
+    if (directions.has('west')) directionOr.push({ directionWest: true });
+    if (directionOr.length) parts.push({ OR: directionOr });
+
+    const locations = new Set(this.parseStringList(query.house_location));
+    const locationOr: Prisma.ListingHouseWhereInput[] = [];
+    if (locations.has('belgorod_district')) locationOr.push({ inBelgorodDistrict: true });
+    if (locations.has('belgorod_region')) locationOr.push({ inBelgorodRegion: true });
+    if (locationOr.length) parts.push({ OR: locationOr });
+
+    const districtNames = query.district_names
+      ?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (districtNames?.length) parts.push({ districtName: { in: districtNames } });
+
+    return parts;
+  }
+
   /** Convert room-category numbers (0=studio,1=1к…4=4+) to roomType IDs from DB.
    *  Frontend always sends category values 0-4, NEVER raw room_type IDs.
    *  Map: 0→Студии, 1→1к, 2→2к, 3→3к, 4→4к+
@@ -606,11 +678,24 @@ export class ListingsService implements OnModuleInit {
 
   private parseIdList(raw?: string): number[] | undefined {
     if (!raw?.trim()) return undefined;
-    const ids = raw
+    const ids = this.parseNumberList(raw);
+    return ids.length ? ids : undefined;
+  }
+
+  private parseNumberList(raw?: string): number[] {
+    if (!raw?.trim()) return [];
+    return raw
       .split(',')
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => !Number.isNaN(n));
-    return ids.length ? ids : undefined;
+  }
+
+  private parseStringList(raw?: string): string[] {
+    if (!raw?.trim()) return [];
+    return raw
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
   }
 
   private parseSort(sort?: string): Prisma.ListingOrderByWithRelationInput {
@@ -750,19 +835,37 @@ export class ListingsService implements OnModuleInit {
         status,
         dataSource: 'MANUAL',
         isPublished: dto.isPublished ?? false,
+        isHot: dto.isHot ?? false,
         publishedAt: dto.isPublished ? new Date() : null,
+        title: this.manualHouseTitle(h),
         address: dto.address?.trim() || dto.seller?.address?.trim() || null,
+        description: dto.description?.trim() || null,
         lat: dto.lat ?? null,
         lng: dto.lng ?? null,
         ...(await this.resolveSellerListingCreate(dto, actorUserId, actorRole)),
         house: {
           create: {
             houseType: h.houseType ?? null,
+            material: h.material?.trim() || null,
             areaTotal: h.areaTotal != null ? new Prisma.Decimal(h.areaTotal) : null,
+            areaLiving: h.areaLiving != null ? new Prisma.Decimal(h.areaLiving) : null,
+            areaKitchen: h.areaKitchen != null ? new Prisma.Decimal(h.areaKitchen) : null,
             areaLand: h.areaLand != null ? new Prisma.Decimal(h.areaLand) : null,
             floorsCount: h.floorsCount ?? null,
             bedrooms: h.bedrooms ?? null,
             bathrooms: h.bathrooms ?? null,
+            districtName: h.districtName?.trim() || null,
+            settlement: h.settlement?.trim() || null,
+            street: h.street?.trim() || null,
+            houseNumber: h.houseNumber?.trim() || null,
+            synonyms: h.synonyms?.trim() || null,
+            distanceToCity: h.distanceToCity ?? null,
+            directionSouth: h.directionSouth ?? false,
+            directionNorth: h.directionNorth ?? false,
+            directionEast: h.directionEast ?? false,
+            directionWest: h.directionWest ?? false,
+            inBelgorodDistrict: h.inBelgorodDistrict ?? true,
+            inBelgorodRegion: h.inBelgorodRegion ?? true,
             hasGarage: h.hasGarage ?? null,
             yearBuilt: h.yearBuilt ?? null,
             photoUrl: h.photoUrl ?? null,
@@ -1093,6 +1196,9 @@ export class ListingsService implements OnModuleInit {
       dto.isPublished,
     );
     if (dto.price !== undefined) listingPatch.price = new Prisma.Decimal(dto.price);
+    if (dto.address !== undefined) listingPatch.address = dto.address?.trim() || null;
+    if (dto.description !== undefined) listingPatch.description = dto.description?.trim() || null;
+    if (dto.isHot !== undefined) listingPatch.isHot = dto.isHot;
     if (dto.blockId !== undefined) {
       if (dto.blockId === null) {
         listingPatch.block = { disconnect: true };
@@ -1107,8 +1213,15 @@ export class ListingsService implements OnModuleInit {
     if (dto.house) {
       const h = dto.house;
       if (h.houseType !== undefined) housePatch.houseType = h.houseType;
+      if (h.material !== undefined) housePatch.material = h.material?.trim() || null;
       if (h.areaTotal !== undefined) {
         housePatch.areaTotal = h.areaTotal != null ? new Prisma.Decimal(h.areaTotal) : null;
+      }
+      if (h.areaLiving !== undefined) {
+        housePatch.areaLiving = h.areaLiving != null ? new Prisma.Decimal(h.areaLiving) : null;
+      }
+      if (h.areaKitchen !== undefined) {
+        housePatch.areaKitchen = h.areaKitchen != null ? new Prisma.Decimal(h.areaKitchen) : null;
       }
       if (h.areaLand !== undefined) {
         housePatch.areaLand = h.areaLand != null ? new Prisma.Decimal(h.areaLand) : null;
@@ -1116,6 +1229,18 @@ export class ListingsService implements OnModuleInit {
       if (h.floorsCount !== undefined) housePatch.floorsCount = h.floorsCount;
       if (h.bedrooms !== undefined) housePatch.bedrooms = h.bedrooms;
       if (h.bathrooms !== undefined) housePatch.bathrooms = h.bathrooms;
+      if (h.districtName !== undefined) housePatch.districtName = h.districtName?.trim() || null;
+      if (h.settlement !== undefined) housePatch.settlement = h.settlement?.trim() || null;
+      if (h.street !== undefined) housePatch.street = h.street?.trim() || null;
+      if (h.houseNumber !== undefined) housePatch.houseNumber = h.houseNumber?.trim() || null;
+      if (h.synonyms !== undefined) housePatch.synonyms = h.synonyms?.trim() || null;
+      if (h.distanceToCity !== undefined) housePatch.distanceToCity = h.distanceToCity;
+      if (h.directionSouth !== undefined) housePatch.directionSouth = h.directionSouth ?? false;
+      if (h.directionNorth !== undefined) housePatch.directionNorth = h.directionNorth ?? false;
+      if (h.directionEast !== undefined) housePatch.directionEast = h.directionEast ?? false;
+      if (h.directionWest !== undefined) housePatch.directionWest = h.directionWest ?? false;
+      if (h.inBelgorodDistrict !== undefined) housePatch.inBelgorodDistrict = h.inBelgorodDistrict ?? true;
+      if (h.inBelgorodRegion !== undefined) housePatch.inBelgorodRegion = h.inBelgorodRegion ?? true;
       if (h.hasGarage !== undefined) housePatch.hasGarage = h.hasGarage;
       if (h.yearBuilt !== undefined) housePatch.yearBuilt = h.yearBuilt;
       if (h.photoUrl !== undefined) housePatch.photoUrl = h.photoUrl;

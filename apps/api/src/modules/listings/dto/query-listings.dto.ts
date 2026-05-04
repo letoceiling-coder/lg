@@ -31,6 +31,12 @@ export class QueryListingsDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) area_total_max?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) area_kitchen_min?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) area_kitchen_max?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) house_land_min?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Type(() => Number) house_land_max?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) distance_min?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) distance_max?: number;
+  @ApiPropertyOptional({ description: 'Comma-separated house directions: south,north,east,west' }) @IsOptional() @IsString() house_directions?: string;
+  @ApiPropertyOptional({ description: 'Comma-separated house location flags: belgorod_district,belgorod_region' }) @IsOptional() @IsString() house_location?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) floor_min?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) floor_max?: number;
