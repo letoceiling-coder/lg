@@ -36,6 +36,7 @@ export class QueryListingsDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) distance_min?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) distance_max?: number;
   @ApiPropertyOptional({ description: 'Comma-separated house directions: south,north,east,west' }) @IsOptional() @IsString() house_directions?: string;
+  @ApiPropertyOptional({ description: 'Alias of house_directions (catalog URL directions=)' }) @IsOptional() @IsString() directions?: string;
   @ApiPropertyOptional({ description: 'Comma-separated house location flags: belgorod_district,belgorod_region' }) @IsOptional() @IsString() house_location?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) floor_min?: number;

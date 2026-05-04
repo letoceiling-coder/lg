@@ -616,7 +616,9 @@ export class ListingsService implements OnModuleInit {
       if (roomOr.length) parts.push({ OR: roomOr });
     }
 
-    const directions = new Set(this.parseStringList(query.house_directions));
+    const directions = new Set(
+      this.parseStringList(query.house_directions ?? query.directions),
+    );
     const directionOr: Prisma.ListingHouseWhereInput[] = [];
     if (directions.has('south')) directionOr.push({ directionSouth: true });
     if (directions.has('north')) directionOr.push({ directionNorth: true });
@@ -634,9 +636,27 @@ export class ListingsService implements OnModuleInit {
       ?.split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    if (districtNames?.length) parts.push({ districtName: { in: districtNames } });
+    if (districtNames?.length) {
+      parts.push({ districtName: { in: this.expandHouseDistrictNameFilter(districtNames) } });
+    }
 
     return parts;
+  }
+
+  /** Совпадение «Белгородский район» в UI и «Белгородский» в CRM / DB.sql. */
+  private expandHouseDistrictNameFilter(names: string[]): string[] {
+    const out = new Set<string>();
+    for (const raw of names) {
+      const n = raw.trim();
+      if (!n) continue;
+      out.add(n);
+      const base = n.replace(/\s+район\s*$/i, '').trim();
+      if (base && base !== n) out.add(base);
+      if (!/район\s*$/i.test(n) && base) {
+        out.add(`${base} район`);
+      }
+    }
+    return [...out];
   }
 
   /** Convert room-category numbers (0=studio,1=1к…4=4+) to roomType IDs from DB.
